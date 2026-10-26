@@ -315,6 +315,9 @@ module "web" {
   environment = {
     API_URL     = "http://api:${local.api_port}" # Service Connect
     TRUST_PROXY = "true"
+    SITE_URL    = local.web_url
+    # Only production is indexed; staging answers noindex and robots.txt Disallow: /.
+    ALLOW_INDEXING = var.env == "prod" ? "true" : "false"
   }
   task_role_arn             = aws_iam_role.task["web"].arn
   desired_count             = var.web_count.min

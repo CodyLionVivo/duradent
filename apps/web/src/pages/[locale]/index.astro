@@ -8,6 +8,9 @@ import CategoryArt from '../../components/CategoryArt.astro';
 import { artKind } from '../../lib/art';
 import { isLocale, localePath, useTranslations } from '../../i18n';
 import { browseProducts, getCategories, getQuotes, topLevel, type Category, type ProductSummary, type Quote } from '../../lib/catalog';
+import { PHONE, RUC, SOCIAL } from '../../lib/legal';
+import { storeJsonLd } from '../../lib/seo';
+import { SITE_URL } from 'astro:env/server';
 
 if (!isLocale(Astro.params.locale)) return new Response(null, { status: 404 });
 
@@ -34,9 +37,15 @@ const values = [
   { title: t('home.valueInvoiceTitle'), text: t('home.valueInvoiceText'), icon: 'M6 3h9l4 4v14H6zM14 3v5h5M9 12h7M9 16h7' },
   { title: t('home.valuePricesTitle'), text: t('home.valuePricesText'), icon: 'M4 12 12 4h8v8l-8 8zM15.5 8.5h.01' },
 ];
+// The store and its company for search engines (name, address, phone, RUC, socials).
+const store = storeJsonLd(SITE_URL, {
+  name: t('meta.siteName'), legalName: 'Duradent S.A.C.', description: t('meta.description'), taxID: RUC,
+  telephone: PHONE.href.replace('tel:', ''), street: 'Av. Emancipación 271, tiendas 108 y 126, Cercado de Lima',
+  sameAs: [SOCIAL.facebook, SOCIAL.instagram],
+});
 ---
 
-<Layout>
+<Layout jsonLd={[store]}>
   {failed ? (
     <ErrorState kind="unavailable" />
   ) : (

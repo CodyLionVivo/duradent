@@ -10,6 +10,8 @@ import { localePath, useTranslations } from '../i18n';
 import { ApiError } from '../lib/api/client';
 import { browseProducts, getCategories, getQuotes, type Category, type ProductFacets, type Quote } from '../lib/catalog';
 import { activeCount, clearedUrl, readFilters, withoutValue } from '../lib/filters';
+import { breadcrumbJsonLd } from '../lib/seo';
+import { SITE_URL } from 'astro:env/server';
 
 interface Props {
   categorySlug?: string;
@@ -60,9 +62,15 @@ const chips = [
     a.values.filter((v) => v.selected).map((v) => ({ label: `${a.name}: ${v.label}`, href: withoutValue(Astro.url, 'attr', `${a.code}:${v.value}`) })),
   ),
 ];
+const crumbs = breadcrumbJsonLd(SITE_URL, [
+  { name: t('nav.home'), path: localePath(locale) },
+  { name: t('nav.catalog'), path: localePath(locale, '/catalog') },
+  ...(parent ? [{ name: parent.name, path: localePath(locale, `/catalog/${parent.slug}`) }] : []),
+  ...(category ? [{ name: category.name, path: localePath(locale, `/catalog/${category.slug}`) }] : []),
+]);
 ---
 
-<Layout title={category?.name ?? t('catalog.title')} description={category?.description || undefined}>
+<Layout title={category?.name ?? t('catalog.title')} description={category?.description || undefined} jsonLd={state === 'ok' ? [crumbs] : []}>
   {state !== 'ok' ? (
     <ErrorState kind={state} />
   ) : (

@@ -6,6 +6,8 @@ import { INTL_LOCALE, formatMoney, isLocale, localePath, useTranslations } from 
 import { getCategories, getProduct, getQuotes, type Category, type ProductDetail, type Quote } from '../../../lib/catalog';
 import { artKind, artTint } from '../../../lib/art';
 import ProductArt from '../../../components/ProductArt.astro';
+import { breadcrumbJsonLd, productJsonLd } from '../../../lib/seo';
+import { SITE_URL } from 'astro:env/server';
 
 if (!isLocale(Astro.params.locale)) return new Response(null, { status: 404 });
 
@@ -62,9 +64,23 @@ const pickerQuotes: Record<string, PickerQuote> = Object.fromEntries(
 const optionLabel = (code: string, value: string) =>
   product?.options.find((o) => o.code === code)?.values.find((v) => v.code === value)?.label ?? value;
 const hero = product?.images[0];
+
+// Structured data: the product with one offer per priced variant, and its breadcrumb.
+const pageURL = product ? new URL(localePath(locale, `/product/${product.slug}`), SITE_URL).href : '';
+const jsonLd = product
+  ? [
+      productJsonLd(product, pageURL, new Map([...quotes].map(([id, q]) => [id, q.unit_price])), availability),
+      breadcrumbJsonLd(SITE_URL, [
+        { name: t('nav.home'), path: localePath(locale) },
+        { name: t('nav.catalog'), path: localePath(locale, '/catalog') },
+        ...(product.category ? [{ name: product.category.name, path: localePath(locale, `/catalog/${product.category.slug}`) }] : []),
+        { name: product.name, path: localePath(locale, `/product/${product.slug}`) },
+      ]),
+    ]
+  : [];
 ---
 
-<Layout title={product?.name} description={product?.description.slice(0, 160) || undefined}>
+<Layout title={product?.name} description={product?.description.slice(0, 160) || undefined} jsonLd={jsonLd}>
   {state !== 'ok' || !product ? (
     <ErrorState kind={state === 'unavailable' ? 'unavailable' : 'notFound'} />
   ) : (

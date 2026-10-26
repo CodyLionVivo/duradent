@@ -152,6 +152,9 @@ test con LocalStack real (outbox → SNS con filtro → SQS → consumidor, rein
 - **Textos legales**: Markdown por idioma en `apps/web/src/content/legal/<locale>/{terms,privacy,returns}.md` (colección `legal`, ruta `/{locale}/legal/{slug}`). El español es la versión que prevalece; al cambiar uno, actualiza los tres idiomas y la fecha `updated`. Teléfono de la tienda en `src/lib/legal.ts`.
 - **Fechas**: la web las muestra en hora de Lima (`TIME_ZONE` en `i18n/locales.ts`) aunque el servidor
   esté en UTC; usa `formatDate`/`formatDay`, nunca `Intl.DateTimeFormat` sin `timeZone`.
+- **SEO** (`src/lib/seo.ts`): las URLs absolutas salen de `SITE_URL`, nunca de `Astro.url` (detrás del
+  ALB es http). Una página pública nueva va en `sitemapPaths`; si tiene datos de alguien, en
+  `isPrivatePath` (noindex). Datos estructurados con la prop `jsonLd` del `Layout`.
 - **Imágenes propias**: en `apps/web/src/assets/` (las optimiza `astro:assets`, p. ej. la foto de la tienda del hero). El logotipo y los iconos están en `public/brand/`.
 - **Efectos visuales**: solo animar `transform`/`opacity`; nada de `filter: blur` ni `backdrop-filter` sobre elementos animados (hacían lento el scroll del inicio). Las animaciones del hero se pausan fuera de pantalla y durante el scroll.
 - **Accesibilidad**: contraste AA en los tokens de `global.css`, foco visible, `label` en cada
@@ -299,6 +302,13 @@ test con LocalStack real (outbox → SNS con filtro → SQS → consumidor, rein
     cierran todas sus sesiones, el correo queda verificado (abrir el enlace prueba el buzón; si está en
     `ADMIN_EMAILS` pasa a admin) y la persona entra con una sesión nueva. Las cuentas de Google o
     Microsoft también pueden usarlo para crear una contraseña.
+50. **SEO básico sin integraciones**: `robots.txt` y `sitemap.xml` son endpoints SSR (el sitemap lee el
+    catálogo del API, 3 idiomas con alternates `hreflang`; `@astrojs/sitemap` solo ve rutas estáticas).
+    Solo producción se indexa (`ALLOW_INDEXING`, lo pone Terraform): en staging y local `robots.txt`
+    dice `Disallow: /` y cada página `noindex`. Canonical sin filtros, orden, búsqueda ni `?variant=`
+    (sí `?page=N`); `x-default` en español. JSON-LD: `Store` en el inicio (con RUC), `Product` con una
+    `Offer` por variante con precio (soles, `valueAddedTaxIncluded: false`, stock solo si se conoce) y
+    `BreadcrumbList` en producto y catálogo. Cuenta, carrito, checkout y pedidos llevan `noindex`.
 
 ## Estado por fases
 

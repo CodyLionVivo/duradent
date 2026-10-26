@@ -2,7 +2,7 @@
 import Logo from './Logo.astro';
 import { localePath, useTranslations } from '../i18n';
 import { getCategories, topLevel, type Category } from '../lib/catalog';
-import { LEGAL_PAGES, PHONE, RUC } from '../lib/legal';
+import { LEGAL_PAGES, PHONE, RUC, SOCIAL } from '../lib/legal';
 
 const { locale } = Astro.locals;
 const t = useTranslations(locale);
@@ -11,13 +11,13 @@ const year = new Date().getFullYear();
 // Official accounts of Duradent SAC.
 const socials = [
   {
-    href: 'https://www.facebook.com/duradentsac/',
+    href: SOCIAL.facebook,
     label: t('footer.facebook'),
     icon: 'M14 8h3V4h-3c-2.8 0-4.5 1.8-4.5 4.6V11H7v4h2.5v6h4v-6h3l.5-4h-3.5V9c0-.6.4-1 1-1Z',
     fill: true,
   },
   {
-    href: 'https://www.instagram.com/duradent_sac/',
+    href: SOCIAL.instagram,
     label: t('footer.instagram'),
     icon: 'M7.5 3h9A4.5 4.5 0 0 1 21 7.5v9a4.5 4.5 0 0 1-4.5 4.5h-9A4.5 4.5 0 0 1 3 16.5v-9A4.5 4.5 0 0 1 7.5 3ZM12 8.2a3.8 3.8 0 1 0 0 7.6 3.8 3.8 0 0 0 0-7.6ZM17.2 6.6h.01',
     fill: false,
