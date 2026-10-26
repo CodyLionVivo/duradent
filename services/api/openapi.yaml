@@ -1,0 +1,65 @@
+openapi: 3.1.0
+info:
+  title: Duradent API
+  version: 0.1.0
+  description: |
+    HTTP API of the Duradent store. This file is the contract between the Go
+    backend and apps/web: the web regenerates its types from it with
+    `task web:gen-api`. Each bounded context adds its paths here as it lands.
+servers:
+  - url: http://localhost:8080
+paths:
+  /healthz:
+    get:
+      summary: Liveness probe
+      description: Answers as long as the process runs. Never checks dependencies.
+      operationId: liveness
+      tags: [ops]
+      responses:
+        "200":
+          description: Process is up
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Liveness" }
+  /readyz:
+    get:
+      summary: Readiness probe
+      description: Checks every dependency (MySQL, later SQS/SNS) with a 2s timeout.
+      operationId: readiness
+      tags: [ops]
+      responses:
+        "200":
+          description: All dependencies are up
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Readiness" }
+        "503":
+          description: At least one dependency is down
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Readiness" }
+components:
+  schemas:
+    Liveness:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, const: ok }
+    Readiness:
+      type: object
+      required: [status, checks]
+      properties:
+        status: { type: string, examples: [OK, Service Unavailable] }
+        checks:
+          type: object
+          additionalProperties: { type: string, enum: [up, down] }
+    Problem:
+      description: Error body for every 4xx/5xx (RFC 9457).
+      type: object
+      required: [type, title, status]
+      properties:
+        type: { type: string, format: uri }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }

@@ -1,0 +1,20 @@
+# Hot reload for local development (used by the `dev` stage of the Dockerfile).
+# The mode is passed through AIR_MODE so api, worker and relay share this file.
+root = "."
+tmp_dir = "/tmp/air"
+
+[build]
+  cmd = "go build -o /tmp/air/duradent ./cmd/duradent"
+  entrypoint = ["/tmp/air/duradent"]
+  args_bin = ["api"]
+  include_ext = ["go", "sql"]
+  exclude_dir = ["tmp", "vendor"]
+  exclude_regex = ["_test\\.go$"]
+  delay = 500
+  poll = true # Docker Desktop bind mounts on Windows do not deliver fs events
+
+[log]
+  time = false
+
+[misc]
+  clean_on_exit = true
