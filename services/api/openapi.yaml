@@ -98,14 +98,27 @@ paths:
         - { $ref: "#/components/parameters/Locale" }
         - { name: category, in: query, description: Category slug; includes subcategories, schema: { type: string } }
         - { name: q, in: query, description: Matches product names and SKUs, schema: { type: string } }
+        - name: brand
+          in: query
+          description: Brand; repeat for several (any of them)
+          schema: { type: array, items: { type: string } }
+          style: form
+          explode: true
+        - name: attr
+          in: query
+          description: "Variant attribute as code:value (e.g. slot:022). Values of one attribute are alternatives; different attributes must match the same variant."
+          schema: { type: array, items: { type: string } }
+          style: form
+          explode: true
+        - { name: sort, in: query, schema: { type: string, enum: [name, newest], default: name } }
         - { $ref: "#/components/parameters/Page" }
         - { name: page_size, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 24 } }
       responses:
         "200":
-          description: One page of products
+          description: One page of products and the filter options with their counts
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/ProductPage" }
+              schema: { $ref: "#/components/schemas/ProductBrowse" }
         "404": { $ref: "#/components/responses/Problem" }
         "422": { $ref: "#/components/responses/Problem" }
   /v1/catalog/products/{slug}:
@@ -1777,14 +1790,47 @@ components:
           oneOf: [{ $ref: "#/components/schemas/Image" }, { type: "null" }]
         default_variant_id: { type: [string, "null"], format: uuid }
         variant_count: { type: integer }
-    ProductPage:
+    FacetValue:
       type: object
-      required: [items, total, page, page_size]
+      required: [value, label, count, selected]
+      properties:
+        value: { type: string }
+        label: { type: string }
+        count: { type: integer, description: Products matching the other filters plus this value }
+        selected: { type: boolean }
+    ProductFacets:
+      type: object
+      description: Disjunctive facets — each group is counted ignoring its own selection.
+      required: [brands, categories, attributes]
+      properties:
+        brands: { type: array, items: { $ref: "#/components/schemas/FacetValue" } }
+        categories:
+          type: array
+          description: Products directly in each category (add subcategories for a subtree)
+          items:
+            type: object
+            required: [slug, count]
+            properties:
+              slug: { type: string }
+              count: { type: integer }
+        attributes:
+          type: array
+          items:
+            type: object
+            required: [code, name, values]
+            properties:
+              code: { type: string }
+              name: { type: string }
+              values: { type: array, items: { $ref: "#/components/schemas/FacetValue" } }
+    ProductBrowse:
+      type: object
+      required: [items, total, page, page_size, facets]
       properties:
         items: { type: array, items: { $ref: "#/components/schemas/ProductSummary" } }
         total: { type: integer }
         page: { type: integer }
         page_size: { type: integer }
+        facets: { $ref: "#/components/schemas/ProductFacets" }
     Option:
       type: object
       required: [code, name, values]

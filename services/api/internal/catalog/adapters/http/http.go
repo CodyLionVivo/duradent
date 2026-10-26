@@ -3,13 +3,16 @@
 package http
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/CodyLionVivo/duradent/services/api/internal/catalog/application"
 	"github.com/CodyLionVivo/duradent/services/api/internal/catalog/domain"
+	"github.com/CodyLionVivo/duradent/services/api/internal/catalog/ports"
 	"github.com/CodyLionVivo/duradent/services/api/internal/kernel/id"
 	"github.com/CodyLionVivo/duradent/services/api/internal/kernel/locale"
 	"github.com/CodyLionVivo/duradent/services/api/internal/platform/httpserver"
@@ -220,19 +223,118 @@ func (h *Handler) browseProducts(w http.ResponseWriter, r *http.Request) {
 	}
 	l := localeOf(r)
 	q := r.URL.Query()
-	ps, total, err := h.svc.BrowseProducts(r.Context(), application.BrowseQuery{
+	// attr=slot:022&attr=arch:upper — values of one attribute are alternatives.
+	attrs := map[string][]string{}
+	for _, raw := range q["attr"] {
+		if code, value, ok := strings.Cut(raw, ":"); ok {
+			attrs[code] = append(attrs[code], value)
+		}
+	}
+	ctx := r.Context()
+	res, err := h.svc.BrowseProducts(ctx, application.BrowseQuery{
 		CategorySlug: q.Get("category"), Query: q.Get("q"), Locale: l,
+		Brands: q["brand"], Attributes: attrs, Sort: ports.ProductSort(q.Get("sort")),
 		Page: application.Page{Limit: size, Offset: (page - 1) * size},
 	})
 	if err != nil {
 		h.fail(w, r, err)
 		return
 	}
-	items := make([]productSummaryDTO, 0, len(ps))
-	for _, p := range ps {
+	facets, err := h.facets(ctx, res.Facets, q["brand"], attrs, l)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	items := make([]productSummaryDTO, 0, len(res.Products))
+	for _, p := range res.Products {
 		items = append(items, h.summary(p, l))
 	}
-	httpserver.JSON(w, http.StatusOK, pageDTO[productSummaryDTO]{Items: items, Total: total, Page: page, PageSize: size})
+	httpserver.JSON(w, http.StatusOK, browseDTO{
+		pageDTO: pageDTO[productSummaryDTO]{Items: items, Total: res.Total, Page: page, PageSize: size},
+		Facets:  facets,
+	})
+}
+
+type facetValueDTO struct {
+	Value    string `json:"value"`
+	Label    string `json:"label"`
+	Count    int    `json:"count"`
+	Selected bool   `json:"selected"`
+}
+
+type attributeFacetDTO struct {
+	Code   string          `json:"code"`
+	Name   string          `json:"name"`
+	Values []facetValueDTO `json:"values"`
+}
+
+type categoryFacetDTO struct {
+	Slug  string `json:"slug"`
+	Count int    `json:"count"` // products directly in the category
+}
+
+type facetsDTO struct {
+	Brands     []facetValueDTO     `json:"brands"`
+	Categories []categoryFacetDTO  `json:"categories"`
+	Attributes []attributeFacetDTO `json:"attributes"`
+}
+
+type browseDTO struct {
+	pageDTO[productSummaryDTO]
+	Facets facetsDTO `json:"facets"`
+}
+
+// facets localizes the counts and keeps every selected value listed, even
+// when it currently matches nothing, so the visitor can unselect it.
+func (h *Handler) facets(ctx context.Context, f ports.Facets, brands []string, attrs map[string][]string, l locale.Locale) (facetsDTO, error) {
+	out := facetsDTO{Brands: []facetValueDTO{}, Categories: []categoryFacetDTO{}, Attributes: []attributeFacetDTO{}}
+
+	counted := map[string]bool{}
+	for _, b := range f.Brands {
+		counted[b.Value] = true
+		out.Brands = append(out.Brands, facetValueDTO{Value: b.Value, Label: b.Value, Count: b.Count, Selected: slices.Contains(brands, b.Value)})
+	}
+	for _, b := range brands {
+		if !counted[b] && b != "" {
+			out.Brands = append(out.Brands, facetValueDTO{Value: b, Label: b, Selected: true})
+		}
+	}
+
+	cats, err := h.svc.Categories(ctx)
+	if err != nil {
+		return out, err
+	}
+	for _, c := range cats {
+		if n := f.Categories[c.ID]; n > 0 {
+			out.Categories = append(out.Categories, categoryFacetDTO{Slug: c.Slug, Count: n})
+		}
+	}
+
+	defs, err := h.svc.Attributes(ctx)
+	if err != nil {
+		return out, err
+	}
+	slices.SortFunc(defs, func(a, b *domain.Attribute) int { return a.SortOrder - b.SortOrder })
+	for _, a := range defs {
+		counts := map[string]int{}
+		for _, c := range f.Attributes[a.Code] {
+			counts[c.Value] = c.Count
+		}
+		facet := attributeFacetDTO{Code: a.Code, Name: a.Names.In(l), Values: []facetValueDTO{}}
+		values := slices.Clone(a.Values)
+		slices.SortFunc(values, func(x, y domain.AttributeValue) int { return x.SortOrder - y.SortOrder })
+		for _, v := range values {
+			selected := slices.Contains(attrs[a.Code], v.Code)
+			if counts[v.Code] == 0 && !selected {
+				continue
+			}
+			facet.Values = append(facet.Values, facetValueDTO{Value: v.Code, Label: v.Labels.In(l), Count: counts[v.Code], Selected: selected})
+		}
+		if len(facet.Values) > 0 {
+			out.Attributes = append(out.Attributes, facet)
+		}
+	}
+	return out, nil
 }
 
 func (h *Handler) productBySlug(w http.ResponseWriter, r *http.Request) {

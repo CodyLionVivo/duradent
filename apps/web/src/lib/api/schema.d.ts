@@ -1569,11 +1569,33 @@ export interface components {
             default_variant_id: string | null;
             variant_count: number;
         };
-        ProductPage: {
+        FacetValue: {
+            value: string;
+            label: string;
+            /** @description Products matching the other filters plus this value */
+            count: number;
+            selected: boolean;
+        };
+        /** @description Disjunctive facets — each group is counted ignoring its own selection. */
+        ProductFacets: {
+            brands: components["schemas"]["FacetValue"][];
+            /** @description Products directly in each category (add subcategories for a subtree) */
+            categories: {
+                slug: string;
+                count: number;
+            }[];
+            attributes: {
+                code: string;
+                name: string;
+                values: components["schemas"]["FacetValue"][];
+            }[];
+        };
+        ProductBrowse: {
             items: components["schemas"]["ProductSummary"][];
             total: number;
             page: number;
             page_size: number;
+            facets: components["schemas"]["ProductFacets"];
         };
         Option: {
             code: string;
@@ -2010,6 +2032,11 @@ export interface operations {
                 category?: string;
                 /** @description Matches product names and SKUs */
                 q?: string;
+                /** @description Brand; repeat for several (any of them) */
+                brand?: string[];
+                /** @description Variant attribute as code:value (e.g. slot:022). Values of one attribute are alternatives; different attributes must match the same variant. */
+                attr?: string[];
+                sort?: "name" | "newest";
                 page?: components["parameters"]["Page"];
                 page_size?: number;
             };
@@ -2019,13 +2046,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description One page of products */
+            /** @description One page of products and the filter options with their counts */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ProductPage"];
+                    "application/json": components["schemas"]["ProductBrowse"];
                 };
             };
             404: components["responses"]["Problem"];

@@ -19,6 +19,10 @@ type ProductRepository interface {
 	ByID(ctx context.Context, productID id.ID) (*domain.Product, error)
 	BySlug(ctx context.Context, slug string) (*domain.Product, error)
 	List(ctx context.Context, f ProductFilter) ([]*domain.Product, int, error)
+	// Facets counts the products matching f per brand, category and attribute
+	// value. Each group is counted ignoring its own selection (disjunctive
+	// faceting), so picking one brand still shows how many the others have.
+	Facets(ctx context.Context, f ProductFilter) (Facets, error)
 	// ByVariantIDs returns the products owning any of the variants.
 	ByVariantIDs(ctx context.Context, variantIDs []id.ID) ([]*domain.Product, error)
 }
@@ -28,8 +32,33 @@ type ProductFilter struct {
 	CategoryIDs []id.ID       // any of them; empty means all
 	Query       string        // matched against names and SKUs
 	Locale      locale.Locale // language used to match Query
-	Limit       int
-	Offset      int
+	Brands      []string      // any of them; empty means all
+	// Attributes maps an attribute code to accepted value codes. Values of one
+	// attribute are alternatives; different attributes must all hold for the
+	// same variant (slot .022 and upper arch = one variant that is both).
+	Attributes map[string][]string
+	Sort       ProductSort
+	Limit      int
+	Offset     int
+}
+
+type ProductSort string
+
+const (
+	SortName   ProductSort = "name"   // by name in the requested language (default)
+	SortNewest ProductSort = "newest" // most recently created first
+)
+
+// FacetCount is how many products have a value.
+type FacetCount struct {
+	Value string
+	Count int
+}
+
+type Facets struct {
+	Brands     []FacetCount
+	Categories map[id.ID]int           // products directly in each category
+	Attributes map[string][]FacetCount // attribute code → value code counts
 }
 
 type CategoryRepository interface {

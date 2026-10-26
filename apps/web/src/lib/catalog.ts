@@ -6,6 +6,7 @@ export type Category = Schemas['Category'];
 export type ProductSummary = Schemas['ProductSummary'];
 export type ProductDetail = Schemas['ProductDetail'];
 export type Quote = Schemas['Quotes']['items'][number];
+export type ProductFacets = Schemas['ProductFacets'];
 
 const TTL_MS = 60_000;
 const categoryCache = new Map<Locale, { at: number; data: Category[] }>();
@@ -27,10 +28,17 @@ export function childrenOf(categories: Category[], parentId: string): Category[]
   return categories.filter((c) => c.parent_id === parentId);
 }
 
+export type CatalogSort = 'name' | 'newest';
+
+/** Products for a listing page plus the filter options (facets) and their counts. */
 export async function browseProducts(api: ApiClient, opts: {
   locale: Locale;
   category?: string;
   q?: string;
+  brands?: string[];
+  /** Variant attributes as "code:value", e.g. "slot:022". */
+  attrs?: string[];
+  sort?: CatalogSort;
   page?: number;
   pageSize?: number;
 }) {
@@ -41,6 +49,9 @@ export async function browseProducts(api: ApiClient, opts: {
           locale: opts.locale,
           category: opts.category || undefined,
           q: opts.q || undefined,
+          brand: opts.brands?.length ? opts.brands : undefined,
+          attr: opts.attrs?.length ? opts.attrs : undefined,
+          sort: opts.sort,
           page: opts.page,
           page_size: opts.pageSize,
         },

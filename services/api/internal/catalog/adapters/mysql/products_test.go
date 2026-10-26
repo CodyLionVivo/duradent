@@ -3,6 +3,7 @@ package mysql_test
 import (
 	"context"
 	"database/sql"
+	"slices"
 	"testing"
 	"time"
 
@@ -225,5 +226,96 @@ func TestCategoryAndAttributePersistence(t *testing.T) {
 	tooth, _ = r.attributes.ByCode(ctx, "tooth")
 	if len(tooth.Values) != 4 {
 		t.Fatalf("new value not saved: %+v", tooth.Values)
+	}
+}
+
+func TestFiltersAndFacets(t *testing.T) {
+	_, r := setup(t)
+	ctx := context.Background()
+	arch, _ := domain.NewAttribute("arch", locale.Text{locale.ES: "Arcada"}, 1)
+	for _, v := range []string{"upper", "lower"} {
+		if _, err := arch.AddValue(v, locale.Text{locale.ES: v}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := r.attributes.Create(ctx, arch); err != nil {
+		t.Fatal(err)
+	}
+	cat, _ := domain.NewCategory(domain.CategoryDetails{Slug: "brackets", Texts: es("Brackets")}, now)
+	_ = r.categories.Create(ctx, cat)
+
+	mk := func(slug, brand string, status domain.Status, category bool, variants ...map[string]string) {
+		d := domain.Details{Slug: slug, Brand: brand, Texts: es(slug)}
+		if category {
+			d.CategoryID = cat.ID
+		}
+		p, _ := domain.NewProduct(d, now)
+		for i, opts := range variants {
+			if _, err := p.AddVariant(domain.VariantInput{SKU: slug + "-" + string(rune('a'+i)), Options: opts}, now); err != nil {
+				t.Fatal(err)
+			}
+		}
+		_ = p.ChangeStatus(status, now)
+		if err := r.products.Create(ctx, p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mk("p1", "Acme", domain.StatusActive, true, map[string]string{"tooth": "11", "arch": "upper"}, map[string]string{"tooth": "12", "arch": "lower"})
+	mk("p2", "Acme", domain.StatusActive, false, map[string]string{"tooth": "11", "arch": "lower"})
+	mk("p3", "Beta", domain.StatusActive, true, map[string]string{"tooth": "13", "arch": "upper"})
+	mk("p4", "Beta", domain.StatusDraft, true, map[string]string{"tooth": "11", "arch": "upper"})
+
+	active := []domain.Status{domain.StatusActive}
+	list := func(f ports.ProductFilter) []string {
+		t.Helper()
+		f.Statuses, f.Limit = active, 10
+		ps, total, err := r.products.List(ctx, f)
+		if err != nil || total != len(ps) {
+			t.Fatalf("list %+v: %d %v", f, total, err)
+		}
+		return slugs(ps)
+	}
+	if got := list(ports.ProductFilter{Brands: []string{"Acme"}}); !slices.Equal(got, []string{"p1", "p2"}) {
+		t.Errorf("brand: %v", got)
+	}
+	// Different attributes must hold for the same variant.
+	if got := list(ports.ProductFilter{Attributes: map[string][]string{"tooth": {"11"}, "arch": {"upper"}}}); !slices.Equal(got, []string{"p1"}) {
+		t.Errorf("same variant: %v", got)
+	}
+	// Values of one attribute are alternatives.
+	if got := list(ports.ProductFilter{Attributes: map[string][]string{"tooth": {"11", "13"}}}); !slices.Equal(got, []string{"p1", "p2", "p3"}) {
+		t.Errorf("any value: %v", got)
+	}
+	if got := list(ports.ProductFilter{Sort: ports.SortNewest}); len(got) != 3 {
+		t.Errorf("newest: %v", got)
+	}
+
+	f, err := r.products.Facets(ctx, ports.ProductFilter{
+		Statuses: active, Brands: []string{"Acme"}, Attributes: map[string][]string{"tooth": {"11"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	counts := func(fc []ports.FacetCount) map[string]int {
+		out := map[string]int{}
+		for _, c := range fc {
+			out[c.Value] = c.Count
+		}
+		return out
+	}
+	// Brands ignore the brand selection: Beta has no active tooth-11 product.
+	if got := counts(f.Brands); len(got) != 1 || got["Acme"] != 2 {
+		t.Errorf("brands: %v", got)
+	}
+	// Tooth ignores its own selection: Acme products have 11 (p1, p2) and 12 (p1).
+	if got := counts(f.Attributes["tooth"]); got["11"] != 2 || got["12"] != 1 || got["13"] != 0 {
+		t.Errorf("tooth: %v", got)
+	}
+	// Arch applies tooth 11 to the same variant: p1 upper, p2 lower.
+	if got := counts(f.Attributes["arch"]); got["upper"] != 1 || got["lower"] != 1 {
+		t.Errorf("arch: %v", got)
+	}
+	if f.Categories[cat.ID] != 1 {
+		t.Errorf("categories: %v", f.Categories)
 	}
 }

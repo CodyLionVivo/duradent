@@ -11,6 +11,9 @@ import (
 
 var codeRe = regexp.MustCompile(`^[a-z0-9][a-z0-9_]{0,31}$`)
 
+// ValidCode reports whether s is a well-formed attribute or value code.
+func ValidCode(s string) bool { return codeRe.MatchString(s) }
+
 // Attribute is a dimension variants differ by: prescription (Roth, MBT),
 // slot (.018, .022), tooth (11…47), size, material.
 type Attribute struct {

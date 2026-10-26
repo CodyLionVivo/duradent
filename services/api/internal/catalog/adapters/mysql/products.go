@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/CodyLionVivo/duradent/services/api/internal/catalog/domain"
@@ -227,47 +228,238 @@ func (r *Products) one(ctx context.Context, where string, arg any) (*domain.Prod
 	return ps[0], nil
 }
 
-func (r *Products) List(ctx context.Context, f ports.ProductFilter) ([]*domain.Product, int, error) {
-	var where []string
+// sqlCond is one WHERE fragment with its bound arguments. Fragments are
+// built from constant SQL; every value goes through a placeholder.
+type sqlCond struct {
+	sql  string
+	args []any
+}
+
+func where(conds ...sqlCond) (string, []any) {
+	var parts []string
 	var args []any
-	if len(f.Statuses) > 0 {
-		where = append(where, "p.status IN ("+mysql.Placeholders(len(f.Statuses))+")")
-		for _, s := range f.Statuses {
-			args = append(args, string(s))
+	for _, c := range conds {
+		if c.sql == "" {
+			continue
 		}
+		parts = append(parts, c.sql)
+		args = append(args, c.args...)
 	}
-	if len(f.CategoryIDs) > 0 {
-		where = append(where, "p.category_id IN ("+mysql.Placeholders(len(f.CategoryIDs))+")")
-		for _, c := range f.CategoryIDs {
-			args = append(args, c)
-		}
+	if len(parts) == 0 {
+		return "", nil
 	}
+	return " WHERE " + strings.Join(parts, " AND "), args
+}
+
+func inList(column string, values []any) sqlCond {
+	if len(values) == 0 {
+		return sqlCond{}
+	}
+	return sqlCond{column + " IN (" + mysql.Placeholders(len(values)) + ")", values}
+}
+
+// baseConds are status and text search: they always apply.
+func baseConds(f ports.ProductFilter) []sqlCond {
+	statuses := make([]any, len(f.Statuses))
+	for i, s := range f.Statuses {
+		statuses[i] = string(s)
+	}
+	conds := []sqlCond{inList("p.status", statuses)}
 	if f.Query != "" {
 		like := "%" + escapeLike(f.Query) + "%"
-		where = append(where, `(EXISTS (SELECT 1 FROM product_translations q WHERE q.product_id = p.id AND q.locale IN (?, ?) AND q.name LIKE ?)
-			OR EXISTS (SELECT 1 FROM variants qv WHERE qv.product_id = p.id AND qv.archived_at IS NULL AND qv.sku LIKE ?))`)
-		args = append(args, string(localeOrDefault(f.Locale)), string(locale.Default), like, like)
+		conds = append(conds, sqlCond{`(EXISTS (SELECT 1 FROM product_translations q WHERE q.product_id = p.id AND q.locale IN (?, ?) AND q.name LIKE ?)
+			OR EXISTS (SELECT 1 FROM variants qv WHERE qv.product_id = p.id AND qv.archived_at IS NULL AND qv.sku LIKE ?))`,
+			[]any{string(localeOrDefault(f.Locale)), string(locale.Default), like, like}})
 	}
-	cond := ""
-	if len(where) > 0 {
-		cond = " WHERE " + strings.Join(where, " AND ")
+	return conds
+}
+
+func categoryCond(f ports.ProductFilter) sqlCond {
+	ids := make([]any, len(f.CategoryIDs))
+	for i, c := range f.CategoryIDs {
+		ids[i] = c
 	}
+	return inList("p.category_id", ids)
+}
+
+func brandCond(f ports.ProductFilter) sqlCond {
+	brands := make([]any, len(f.Brands))
+	for i, b := range f.Brands {
+		brands[i] = b
+	}
+	return inList("p.brand", brands)
+}
+
+// attributeConds are the attribute selections as conditions on the variant
+// aliased v, leaving out the attribute `skip` (its own facet).
+func attributeConds(f ports.ProductFilter, skip string) []sqlCond {
+	codes := make([]string, 0, len(f.Attributes))
+	for code := range f.Attributes {
+		codes = append(codes, code)
+	}
+	sort.Strings(codes) // stable SQL for the same filter
+	var conds []sqlCond
+	for _, code := range codes {
+		values := f.Attributes[code]
+		if code == skip || len(values) == 0 {
+			continue
+		}
+		args := []any{code}
+		for _, v := range values {
+			args = append(args, v)
+		}
+		conds = append(conds, sqlCond{`EXISTS (SELECT 1 FROM variant_attribute_values fx
+			JOIN attribute_values fav ON fav.id = fx.attribute_value_id
+			JOIN attributes fa ON fa.id = fav.attribute_id
+			WHERE fx.variant_id = v.id AND fa.code = ? AND fav.code IN (` + mysql.Placeholders(len(values)) + `))`, args})
+	}
+	return conds
+}
+
+// variantCond requires an active variant matching every attribute selection.
+func variantCond(f ports.ProductFilter) sqlCond {
+	conds := attributeConds(f, "")
+	if len(conds) == 0 {
+		return sqlCond{}
+	}
+	inner, args := where(conds...)
+	return sqlCond{"EXISTS (SELECT 1 FROM variants v" + inner + " AND v.product_id = p.id AND v.archived_at IS NULL)", args}
+}
+
+func (r *Products) List(ctx context.Context, f ports.ProductFilter) ([]*domain.Product, int, error) {
+	cond, args := where(append(baseConds(f), categoryCond(f), brandCond(f), variantCond(f))...)
 
 	var total int
 	if err := r.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM products p"+cond, args...).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("count products: %w", err)
 	}
 
+	order := "COALESCE(tl.name, td.name), p.id"
+	if f.Sort == ports.SortNewest {
+		order = "p.created_at DESC, p.id DESC"
+	}
 	l := localeOrDefault(f.Locale)
-	//nolint:gosec // cond is built from constant fragments; values are bound
+	//nolint:gosec // cond and order are built from constant fragments; values are bound
 	q := `SELECT p.id FROM products p
 		LEFT JOIN product_translations tl ON tl.product_id = p.id AND tl.locale = ?
 		LEFT JOIN product_translations td ON td.product_id = p.id AND td.locale = ?` + cond +
-		` ORDER BY COALESCE(tl.name, td.name), p.id LIMIT ? OFFSET ?`
+		` ORDER BY ` + order + ` LIMIT ? OFFSET ?`
 	all := append([]any{string(l), string(locale.Default)}, args...)
 	all = append(all, f.Limit, f.Offset)
 	ps, err := r.load(ctx, q, all...)
 	return ps, total, err
+}
+
+func (r *Products) Facets(ctx context.Context, f ports.ProductFilter) (ports.Facets, error) {
+	out := ports.Facets{Categories: map[id.ID]int{}, Attributes: map[string][]ports.FacetCount{}}
+	base := baseConds(f)
+
+	// Brands: everything but the brand selection.
+	cond, args := where(append(base, categoryCond(f), variantCond(f), sqlCond{"p.brand <> ''", nil})...)
+	//nolint:gosec // cond is built from constant fragments; values are bound
+	rows, err := r.db.QueryContext(ctx, "SELECT p.brand, COUNT(*) FROM products p"+cond+" GROUP BY p.brand ORDER BY p.brand", args...)
+	if err != nil {
+		return out, fmt.Errorf("brand facets: %w", err)
+	}
+	if out.Brands, err = scanCounts(rows); err != nil {
+		return out, err
+	}
+
+	// Categories: everything but the category selection.
+	cond, args = where(append(base, brandCond(f), variantCond(f), sqlCond{"p.category_id IS NOT NULL", nil})...)
+	//nolint:gosec // cond is built from constant fragments; values are bound
+	if err := r.countInto(ctx, "SELECT p.category_id, COUNT(*) FROM products p"+cond+" GROUP BY p.category_id", args, out.Categories); err != nil {
+		return out, fmt.Errorf("category facets: %w", err)
+	}
+
+	// Attributes: one query for the attributes nobody selected (all
+	// selections apply) and one per selected attribute (its own selection
+	// left out).
+	var selected []string
+	for code, values := range f.Attributes {
+		if len(values) > 0 {
+			selected = append(selected, code)
+		}
+	}
+	sort.Strings(selected)
+	groups := []struct {
+		skip  string
+		scope sqlCond
+	}{{"", sqlCond{}}}
+	if len(selected) > 0 {
+		codes := make([]any, len(selected))
+		for i, c := range selected {
+			codes[i] = c
+		}
+		groups[0].scope = sqlCond{"a.code NOT IN (" + mysql.Placeholders(len(codes)) + ")", codes}
+		for _, code := range selected {
+			groups = append(groups, struct {
+				skip  string
+				scope sqlCond
+			}{code, sqlCond{"a.code = ?", []any{code}}})
+		}
+	}
+	for _, g := range groups {
+		conds := append(append([]sqlCond{}, base...), categoryCond(f), brandCond(f), g.scope)
+		conds = append(conds, attributeConds(f, g.skip)...)
+		cond, args := where(conds...)
+		//nolint:gosec // cond is built from constant fragments; values are bound
+		rows, err := r.db.QueryContext(ctx, `SELECT a.code, av.code, COUNT(DISTINCT p.id) FROM products p
+			JOIN variants v ON v.product_id = p.id AND v.archived_at IS NULL
+			JOIN variant_attribute_values vav ON vav.variant_id = v.id
+			JOIN attribute_values av ON av.id = vav.attribute_value_id
+			JOIN attributes a ON a.id = av.attribute_id`+cond+` GROUP BY a.code, av.code`, args...)
+		if err != nil {
+			return out, fmt.Errorf("attribute facets: %w", err)
+		}
+		if err := scanAttributeCounts(rows, out.Attributes); err != nil {
+			return out, err
+		}
+	}
+	return out, nil
+}
+
+func scanCounts(rows *sql.Rows) ([]ports.FacetCount, error) {
+	defer func() { _ = rows.Close() }()
+	var out []ports.FacetCount
+	for rows.Next() {
+		var c ports.FacetCount
+		if err := rows.Scan(&c.Value, &c.Count); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+func (r *Products) countInto(ctx context.Context, q string, args []any, dst map[id.ID]int) error {
+	rows, err := r.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var k id.ID
+		var n int
+		if err := rows.Scan(&k, &n); err != nil {
+			return err
+		}
+		dst[k] = n
+	}
+	return rows.Err()
+}
+
+func scanAttributeCounts(rows *sql.Rows, dst map[string][]ports.FacetCount) error {
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var code string
+		var c ports.FacetCount
+		if err := rows.Scan(&code, &c.Value, &c.Count); err != nil {
+			return err
+		}
+		dst[code] = append(dst[code], c)
+	}
+	return rows.Err()
 }
 
 func (r *Products) ByVariantIDs(ctx context.Context, variantIDs []id.ID) ([]*domain.Product, error) {

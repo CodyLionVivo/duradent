@@ -68,26 +68,82 @@ type BrowseQuery struct {
 	CategorySlug string // includes its subcategories
 	Query        string
 	Locale       locale.Locale
+	Brands       []string
+	Attributes   map[string][]string // attribute code → value codes
+	Sort         ports.ProductSort
 	Page         Page
 }
 
-// BrowseProducts lists active products for the store.
-func (s *Service) BrowseProducts(ctx context.Context, q BrowseQuery) ([]*domain.Product, int, error) {
+// BrowseResult is a page of products plus the counts the store shows next to
+// each filter option.
+type BrowseResult struct {
+	Products []*domain.Product
+	Total    int
+	Facets   ports.Facets
+}
+
+// Limits on what a visitor can send as filters (they come from the URL).
+const (
+	maxFilterValues = 20
+	maxFilterLen    = 80
+)
+
+func cleanValues(values []string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, v := range values {
+		v = strings.TrimSpace(v)
+		if v == "" || len(v) > maxFilterLen || seen[v] {
+			continue
+		}
+		seen[v] = true
+		out = append(out, v)
+		if len(out) == maxFilterValues {
+			break
+		}
+	}
+	return out
+}
+
+// BrowseProducts lists active products for the store with their facets.
+func (s *Service) BrowseProducts(ctx context.Context, q BrowseQuery) (BrowseResult, error) {
 	f := ports.ProductFilter{
-		Statuses: []domain.Status{domain.StatusActive},
-		Query:    strings.TrimSpace(q.Query),
-		Locale:   q.Locale,
+		Statuses:   []domain.Status{domain.StatusActive},
+		Query:      strings.TrimSpace(q.Query),
+		Locale:     q.Locale,
+		Brands:     cleanValues(q.Brands),
+		Attributes: map[string][]string{},
+		Sort:       ports.SortName,
+	}
+	if q.Sort == ports.SortNewest {
+		f.Sort = ports.SortNewest
+	}
+	for code, values := range q.Attributes {
+		if len(f.Attributes) == maxFilterValues || !domain.ValidCode(code) {
+			continue
+		}
+		if vs := cleanValues(values); len(vs) > 0 {
+			f.Attributes[code] = vs
+		}
 	}
 	if q.CategorySlug != "" {
 		ids, err := s.categorySubtree(ctx, q.CategorySlug)
 		if err != nil {
-			return nil, 0, err
+			return BrowseResult{}, err
 		}
 		f.CategoryIDs = ids
 	}
 	p := q.Page.normalized()
 	f.Limit, f.Offset = p.Limit, p.Offset
-	return s.products.List(ctx, f)
+	products, total, err := s.products.List(ctx, f)
+	if err != nil {
+		return BrowseResult{}, err
+	}
+	facets, err := s.products.Facets(ctx, f)
+	if err != nil {
+		return BrowseResult{}, err
+	}
+	return BrowseResult{Products: products, Total: total, Facets: facets}, nil
 }
 
 func (s *Service) categorySubtree(ctx context.Context, slug string) ([]id.ID, error) {

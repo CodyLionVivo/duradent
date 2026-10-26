@@ -18,7 +18,17 @@ import (
 
 // --- in-memory fakes of the ports ---------------------------------------------
 
-type memProducts struct{ byID map[id.ID]domain.Product }
+type memProducts struct {
+	byID       map[id.ID]domain.Product
+	lastFacets ports.ProductFilter
+}
+
+// Facets records the filter it was asked for (the counting itself is tested
+// against MySQL in the adapter).
+func (m *memProducts) Facets(_ context.Context, f ports.ProductFilter) (ports.Facets, error) {
+	m.lastFacets = f
+	return ports.Facets{}, nil
+}
 
 func (m *memProducts) Create(_ context.Context, p *domain.Product) error {
 	for _, o := range m.byID {
@@ -198,9 +208,9 @@ func TestStoreOnlySeesActiveProducts(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	list, total, err := f.svc.BrowseProducts(ctx, application.BrowseQuery{Locale: locale.ES})
-	if err != nil || total != 1 || list[0].ID != active.ID {
-		t.Fatalf("browse = %v (%d), %v", list, total, err)
+	res, err := f.svc.BrowseProducts(ctx, application.BrowseQuery{Locale: locale.ES})
+	if err != nil || res.Total != 1 || res.Products[0].ID != active.ID {
+		t.Fatalf("browse = %+v, %v", res, err)
 	}
 	if _, err := f.svc.ProductForStore(ctx, draft.Slug); !apperr.IsKind(err, apperr.KindNotFound) {
 		t.Fatalf("draft must be hidden from the store, got %v", err)
@@ -220,11 +230,11 @@ func TestBrowseByCategoryIncludesSubcategories(t *testing.T) {
 	f.activeProduct(t, "bracket-roth", "Bracket Roth", metal.ID)
 	f.activeProduct(t, "arco-niti", "Arco NiTi", wires.ID)
 
-	_, total, err := f.svc.BrowseProducts(ctx, application.BrowseQuery{CategorySlug: "brackets"})
-	if err != nil || total != 1 {
-		t.Fatalf("brackets subtree should contain 1 product, got %d (%v)", total, err)
+	res, err := f.svc.BrowseProducts(ctx, application.BrowseQuery{CategorySlug: "brackets"})
+	if err != nil || res.Total != 1 {
+		t.Fatalf("brackets subtree should contain 1 product, got %d (%v)", res.Total, err)
 	}
-	if _, _, err := f.svc.BrowseProducts(ctx, application.BrowseQuery{CategorySlug: "nope"}); !apperr.IsKind(err, apperr.KindNotFound) {
+	if _, err := f.svc.BrowseProducts(ctx, application.BrowseQuery{CategorySlug: "nope"}); !apperr.IsKind(err, apperr.KindNotFound) {
 		t.Fatalf("unknown category: %v", err)
 	}
 }
@@ -284,5 +294,37 @@ func TestImageUploadFlow(t *testing.T) {
 	}
 	if got := f.svc.MediaURL(key); got != "https://cdn.test/"+key {
 		t.Fatalf("media url = %q", got)
+	}
+}
+
+func TestBrowseCleansFilters(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	f.activeProduct(t, "bracket-roth", "Bracket Roth", id.Nil)
+	_, err := f.svc.BrowseProducts(ctx, application.BrowseQuery{
+		Brands: []string{" Duradent ", "Duradent", "", strings.Repeat("x", 81)},
+		Attributes: map[string][]string{
+			"slot":         {"022", "022", "018"},
+			"Bad Code!":    {"x"},
+			"arch":         {""},
+			"prescription": {"roth"},
+		},
+		Sort: "price; DROP TABLE products",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := f.products.lastFacets
+	if !slices.Equal(got.Brands, []string{"Duradent"}) {
+		t.Errorf("brands: %q", got.Brands)
+	}
+	if len(got.Attributes) != 2 || !slices.Equal(got.Attributes["slot"], []string{"022", "018"}) || got.Attributes["prescription"][0] != "roth" {
+		t.Errorf("attributes: %v", got.Attributes)
+	}
+	if got.Sort != ports.SortName {
+		t.Errorf("unknown sort falls back to name: %q", got.Sort)
+	}
+	if _, err := f.svc.BrowseProducts(ctx, application.BrowseQuery{Sort: ports.SortNewest}); err != nil || f.products.lastFacets.Sort != ports.SortNewest {
+		t.Errorf("newest: %v %q", err, f.products.lastFacets.Sort)
 	}
 }
