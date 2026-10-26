@@ -3,7 +3,7 @@ import Logo from './Logo.astro';
 import { CURRENCIES, LOCALES, LOCALE_NAMES, localePath, switchLocalePath, useTranslations } from '../i18n';
 import { getCategories, topLevel, type Category } from '../lib/catalog';
 
-const { locale, currency, user } = Astro.locals;
+const { locale, currency, user, cartCount } = Astro.locals;
 const t = useTranslations(locale);
 
 let categories: Category[] = [];
@@ -32,6 +32,15 @@ const returnTo = Astro.url.pathname + Astro.url.search;
     </form>
 
     <div class="ml-auto flex items-center gap-2 md:ml-0">
+      <a
+        href={localePath(locale, '/cart')}
+        class="btn-secondary relative px-3 py-1.5 text-xs"
+        aria-label={t('cart.open', { count: cartCount })}
+      >
+        <svg aria-hidden="true" viewBox="0 0 20 20" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2.5 3h2l2 10h9l2-7H6" stroke-linejoin="round" stroke-linecap="round"></path><circle cx="8" cy="16.5" r="1.2"></circle><circle cx="14.5" cy="16.5" r="1.2"></circle></svg>
+        <span class="hidden sm:inline">{t('nav.cart')}</span>
+        {cartCount > 0 && <span class="ml-1 rounded-full bg-brand-700 px-1.5 text-[10px] font-bold leading-4 text-white">{cartCount > 99 ? '99+' : cartCount}</span>}
+      </a>
       <a
         href={localePath(locale, user ? '/account' : '/account/login')}
         class="btn-secondary px-3 py-1.5 text-xs"

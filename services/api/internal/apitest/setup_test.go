@@ -1,11 +1,12 @@
 // Package apitest drives the real HTTP API (handlers, services, MySQL) end to
-// end, wired as in cmd/duradent. Only object storage is faked, and Google is
-// played by an in-process OIDC provider.
+// end, wired by internal/wiring exactly as cmd/duradent does. Only object
+// storage and Culqi are faked, and Google is an in-process OIDC provider.
 package apitest
 
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -14,33 +15,24 @@ import (
 	"testing"
 	"time"
 
-	cataloghttp "github.com/CodyLionVivo/duradent/services/api/internal/catalog/adapters/http"
-	catalogmysql "github.com/CodyLionVivo/duradent/services/api/internal/catalog/adapters/mysql"
-	catalogapp "github.com/CodyLionVivo/duradent/services/api/internal/catalog/application"
 	"github.com/CodyLionVivo/duradent/services/api/internal/catalog/ports"
-	identityargon2 "github.com/CodyLionVivo/duradent/services/api/internal/identity/adapters/argon2"
-	identityhttp "github.com/CodyLionVivo/duradent/services/api/internal/identity/adapters/http"
-	identitymysql "github.com/CodyLionVivo/duradent/services/api/internal/identity/adapters/mysql"
 	identityoidc "github.com/CodyLionVivo/duradent/services/api/internal/identity/adapters/oidc"
 	"github.com/CodyLionVivo/duradent/services/api/internal/identity/adapters/oidc/oidctest"
-	identityapp "github.com/CodyLionVivo/duradent/services/api/internal/identity/application"
 	identitydomain "github.com/CodyLionVivo/duradent/services/api/internal/identity/domain"
 	identityports "github.com/CodyLionVivo/duradent/services/api/internal/identity/ports"
-	"github.com/CodyLionVivo/duradent/services/api/internal/kernel/apperr"
-	"github.com/CodyLionVivo/duradent/services/api/internal/platform/auth"
+	"github.com/CodyLionVivo/duradent/services/api/internal/orders/adapters/fakegateway"
 	"github.com/CodyLionVivo/duradent/services/api/internal/platform/httpserver"
 	"github.com/CodyLionVivo/duradent/services/api/internal/platform/mysql"
 	"github.com/CodyLionVivo/duradent/services/api/internal/platform/mysqltest"
-	pricinghttp "github.com/CodyLionVivo/duradent/services/api/internal/pricing/adapters/http"
-	pricingmysql "github.com/CodyLionVivo/duradent/services/api/internal/pricing/adapters/mysql"
-	pricingapp "github.com/CodyLionVivo/duradent/services/api/internal/pricing/application"
+	"github.com/CodyLionVivo/duradent/services/api/internal/wiring"
 	"github.com/CodyLionVivo/duradent/services/api/migrations"
 )
 
 const (
-	token      = "test-admin-token"
-	adminEmail = "jefe@duradent.pe"
-	webBaseURL = "http://web.test"
+	token         = "test-admin-token"
+	adminEmail    = "jefe@duradent.pe"
+	webBaseURL    = "http://web.test"
+	webhookSecret = "test-webhook-secret-0123456789"
 )
 
 type fakeMedia struct{}
@@ -52,18 +44,34 @@ func (fakeMedia) PublicURL(key string) string { return "https://cdn.test/" + key
 
 type server struct {
 	client
-	google *oidctest.Server
+	google  *oidctest.Server
+	gateway *fakegateway.Gateway
+	app     *wiring.App
+	db      *sql.DB
 }
 
 type client struct {
 	t       *testing.T
 	srv     *httptest.Server
-	session string // sent as "Authorization: Session <token>" when set
+	session string            // sent as "Authorization: Session <token>" when set
+	headers map[string]string // extra headers (cart key, idempotency key)
 }
 
 // as returns a client that calls the API as the signed-in user.
 func (c client) as(session string) client {
 	c.session = session
+	return c
+}
+
+// with returns a client that sends an extra header.
+func (c client) with(name, value string) client {
+	h := map[string]string{name: value}
+	for k, v := range c.headers {
+		if k != name {
+			h[k] = v
+		}
+	}
+	c.headers = h
 	return c
 }
 
@@ -74,46 +82,26 @@ func newServer(t *testing.T) server {
 		t.Fatal(err)
 	}
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	now := func() time.Time { return time.Now().UTC().Truncate(time.Microsecond) }
-	catalog := catalogapp.NewService(catalogmysql.NewProducts(db), catalogmysql.NewCategories(db), catalogmysql.NewAttributes(db), fakeMedia{}, now)
-	pricing := pricingapp.NewService(pricingmysql.NewPriceLists(db), pricingmysql.NewPrices(db))
 
 	google := oidctest.New(t)
 	gp, err := identityoidc.New(context.Background(), identityoidc.Options{Issuer: google.URL, ClientID: google.ClientID, ClientSecret: google.ClientSecret})
 	if err != nil {
 		t.Fatal(err)
 	}
-	stores := identitymysql.New(db)
-	identity, err := identityapp.NewService(identityapp.Deps{
-		Accounts: stores.Accounts, Customers: stores.Customers, Addresses: stores.Addresses,
-		Sessions: stores.Sessions, States: stores.LoginStates, Hasher: identityargon2.Hasher{},
+	gateway := fakegateway.New()
+	app, err := wiring.Build(wiring.Options{
+		DB: db, Log: log, Media: fakeMedia{}, Gateway: gateway, AdminEmails: []string{adminEmail},
 		Providers: map[identitydomain.Provider]identityports.OIDCProvider{identitydomain.ProviderGoogle: gp},
-		Now:       now,
-	}, identityapp.Config{AdminEmails: []string{adminEmail}})
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	mux := httpserver.NewMux(map[string]httpserver.Pinger{"mysql": db})
-	admin := auth.RequireAdmin(token)
-	cataloghttp.Register(mux, catalog, log, admin)
-	pricinghttp.Register(mux, pricing, log, admin)
-	identityhttp.Register(mux, identity, log, identityhttp.Options{
-		WebBaseURL: webBaseURL, PriceListExists: pricing.PriceListExists, Admin: admin,
+	h := app.Handler(db, log, wiring.HTTPOptions{
+		AdminToken: token, WebBaseURL: webBaseURL, WebhookSecret: webhookSecret, PublicKey: "pk_test_x", BankDetails: "BCP 191-0000000-0-00",
 	})
-	resolve := func(ctx context.Context, tok string) (auth.Principal, bool, error) {
-		p, err := identity.Authenticate(ctx, tok)
-		if apperr.IsKind(err, apperr.KindNotFound) {
-			return auth.Principal{}, false, nil
-		}
-		if err != nil {
-			return auth.Principal{}, false, err
-		}
-		return auth.Principal{AccountID: p.Account.ID, Email: p.Account.Email, Role: string(p.Account.Role), PriceListCode: p.PriceListCode}, true, nil
-	}
-	srv := httptest.NewServer(httpserver.Observe(log, auth.Middleware(resolve, log, mux)))
+	srv := httptest.NewServer(httpserver.Observe(log, h))
 	t.Cleanup(srv.Close)
-	return server{client: client{t: t, srv: srv}, google: google}
+	return server{client: client{t: t, srv: srv}, google: google, gateway: gateway, app: app, db: db}
 }
 
 // do sends a request and decodes the JSON response into out (if not nil).
@@ -127,6 +115,9 @@ func (c client) do(method, path string, admin bool, body any, out any) int {
 	}
 	req, _ := http.NewRequestWithContext(context.Background(), method, c.srv.URL+path, buf)
 	req.Header.Set("Content-Type", "application/json")
+	for k, v := range c.headers {
+		req.Header.Set(k, v)
+	}
 	switch {
 	case admin:
 		req.Header.Set("Authorization", "Bearer "+token)

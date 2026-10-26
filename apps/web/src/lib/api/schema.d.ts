@@ -726,6 +726,428 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/inventory/availability": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Sellable units per variant */
+        get: operations["getAvailability"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/inventory": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["adminListStock"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/inventory/{variant}/adjust": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                variant: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Change on-hand stock (purchase, count correction, return) */
+        post: operations["adminAdjustStock"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/inventory/{variant}/reorder-point": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                variant: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["adminSetReorderPoint"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/inventory/{variant}/movements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                variant: string;
+            };
+            cookie?: never;
+        };
+        get: operations["adminStockMovements"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/cart": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The caller's cart (account cart, or anonymous cart by X-Cart-Key) */
+        get: operations["getCart"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/cart/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add units of a variant; returns the cart (with its key for anonymous visitors) */
+        post: operations["addCartItem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/cart/items/{variant}": {
+        parameters: {
+            query?: {
+                currency?: components["schemas"]["Currency"];
+                /** @description Language of the response; unknown values fall back to es. */
+                locale?: components["parameters"]["Locale"];
+            };
+            header?: {
+                /** @description Anonymous cart key (ignored for signed-in callers) */
+                "X-Cart-Key"?: components["parameters"]["CartKey"];
+            };
+            path: {
+                variant: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** Set a line's quantity (0 removes it) */
+        put: operations["setCartItem"];
+        post?: never;
+        delete: operations["removeCartItem"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/cart/merge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Move an anonymous cart into the signed-in account's cart */
+        post: operations["mergeCart"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/checkout/quote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Price the cart with delivery and IGV */
+        post: operations["quoteCheckout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["myOrders"];
+        put?: never;
+        /**
+         * Place an order from the cart (freezes prices, reserves stock)
+         * @description Send an `Idempotency-Key` header; retries with the same key return the same order.
+         */
+        post: operations["placeOrder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orders/{number}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                number: string;
+            };
+            cookie?: never;
+        };
+        get: operations["myOrder"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orders/{number}/pay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                number: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Pay with a Culqi Checkout token (card tkn_… or Yape ype_…) */
+        post: operations["payOrder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orders/{number}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                number: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel an unpaid order (releases stock) */
+        post: operations["cancelOrder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/payments/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Payment settings for the checkout page */
+        get: operations["paymentsConfig"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/webhooks/culqi/{secret}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                secret: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Culqi events (configure in CulqiPanel → Eventos → Webhooks)
+         * @description Culqi does not sign webhooks: the URL carries a secret and every charge
+         *     is re-read from Culqi's API before an order changes. Duplicates are harmless.
+         */
+        post: operations["culqiWebhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["adminListOrders"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/orders/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get: operations["adminGetOrder"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/orders/{id}/confirm-transfer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["adminConfirmTransfer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/orders/{id}/prepare": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["adminPrepareOrder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/orders/{id}/ship": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["adminShipOrder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/orders/{id}/deliver": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["adminDeliverOrder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/orders/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["adminCancelOrder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -759,6 +1181,130 @@ export interface components {
         Locale: "es" | "en" | "pt-br";
         /** @enum {string} */
         Provider: "google" | "microsoft" | "dev";
+        StockItem: {
+            /** Format: uuid */
+            variant_id: string;
+            on_hand: number;
+            reserved: number;
+            available: number;
+            reorder_point: number;
+            low: boolean;
+        };
+        CartLine: {
+            /** Format: uuid */
+            variant_id: string;
+            sku: string;
+            product_name: string;
+            product_slug: string;
+            options: string;
+            image_url: string;
+            qty: number;
+            unit_price: components["schemas"]["Decimal"] | null;
+            line_total: components["schemas"]["Decimal"] | null;
+            available: number;
+            /** @enum {string} */
+            problem: "" | "unavailable" | "not_priced" | "insufficient_stock";
+        };
+        Cart: {
+            /** @description Anonymous carts only; keep it in a cookie */
+            key?: string;
+            currency: components["schemas"]["Currency"];
+            lines: components["schemas"]["CartLine"][];
+            subtotal: components["schemas"]["Decimal"];
+            item_count: number;
+            weight_g: number;
+            /** @description Every line can be bought */
+            ready: boolean;
+        };
+        /** @enum {string} */
+        OrderStatus: "pending_payment" | "paid" | "preparing" | "shipped" | "delivered" | "cancelled";
+        OrderBilling: {
+            customer_type: string;
+            document_type: string;
+            document_number: string;
+            business_name: string;
+            /** @enum {string} */
+            invoice_type: "01" | "03";
+        };
+        OrderShipping: {
+            pickup: boolean;
+            /** @enum {string} */
+            zone: "lima" | "provincias" | "pickup" | "";
+            recipient?: string;
+            line1?: string;
+            reference?: string;
+            district?: string;
+            province?: string;
+            department?: string;
+            phone?: string;
+        };
+        Order: {
+            /** Format: uuid */
+            id: string;
+            /** @example DD-000123 */
+            number: string;
+            status: components["schemas"]["OrderStatus"];
+            /** @enum {string} */
+            payment_method: "culqi" | "bank_transfer";
+            currency: components["schemas"]["Currency"];
+            email: string;
+            lines: {
+                /** Format: uuid */
+                variant_id: string;
+                sku: string;
+                name: string;
+                options: string;
+                unit_price: components["schemas"]["Decimal"];
+                qty: number;
+                line_total: components["schemas"]["Decimal"];
+            }[];
+            subtotal: components["schemas"]["Decimal"];
+            shipping_amount: components["schemas"]["Decimal"];
+            tax: components["schemas"]["Decimal"];
+            total: components["schemas"]["Decimal"];
+            billing: components["schemas"]["OrderBilling"];
+            shipping: components["schemas"]["OrderShipping"];
+            notes: string;
+            /** Format: date-time */
+            payment_deadline: string;
+            payment_in_progress: boolean;
+            carrier: string;
+            tracking: string;
+            cancel_reason: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            paid_at: string | null;
+            /** Format: date-time */
+            shipped_at: string | null;
+            /** Format: date-time */
+            delivered_at: string | null;
+            /** Format: date-time */
+            cancelled_at: string | null;
+        };
+        OrderPage: {
+            items: components["schemas"]["Order"][];
+            total: number;
+            page: number;
+            page_size: number;
+        };
+        Payment: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            method: "culqi" | "bank_transfer";
+            /** @enum {string} */
+            status: "confirmed" | "failed";
+            amount: components["schemas"]["Decimal"];
+            currency: components["schemas"]["Currency"];
+            provider_ref: string;
+            source_type: string;
+            failure_code: string;
+            failure_message: string;
+            reference: string;
+            /** Format: date-time */
+            created_at: string;
+        };
         /** @enum {string} */
         Role: "customer" | "admin";
         Account: {
@@ -1004,6 +1550,24 @@ export interface components {
         };
     };
     responses: {
+        /** @description The cart */
+        Cart: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Cart"];
+            };
+        };
+        /** @description The order */
+        Order: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Order"];
+            };
+        };
         /** @description Signed in */
         Session: {
             headers: {
@@ -1079,12 +1643,28 @@ export interface components {
         };
     };
     parameters: {
+        /** @description Anonymous cart key (ignored for signed-in callers) */
+        CartKey: string;
         /** @description Language of the response; unknown values fall back to es. */
         Locale: components["schemas"]["Locale"];
         Page: number;
         ID: string;
     };
     requestBodies: {
+        CheckoutInput: {
+            content: {
+                "application/json": {
+                    currency?: components["schemas"]["Currency"];
+                    /** Format: uuid */
+                    address_id?: string | null;
+                    /** @description Collect at Duradent's store */
+                    pickup?: boolean;
+                    /** @enum {string} */
+                    payment_method?: "culqi" | "bank_transfer";
+                    notes?: string;
+                };
+            };
+        };
         AddressInput: {
             content: {
                 "application/json": {
@@ -2189,6 +2769,598 @@ export interface operations {
                 };
                 content?: never;
             };
+            409: components["responses"]["Problem"];
+        };
+    };
+    getAvailability: {
+        parameters: {
+            query?: {
+                variant_id?: string[];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Availability in request order */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        variant_id: string;
+                        available: number;
+                    }[];
+                };
+            };
+        };
+    };
+    adminListStock: {
+        parameters: {
+            query?: {
+                variant_id?: string[];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Stock per variant */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StockItem"][];
+                };
+            };
+        };
+    };
+    adminAdjustStock: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                variant: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Units to add (positive) or remove (negative) */
+                    delta: number;
+                    /** @enum {string} */
+                    reason: "purchase" | "adjustment" | "return";
+                    note?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Stock after the change */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StockItem"];
+                };
+            };
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    adminSetReorderPoint: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                variant: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    value: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Stock after the change */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StockItem"];
+                };
+            };
+        };
+    };
+    adminStockMovements: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                variant: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Last 50 movements, newest first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        delta: number;
+                        reason: string;
+                        reference: string;
+                        /** Format: date-time */
+                        created_at: string;
+                    }[];
+                };
+            };
+        };
+    };
+    getCart: {
+        parameters: {
+            query?: {
+                currency?: components["schemas"]["Currency"];
+                /** @description Language of the response; unknown values fall back to es. */
+                locale?: components["parameters"]["Locale"];
+            };
+            header?: {
+                /** @description Anonymous cart key (ignored for signed-in callers) */
+                "X-Cart-Key"?: components["parameters"]["CartKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Cart"];
+        };
+    };
+    addCartItem: {
+        parameters: {
+            query?: {
+                currency?: components["schemas"]["Currency"];
+                /** @description Language of the response; unknown values fall back to es. */
+                locale?: components["parameters"]["Locale"];
+            };
+            header?: {
+                /** @description Anonymous cart key (ignored for signed-in callers) */
+                "X-Cart-Key"?: components["parameters"]["CartKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    variant_id: string;
+                    qty: number;
+                };
+            };
+        };
+        responses: {
+            200: components["responses"]["Cart"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    setCartItem: {
+        parameters: {
+            query?: {
+                currency?: components["schemas"]["Currency"];
+                /** @description Language of the response; unknown values fall back to es. */
+                locale?: components["parameters"]["Locale"];
+            };
+            header?: {
+                /** @description Anonymous cart key (ignored for signed-in callers) */
+                "X-Cart-Key"?: components["parameters"]["CartKey"];
+            };
+            path: {
+                variant: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    qty: number;
+                };
+            };
+        };
+        responses: {
+            200: components["responses"]["Cart"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    removeCartItem: {
+        parameters: {
+            query?: {
+                currency?: components["schemas"]["Currency"];
+                /** @description Language of the response; unknown values fall back to es. */
+                locale?: components["parameters"]["Locale"];
+            };
+            header?: {
+                /** @description Anonymous cart key (ignored for signed-in callers) */
+                "X-Cart-Key"?: components["parameters"]["CartKey"];
+            };
+            path: {
+                variant: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Cart"];
+        };
+    };
+    mergeCart: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    key: string;
+                };
+            };
+        };
+        responses: {
+            200: components["responses"]["Cart"];
+        };
+    };
+    quoteCheckout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: components["requestBodies"]["CheckoutInput"];
+        responses: {
+            /** @description Quote */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        cart: components["schemas"]["Cart"];
+                        shipping: components["schemas"]["OrderShipping"];
+                        shipping_amount: components["schemas"]["Decimal"];
+                        tax: components["schemas"]["Decimal"];
+                        total: components["schemas"]["Decimal"];
+                        billing: components["schemas"]["OrderBilling"] | null;
+                        igv_percent: number;
+                    };
+                };
+            };
+            422: components["responses"]["Problem"];
+        };
+    };
+    myOrders: {
+        parameters: {
+            query?: {
+                page?: components["parameters"]["Page"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The caller's orders, newest first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderPage"];
+                };
+            };
+        };
+    };
+    placeOrder: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: components["requestBodies"]["CheckoutInput"];
+        responses: {
+            201: components["responses"]["Order"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    myOrder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                number: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Order"];
+            404: components["responses"]["Problem"];
+        };
+    };
+    payOrder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                number: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    token: string;
+                };
+            };
+        };
+        responses: {
+            200: components["responses"]["Order"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            429: components["responses"]["Problem"];
+        };
+    };
+    cancelOrder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                number: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Order"];
+            409: components["responses"]["Problem"];
+        };
+    };
+    paymentsConfig: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Gateway in use, Culqi public key, bank transfer details */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        gateway: "culqi" | "fake";
+                        culqi_public_key: string;
+                        bank_details: string;
+                        yape_max_pen: components["schemas"]["Decimal"];
+                    };
+                };
+            };
+        };
+    };
+    culqiWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                secret: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description Processed or ignored */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Wrong secret */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Temporary failure; Culqi retries */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    adminListOrders: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["OrderStatus"];
+                /** @description Number, email, RUC/DNI or business name */
+                q?: string;
+                page?: components["parameters"]["Page"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Orders, newest first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderPage"];
+                };
+            };
+        };
+    };
+    adminGetOrder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Order with payments and status history */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        order: components["schemas"]["Order"];
+                        payments: components["schemas"]["Payment"][];
+                        history: {
+                            from: string;
+                            to: string;
+                            actor: string;
+                            note: string;
+                            /** Format: date-time */
+                            at: string;
+                        }[];
+                    };
+                };
+            };
+            404: components["responses"]["Problem"];
+        };
+    };
+    adminConfirmTransfer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Bank operation number */
+                    reference: string;
+                };
+            };
+        };
+        responses: {
+            200: components["responses"]["Order"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    adminPrepareOrder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Order"];
+            409: components["responses"]["Problem"];
+        };
+    };
+    adminShipOrder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    carrier?: string;
+                    tracking?: string;
+                };
+            };
+        };
+        responses: {
+            200: components["responses"]["Order"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    adminDeliverOrder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Order"];
+            409: components["responses"]["Problem"];
+        };
+    };
+    adminCancelOrder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    reason?: string;
+                };
+            };
+        };
+        responses: {
+            200: components["responses"]["Order"];
             409: components["responses"]["Problem"];
         };
     };

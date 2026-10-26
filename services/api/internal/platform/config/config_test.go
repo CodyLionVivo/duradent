@@ -49,7 +49,8 @@ func TestDevLoginOnlyLocal(t *testing.T) {
 	if err != nil || !cfg.DevLogin || len(cfg.AdminEmails) != 2 || cfg.AdminEmails[1] != "b@x.pe" {
 		t.Fatalf("local: %+v %v", cfg, err)
 	}
-	prod := map[string]string{"APP_ENV": "prod", "MYSQL_DSN": "x", "S3_MEDIA_BUCKET": "b", "MEDIA_BASE_URL": "https://cdn", "WEB_BASE_URL": "https://duradent.pe"}
+	prod := map[string]string{"APP_ENV": "prod", "MYSQL_DSN": "x", "S3_MEDIA_BUCKET": "b", "MEDIA_BASE_URL": "https://cdn", "WEB_BASE_URL": "https://duradent.pe",
+		"CULQI_SECRET_KEY": "sk_live_x", "CULQI_PUBLIC_KEY": "pk_live_x", "CULQI_WEBHOOK_SECRET": "a-long-random-webhook-secret-123"}
 	if _, err := load(env(prod)); err != nil {
 		t.Fatalf("valid prod config: %v", err)
 	}
@@ -61,5 +62,16 @@ func TestDevLoginOnlyLocal(t *testing.T) {
 	prod["WEB_BASE_URL"] = "http://duradent.pe"
 	if _, err := load(env(prod)); err == nil {
 		t.Fatal("plain http web URL must be rejected outside local")
+	}
+}
+
+func TestCulqiRequiredOutsideLocal(t *testing.T) {
+	base := map[string]string{"APP_ENV": "staging", "MYSQL_DSN": "x", "S3_MEDIA_BUCKET": "b", "MEDIA_BASE_URL": "https://cdn", "WEB_BASE_URL": "https://staging.duradent.pe"}
+	if _, err := load(env(base)); err == nil {
+		t.Fatal("staging without Culqi keys must fail")
+	}
+	base["CULQI_SECRET_KEY"], base["CULQI_PUBLIC_KEY"], base["CULQI_WEBHOOK_SECRET"] = "sk_test_x", "pk_test_x", "short"
+	if _, err := load(env(base)); err == nil {
+		t.Fatal("a short webhook secret must fail")
 	}
 }

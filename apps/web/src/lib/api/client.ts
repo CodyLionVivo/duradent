@@ -13,14 +13,17 @@ export type Problem = Schemas['Problem'];
 export type ApiClient = Client<paths>;
 
 /**
- * A client acting for one visitor: forwards their session token and their IP
- * (the API rate-limits sign-in attempts per client IP).
+ * A client acting for one visitor: forwards their session token (or their
+ * anonymous cart key) and their IP (the API rate-limits sign-in per IP).
  */
-export function createApi(opts: { session?: string; clientIP?: string; userAgent?: string } = {}): ApiClient {
+export function createApi(
+  opts: { session?: string; cartKey?: string; clientIP?: string; userAgent?: string } = {},
+): ApiClient {
   const client = createClient<paths>({ baseUrl: API_URL });
   client.use({
     onRequest({ request }) {
       if (opts.session) request.headers.set('Authorization', `Session ${opts.session}`);
+      else if (opts.cartKey) request.headers.set('X-Cart-Key', opts.cartKey);
       if (opts.clientIP) request.headers.set('X-Forwarded-For', opts.clientIP);
       if (opts.userAgent) request.headers.set('User-Agent', opts.userAgent);
       return request;

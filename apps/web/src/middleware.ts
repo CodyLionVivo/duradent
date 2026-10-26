@@ -1,7 +1,7 @@
 import { defineMiddleware } from 'astro:middleware';
 import { DEFAULT_CURRENCY, DEFAULT_LOCALE, isCurrency, isLocale } from './i18n';
 import { createApi } from './lib/api/client';
-import { SESSION_COOKIE, clearSession } from './lib/session';
+import { CART_COOKIE, SESSION_COOKIE, clearSession } from './lib/session';
 
 export const CURRENCY_COOKIE = 'currency';
 
@@ -14,16 +14,21 @@ export const onRequest = defineMiddleware(async (context, next) => {
   locals.currency = isCurrency(currency) ? currency : DEFAULT_CURRENCY;
 
   // Every page talks to the API as the visitor: their session decides which
-  // price list they see and what they may do.
-  const session = cookies.get(SESSION_COOKIE)?.value;
+  // price list they see and what they may do; anonymous visitors carry the
+  // key of their cart.
+  let session = cookies.get(SESSION_COOKIE)?.value;
+  const cartKey = cookies.get(CART_COOKIE)?.value;
   let clientIP: string | undefined;
   try {
     clientIP = context.clientAddress;
   } catch {
     // Not available during prerendering.
   }
-  locals.api = createApi({ session, clientIP, userAgent: request.headers.get('user-agent') ?? undefined });
+  const userAgent = request.headers.get('user-agent') ?? undefined;
+  locals.clientIP = clientIP;
+  locals.api = createApi({ session, cartKey, clientIP, userAgent });
   locals.user = null;
+  locals.cartCount = 0;
   if (session) {
     const res = await locals.api.GET('/v1/me');
     if (res.response.ok && res.data) {
@@ -31,7 +36,8 @@ export const onRequest = defineMiddleware(async (context, next) => {
       locals.customer = res.data.customer ?? null;
     } else if (res.response.status === 401) {
       clearSession(cookies);
-      locals.api = createApi({ clientIP });
+      session = undefined;
+      locals.api = createApi({ cartKey, clientIP, userAgent });
     }
   }
 
@@ -43,12 +49,18 @@ export const onRequest = defineMiddleware(async (context, next) => {
     if (locals.user.role !== 'admin') {
       return new Response('Forbidden', { status: 403 });
     }
+  } else if ((session || cartKey) && request.method === 'GET' && isLocale(first)) {
+    // Item count for the header's cart link.
+    const res = await locals.api.GET('/v1/cart', { params: { query: { currency: locals.currency } } });
+    if (res.data) locals.cartCount = res.data.item_count;
   }
 
   const response = await next();
   response.headers.set('X-Content-Type-Options', 'nosniff');
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
   response.headers.set('X-Frame-Options', 'DENY');
-  if (first === 'admin' || url.pathname.includes('/account')) response.headers.set('Cache-Control', 'no-store');
+  if (first === 'admin' || /\/(account|cart|checkout|orders)/.test(url.pathname)) {
+    response.headers.set('Cache-Control', 'no-store');
+  }
   return response;
 });

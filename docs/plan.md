@@ -320,3 +320,11 @@ Cada fase termina con: compila, `golangci-lint` + `astro check` limpios, tests v
     se cargará si la fase 4 lo necesita para las zonas de envío.
   - El evento `CustomerRegistered` se publicará en la fase 5 (outbox).
   - Verificación de correo para cuentas con contraseña: fase 5 (necesita SES).
+- **Fase 4**:
+  - `payments` vive dentro del contexto `orders` (no como contexto aparte).
+  - Culqi no firma webhooks: se verifica releyendo el cargo en su API (ver ADR 25 en CLAUDE.md).
+  - El stock se confirma/libera de forma síncrona desde `orders` (por ports) en vez de por eventos;
+    los eventos se escriben igual en el outbox para notificaciones y facturación (fase 5).
+  - El job de expiración corre en el proceso `worker`.
+  - Tarifas de envío sembradas en la migración 0006 (editables por SQL; falta pantalla de admin).
+  - Cancelación de pedidos pagados y reembolsos Culqi: fase 5.

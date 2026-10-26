@@ -14,6 +14,8 @@ import (
 
 	catalogapp "github.com/CodyLionVivo/duradent/services/api/internal/catalog/application"
 	"github.com/CodyLionVivo/duradent/services/api/internal/catalog/domain"
+	inventoryapp "github.com/CodyLionVivo/duradent/services/api/internal/inventory/application"
+	inventorydomain "github.com/CodyLionVivo/duradent/services/api/internal/inventory/domain"
 	"github.com/CodyLionVivo/duradent/services/api/internal/kernel/id"
 	"github.com/CodyLionVivo/duradent/services/api/internal/kernel/locale"
 	"github.com/CodyLionVivo/duradent/services/api/internal/kernel/money"
@@ -277,7 +279,7 @@ var lists = []struct {
 
 const penPerUSD = 3.75
 
-func Run(ctx context.Context, log *slog.Logger, catalog *catalogapp.Service, pricing *pricingapp.Service) error {
+func Run(ctx context.Context, log *slog.Logger, catalog *catalogapp.Service, pricing *pricingapp.Service, inventory *inventoryapp.Service) error {
 	if existing, err := pricing.PriceLists(ctx); err != nil {
 		return err
 	} else if len(existing) > 0 {
@@ -317,7 +319,7 @@ func Run(ctx context.Context, log *slog.Logger, catalog *catalogapp.Service, pri
 	}
 
 	variants := 0
-	for _, p := range products {
+	for pi, p := range products {
 		created, err := catalog.CreateProduct(ctx, domain.Details{
 			Slug: p.slug, Brand: p.brand, CategoryID: catIDs[p.category], Texts: translations(p.names, p.desc),
 		})
@@ -337,7 +339,20 @@ func Run(ctx context.Context, log *slog.Logger, catalog *catalogapp.Service, pri
 		if err != nil {
 			return err
 		}
-		for _, v := range created.ActiveVariants() {
+		for vi, v := range created.ActiveVariants() {
+			// Varied demo stock, with one sold-out variant to see that state.
+			stock := 20 + (pi*37+vi*11)%180
+			if pi == 1 && vi == 1 {
+				stock = 0
+			}
+			if stock > 0 {
+				if _, err := inventory.Adjust(ctx, v.ID, stock, inventorydomain.MovementPurchase, "stock inicial (demo)"); err != nil {
+					return fmt.Errorf("stock %s: %w", v.SKU, err)
+				}
+			}
+			if _, err := inventory.SetReorderPoint(ctx, v.ID, 10); err != nil {
+				return err
+			}
 			for _, l := range lists {
 				if _, err := pricing.SetVariantPrices(ctx, listIDs[l.code], v.ID, tiers(base, l.factor)); err != nil {
 					return fmt.Errorf("prices %s/%s: %w", v.SKU, l.code, err)

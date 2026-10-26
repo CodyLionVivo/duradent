@@ -12,11 +12,20 @@ const t = useTranslations(locale);
 
 let product: ProductDetail | null = null;
 let quotes = new Map<string, Quote>();
+let availability: Record<string, number> = {};
 let state: 'ok' | 'notFound' | 'unavailable' = 'ok';
 try {
   product = await getProduct(Astro.locals.api, Astro.params.slug ?? '', locale);
   if (!product) state = 'notFound';
-  else quotes = await getQuotes(Astro.locals.api, product.variants.map((v) => v.id), currency);
+  else {
+    const ids = product.variants.map((v) => v.id);
+    const [q, avail] = await Promise.all([
+      getQuotes(Astro.locals.api, ids, currency),
+      Astro.locals.api.GET('/v1/inventory/availability', { params: { query: { variant_id: ids } } }),
+    ]);
+    quotes = q;
+    availability = Object.fromEntries((avail.data ?? []).map((a) => [a.variant_id, a.available]));
+  }
 } catch {
   state = 'unavailable';
 }
@@ -38,8 +47,9 @@ const labels: PickerLabels = {
   priceOnRequest: t('product.priceOnRequest'),
   unavailable: t('product.unavailable'),
   addToCart: t('product.addToCart'),
-  cartSoon: t('product.cartSoon'),
   quantity: t('product.quantity'),
+  inStock: t('stock.inStock'),
+  outOfStock: t('stock.out'),
 };
 const pickerQuotes: Record<string, PickerQuote> = Object.fromEntries(
   [...quotes].map(([id, q]) => [id, { unit_price: q.unit_price, tiers: q.tiers }]),
@@ -103,6 +113,8 @@ const hero = product?.images[0];
               options={product.options}
               variants={product.variants.map((v) => ({ id: v.id, sku: v.sku, weight_g: v.weight_g, options: v.options }))}
               quotes={pickerQuotes}
+              availability={availability}
+              cartAction={localePath(locale, '/cart')}
               initialVariantId={initial?.id ?? ''}
               currency={currency}
               intlLocale={INTL_LOCALE[locale]}

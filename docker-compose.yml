@@ -30,6 +30,15 @@ x-api-env: &api-env
   GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
   MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID:-}
   MICROSOFT_CLIENT_SECRET: ${MICROSOFT_CLIENT_SECRET:-}
+  # Payments (phase 4). Without CULQI_SECRET_KEY payments are simulated.
+  # With sandbox keys: CULQI_PUBLIC_KEY=pk_test_… CULQI_SECRET_KEY=sk_test_…
+  CULQI_PUBLIC_KEY: ${CULQI_PUBLIC_KEY:-}
+  CULQI_SECRET_KEY: ${CULQI_SECRET_KEY:-}
+  CULQI_WEBHOOK_SECRET: ${CULQI_WEBHOOK_SECRET:-local-webhook-secret-change-me}
+  BANK_DETAILS: |-
+    Banco de Crédito del Perú (BCP) · Duradent SAC · RUC 20000000000
+    Cuenta corriente soles: 000-0000000-0-00 · CCI: 002-000-000000000000-00
+    (datos de ejemplo para desarrollo)
 
 services:
   mysql:

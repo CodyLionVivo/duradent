@@ -14,7 +14,9 @@ const t = useTranslations('es');
 const notice = Astro.url.searchParams.get('notice');
 const path = Astro.url.pathname;
 const nav = [
+  { href: '/admin/orders', label: t('admin.nav.orders') },
   { href: '/admin/products', label: t('admin.nav.products') },
+  { href: '/admin/inventory', label: t('admin.nav.inventory') },
   { href: '/admin/categories', label: t('admin.nav.categories') },
   { href: '/admin/attributes', label: t('admin.nav.attributes') },
   { href: '/admin/price-lists', label: t('admin.nav.priceLists') },

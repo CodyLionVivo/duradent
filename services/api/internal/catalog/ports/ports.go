@@ -19,6 +19,8 @@ type ProductRepository interface {
 	ByID(ctx context.Context, productID id.ID) (*domain.Product, error)
 	BySlug(ctx context.Context, slug string) (*domain.Product, error)
 	List(ctx context.Context, f ProductFilter) ([]*domain.Product, int, error)
+	// ByVariantIDs returns the products owning any of the variants.
+	ByVariantIDs(ctx context.Context, variantIDs []id.ID) ([]*domain.Product, error)
 }
 
 type ProductFilter struct {

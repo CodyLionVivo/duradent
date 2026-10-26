@@ -5,7 +5,7 @@ import type { APIRoute } from 'astro';
 import { timingSafeEqual } from 'node:crypto';
 import { isLocale, localePath, type Locale } from '../../../i18n';
 import { ApiError, unwrap } from '../../../lib/api/client';
-import { OAUTH_STATE_COOKIE, setSession } from '../../../lib/session';
+import { OAUTH_STATE_COOKIE, adoptCart, setSession } from '../../../lib/session';
 import { safeReturnPath } from '../../../lib/urls';
 
 function same(a: string, b: string): boolean {
@@ -33,6 +33,7 @@ export const GET: APIRoute = async ({ params, url, locals, cookies, redirect }) 
       }),
     );
     setSession(cookies, signed.token, signed.expires_at);
+    await adoptCart(cookies, signed.token, locals.clientIP);
     const target = safeReturnPath(signed.return_to ?? null);
     return redirect(target === '/' ? localePath(locale, '/account') : target, 302);
   } catch (err) {

@@ -11,7 +11,7 @@ import (
 func (c client) must(want int, method, path string, body any, out any) {
 	c.t.Helper()
 	var raw json.RawMessage
-	if got := c.do(method, path, true, body, &raw); got != want {
+	if got := c.do(method, path, c.session == "", body, &raw); got != want { // admin token unless acting as a user
 		c.t.Fatalf("%s %s: status %d, want %d: %s", method, path, got, want, raw)
 	}
 	if out != nil {

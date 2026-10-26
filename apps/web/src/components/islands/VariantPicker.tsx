@@ -33,14 +33,18 @@ export interface PickerLabels {
   priceOnRequest: string;
   unavailable: string;
   addToCart: string;
-  cartSoon: string;
   quantity: string;
+  inStock: string; // contains {count}
+  outOfStock: string;
 }
 
 interface Props {
   options: PickerOption[];
   variants: PickerVariant[];
   quotes: Record<string, PickerQuote>;
+  availability: Record<string, number>;
+  /** Form target that adds to the cart (works without JavaScript too). */
+  cartAction: string;
   initialVariantId: string;
   currency: string;
   intlLocale: string;
@@ -53,7 +57,7 @@ function matches(v: PickerVariant, selection: Record<string, string>): boolean {
   return Object.entries(selection).every(([k, val]) => v.options[k] === val);
 }
 
-export default function VariantPicker({ options, variants, quotes, initialVariantId, currency, intlLocale, labels }: Props) {
+export default function VariantPicker({ options, variants, quotes, availability, cartAction, initialVariantId, currency, intlLocale, labels }: Props) {
   const initial = variants.find((v) => v.id === initialVariantId) ?? variants[0];
   const [selection, setSelection] = useState<Record<string, string>>({ ...(initial?.options ?? {}) });
   const [qty, setQty] = useState(1);
@@ -64,6 +68,8 @@ export default function VariantPicker({ options, variants, quotes, initialVarian
   );
   const current = variants.find((v) => matches(v, selection) && Object.keys(v.options).length === Object.keys(selection).length);
   const quote = current ? quotes[current.id] : undefined;
+  const stock = current ? (availability[current.id] ?? 0) : 0;
+  const canBuy = !!current && !!quote && stock > 0;
 
   const unitFor = (q: PickerQuote, n: number) =>
     [...q.tiers].reverse().find((t) => t.min_qty <= n)?.unit_price ?? q.unit_price;
@@ -159,23 +165,31 @@ export default function VariantPicker({ options, variants, quotes, initialVarian
           <p class="text-sm text-muted">{labels.unavailable}</p>
         )}
 
-        <div class="mt-5 flex items-end gap-3">
+        {current && (
+          <p class={`mt-4 text-sm font-medium ${stock > 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+            {stock > 0 ? fill(labels.inStock, 'count', stock) : labels.outOfStock}
+          </p>
+        )}
+
+        <form method="post" action={cartAction} class="mt-4 flex items-end gap-3">
+          <input type="hidden" name="intent" value="add" />
+          <input type="hidden" name="variant_id" value={current?.id ?? ''} />
           <label class="w-24">
             <span class="label">{labels.quantity}</span>
             <input
               type="number"
+              name="qty"
               min={1}
-              max={9999}
+              max={Math.max(1, Math.min(stock, 9999))}
               value={qty}
               class="input"
               onInput={(e) => setQty(Math.max(1, Number((e.target as HTMLInputElement).value) || 1))}
             />
           </label>
-          <button type="button" class="btn-primary flex-1" disabled aria-describedby="cart-soon">
+          <button type="submit" class="btn-primary flex-1 py-3" disabled={!canBuy}>
             {labels.addToCart}
           </button>
-        </div>
-        <p id="cart-soon" class="mt-2 text-xs text-muted">{labels.cartSoon}</p>
+        </form>
       </div>
     </div>
   );

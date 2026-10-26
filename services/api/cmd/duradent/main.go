@@ -16,27 +16,19 @@ import (
 
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 
-	cataloghttp "github.com/CodyLionVivo/duradent/services/api/internal/catalog/adapters/http"
-	catalogmysql "github.com/CodyLionVivo/duradent/services/api/internal/catalog/adapters/mysql"
 	catalogs3 "github.com/CodyLionVivo/duradent/services/api/internal/catalog/adapters/s3"
-	catalogapp "github.com/CodyLionVivo/duradent/services/api/internal/catalog/application"
-	identityargon2 "github.com/CodyLionVivo/duradent/services/api/internal/identity/adapters/argon2"
-	identityhttp "github.com/CodyLionVivo/duradent/services/api/internal/identity/adapters/http"
-	identitymysql "github.com/CodyLionVivo/duradent/services/api/internal/identity/adapters/mysql"
 	identityoidc "github.com/CodyLionVivo/duradent/services/api/internal/identity/adapters/oidc"
-	identityapp "github.com/CodyLionVivo/duradent/services/api/internal/identity/application"
 	identitydomain "github.com/CodyLionVivo/duradent/services/api/internal/identity/domain"
 	identityports "github.com/CodyLionVivo/duradent/services/api/internal/identity/ports"
-	"github.com/CodyLionVivo/duradent/services/api/internal/kernel/apperr"
-	"github.com/CodyLionVivo/duradent/services/api/internal/platform/auth"
+	"github.com/CodyLionVivo/duradent/services/api/internal/orders/adapters/culqi"
+	"github.com/CodyLionVivo/duradent/services/api/internal/orders/adapters/fakegateway"
+	ordersports "github.com/CodyLionVivo/duradent/services/api/internal/orders/ports"
 	"github.com/CodyLionVivo/duradent/services/api/internal/platform/config"
 	"github.com/CodyLionVivo/duradent/services/api/internal/platform/httpserver"
 	"github.com/CodyLionVivo/duradent/services/api/internal/platform/logging"
 	"github.com/CodyLionVivo/duradent/services/api/internal/platform/mysql"
-	pricinghttp "github.com/CodyLionVivo/duradent/services/api/internal/pricing/adapters/http"
-	pricingmysql "github.com/CodyLionVivo/duradent/services/api/internal/pricing/adapters/mysql"
-	pricingapp "github.com/CodyLionVivo/duradent/services/api/internal/pricing/application"
 	"github.com/CodyLionVivo/duradent/services/api/internal/seed"
+	"github.com/CodyLionVivo/duradent/services/api/internal/wiring"
 	"github.com/CodyLionVivo/duradent/services/api/migrations"
 )
 
@@ -44,10 +36,10 @@ const usage = `usage: duradent <command>
 
 commands:
   api            serve the HTTP API
-  worker         consume domain events from SQS
+  worker         background jobs (expire unpaid orders; event consumers in phase 5)
   outbox-relay   publish pending outbox rows to SNS
   migrate        apply database migrations and exit
-  seed           load demo catalog and prices (local only; skipped if data exists)`
+  seed           load demo catalog, prices and stock (local only; skipped if data exists)`
 
 func main() {
 	if len(os.Args) < 2 {
@@ -85,76 +77,92 @@ func run(ctx context.Context, mode string, cfg config.Config, log *slog.Logger) 
 	}
 	defer func() { _ = db.Close() }()
 
-	switch mode {
-	case "migrate":
+	if mode == "migrate" {
 		if err := mysql.Migrate(db, migrations.FS, "."); err != nil {
 			return err
 		}
 		log.Info("migrations applied")
 		return nil
-	case "seed":
-		if cfg.Env != "local" {
-			return fmt.Errorf("seed only runs with APP_ENV=local (got %q)", cfg.Env)
-		}
-		app, err := newApp(ctx, cfg, db)
-		if err != nil {
-			return err
-		}
-		return seed.Run(ctx, log, app.catalog, app.pricing)
+	}
+	if mode == "seed" && cfg.Env != "local" {
+		return fmt.Errorf("seed only runs with APP_ENV=local (got %q)", cfg.Env)
 	}
 
-	deps := map[string]httpserver.Pinger{"mysql": db}
-	mux := httpserver.NewMux(deps)
-	var handler http.Handler = mux
+	app, err := build(ctx, cfg, db, log, mode == "api")
+	if err != nil {
+		return err
+	}
 
 	switch mode {
+	case "seed":
+		return seed.Run(ctx, log, app.Catalog, app.Pricing, app.Inventory)
 	case "api":
-		app, err := newApp(ctx, cfg, db)
-		if err != nil {
-			return err
-		}
-		identity, err := newIdentity(ctx, cfg, db, log)
-		if err != nil {
-			return err
-		}
-		admin := auth.RequireAdmin(cfg.AdminToken)
-		cataloghttp.Register(mux, app.catalog, log, admin)
-		pricinghttp.Register(mux, app.pricing, log, admin)
-		identityhttp.Register(mux, identity, log, identityhttp.Options{
-			WebBaseURL: cfg.WebBaseURL, TrustProxy: cfg.TrustProxyHeaders,
-			PriceListExists: app.pricing.PriceListExists, Admin: admin,
+		h := app.Handler(db, log, wiring.HTTPOptions{
+			AdminToken: cfg.AdminToken, WebBaseURL: cfg.WebBaseURL, TrustProxy: cfg.TrustProxyHeaders,
+			PublicKey: cfg.CulqiPublicKey, WebhookSecret: cfg.CulqiWebhookSecret, BankDetails: cfg.BankDetails,
 		})
-		handler = auth.Middleware(sessionResolver(identity), log, mux)
-	case "worker", "outbox-relay":
-		// Consumers and the relay arrive in phase 5. Until then these modes
-		// only expose health and metrics so the deployment shape is final.
-		log.Info("no handlers registered yet", "mode", mode)
+		return httpserver.Run(ctx, log, cfg.HTTPAddr, h, cfg.ShutdownTimeout)
+	case "worker":
+		go jobs(ctx, app, log)
+	case "outbox-relay":
+		// The relay arrives in phase 5; the mode already exposes health and
+		// metrics so the deployment shape is final.
+		log.Info("outbox relay not implemented yet")
 	}
-
-	return httpserver.Run(ctx, log, cfg.HTTPAddr, handler, cfg.ShutdownTimeout)
+	mux := httpserver.NewMux(map[string]httpserver.Pinger{"mysql": db})
+	return httpserver.Run(ctx, log, cfg.HTTPAddr, http.Handler(mux), cfg.ShutdownTimeout)
 }
 
-// sessionResolver adapts the identity service to the platform auth middleware.
-func sessionResolver(svc *identityapp.Service) auth.Resolver {
-	return func(ctx context.Context, token string) (auth.Principal, bool, error) {
-		p, err := svc.Authenticate(ctx, token)
-		if err != nil {
-			if apperr.IsKind(err, apperr.KindNotFound) {
-				return auth.Principal{}, false, nil
-			}
-			return auth.Principal{}, false, err
+// jobs runs periodic maintenance in the worker process.
+func jobs(ctx context.Context, app *wiring.App, log *slog.Logger) {
+	tick := time.NewTicker(time.Minute)
+	defer tick.Stop()
+	for {
+		if n, err := app.Orders.ExpireOverdue(ctx); err != nil {
+			log.Error("expire overdue orders", "error", err)
+		} else if n > 0 {
+			log.Info("expired unpaid orders", "count", n)
 		}
-		return auth.Principal{
-			AccountID: p.Account.ID, Email: p.Account.Email, Name: p.Account.DisplayName,
-			Role: string(p.Account.Role), PriceListCode: p.PriceListCode,
-		}, true, nil
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+		}
 	}
 }
 
-// newIdentity wires the identity context. OIDC providers are discovered at
-// start-up; one that cannot be reached is disabled (and logged) instead of
-// taking the whole API down.
-func newIdentity(ctx context.Context, cfg config.Config, db *sql.DB, log *slog.Logger) (*identityapp.Service, error) {
+// build wires the application. OIDC discovery only happens for the api.
+func build(ctx context.Context, cfg config.Config, db *sql.DB, log *slog.Logger, withProviders bool) (*wiring.App, error) {
+	awsCfg, err := awsconfig.LoadDefaultConfig(ctx, awsconfig.WithRegion(cfg.AWSRegion))
+	if err != nil {
+		return nil, fmt.Errorf("aws config: %w", err)
+	}
+	media := catalogs3.New(awsCfg, catalogs3.Options{Bucket: cfg.MediaBucket, PresignEndpoint: cfg.S3PresignEndpoint, BaseURL: cfg.MediaBaseURL})
+
+	var gateway ordersports.PaymentGateway
+	if cfg.CulqiSecretKey != "" {
+		gateway = culqi.New(cfg.CulqiSecretKey, cfg.CulqiBaseURL)
+	} else {
+		log.Warn("CULQI_SECRET_KEY is empty: payments are simulated (local development only)")
+		gateway = fakegateway.New()
+	}
+
+	providers := map[identitydomain.Provider]identityports.OIDCProvider{}
+	if withProviders {
+		providers = discoverProviders(ctx, cfg, log)
+		if len(cfg.AdminEmails) == 0 {
+			log.Warn("ADMIN_EMAILS is empty: nobody can open the admin panel with a session")
+		}
+	}
+	return wiring.Build(wiring.Options{
+		DB: db, Log: log, Media: media, Providers: providers, Gateway: gateway,
+		AdminEmails: cfg.AdminEmails, DevLogin: cfg.DevLogin,
+	})
+}
+
+// discoverProviders sets up OIDC providers. One that cannot be reached is
+// disabled (and logged) instead of taking the whole API down.
+func discoverProviders(ctx context.Context, cfg config.Config, log *slog.Logger) map[identitydomain.Provider]identityports.OIDCProvider {
 	providers := map[identitydomain.Provider]identityports.OIDCProvider{}
 	discover := func(name identitydomain.Provider, build func(context.Context) (*identityoidc.Provider, error)) {
 		dctx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -176,35 +184,5 @@ func newIdentity(ctx context.Context, cfg config.Config, db *sql.DB, log *slog.L
 			return identityoidc.NewMicrosoft(c, cfg.MicrosoftTenant, cfg.MicrosoftClientID, cfg.MicrosoftClientSecret)
 		})
 	}
-	if len(cfg.AdminEmails) == 0 {
-		log.Warn("ADMIN_EMAILS is empty: nobody can open the admin panel with a session")
-	}
-	stores := identitymysql.New(db)
-	return identityapp.NewService(identityapp.Deps{
-		Accounts: stores.Accounts, Customers: stores.Customers, Addresses: stores.Addresses,
-		Sessions: stores.Sessions, States: stores.LoginStates, Hasher: identityargon2.Hasher{},
-		Providers: providers, Now: func() time.Time { return time.Now().UTC().Truncate(time.Microsecond) },
-	}, identityapp.Config{AdminEmails: cfg.AdminEmails, DevLogin: cfg.DevLogin})
-}
-
-type app struct {
-	catalog *catalogapp.Service
-	pricing *pricingapp.Service
-}
-
-// newApp wires adapters into the application services.
-func newApp(ctx context.Context, cfg config.Config, db *sql.DB) (*app, error) {
-	awsCfg, err := awsconfig.LoadDefaultConfig(ctx, awsconfig.WithRegion(cfg.AWSRegion))
-	if err != nil {
-		return nil, fmt.Errorf("aws config: %w", err)
-	}
-	media := catalogs3.New(awsCfg, catalogs3.Options{
-		Bucket: cfg.MediaBucket, PresignEndpoint: cfg.S3PresignEndpoint, BaseURL: cfg.MediaBaseURL,
-	})
-	now := func() time.Time { return time.Now().UTC().Truncate(time.Microsecond) }
-	return &app{
-		catalog: catalogapp.NewService(
-			catalogmysql.NewProducts(db), catalogmysql.NewCategories(db), catalogmysql.NewAttributes(db), media, now),
-		pricing: pricingapp.NewService(pricingmysql.NewPriceLists(db), pricingmysql.NewPrices(db)),
-	}, nil
+	return providers
 }

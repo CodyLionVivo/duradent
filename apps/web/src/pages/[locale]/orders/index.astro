@@ -1,0 +1,52 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import OrderStatus from '../../../components/OrderStatus.astro';
+import Pagination from '../../../components/Pagination.astro';
+import { formatDate, formatMoney, isLocale, localePath, useTranslations, type Currency } from '../../../i18n';
+import { unwrap, type Schemas } from '../../../lib/api/client';
+
+if (!isLocale(Astro.params.locale)) return new Response(null, { status: 404 });
+
+const { locale, api, user } = Astro.locals;
+const t = useTranslations(locale);
+const here = localePath(locale, '/orders');
+if (!user) return Astro.redirect(`${localePath(locale, '/account/login')}?next=${encodeURIComponent(here)}`, 302);
+const page = Math.max(1, Number.parseInt(Astro.url.searchParams.get('page') ?? '1', 10) || 1);
+
+let data: Schemas['OrderPage'] = { items: [], total: 0, page, page_size: 20 };
+try {
+  data = unwrap(await api.GET('/v1/orders', { params: { query: { page } } }));
+} catch {
+  // empty list
+}
+---
+
+<Layout title={t('orders.title')}>
+  <div class="container-page py-10">
+    <h1 class="text-3xl font-bold tracking-tight">{t('orders.title')}</h1>
+    {data.items.length === 0 ? (
+      <div class="card mt-8 p-10 text-center">
+        <p class="font-semibold">{t('orders.empty')}</p>
+        <a href={localePath(locale, '/catalog')} class="btn-primary mt-6">{t('cart.continue')}</a>
+      </div>
+    ) : (
+      <ul class="mt-8 space-y-3" role="list">
+        {data.items.map((o) => (
+          <li>
+            <a href={localePath(locale, `/orders/${o.number}`)} class="card flex flex-wrap items-center justify-between gap-4 p-4 hover:border-brand-500">
+              <div>
+                <p class="font-semibold">{t('orders.number', { number: o.number })}</p>
+                <p class="text-sm text-muted">{formatDate(o.created_at, locale)} · {t('cart.items', { count: o.lines.reduce((n, l) => n + l.qty, 0) })}</p>
+              </div>
+              <div class="flex items-center gap-4">
+                <OrderStatus status={o.status} />
+                <span class="font-semibold">{formatMoney(o.total, o.currency as Currency, locale)}</span>
+              </div>
+            </a>
+          </li>
+        ))}
+      </ul>
+    )}
+    <Pagination page={page} pageSize={20} total={data.total} />
+  </div>
+</Layout>

@@ -48,6 +48,15 @@ type Config struct {
 	// TrustProxyHeaders trusts X-Forwarded-For; only safe when the API is
 	// reachable solely through the web BFF / ALB.
 	TrustProxyHeaders bool
+
+	// Culqi. Without a secret key in local development a fake gateway
+	// simulates payments; outside local all three values are required.
+	CulqiSecretKey     string
+	CulqiPublicKey     string
+	CulqiWebhookSecret string // secret path segment of the webhook URL
+	CulqiBaseURL       string // override for tests
+	// BankDetails are the transfer instructions shown to customers.
+	BankDetails string
 }
 
 // Load reads configuration from the environment, applying defaults suitable
@@ -77,6 +86,11 @@ func load(getenv func(string) string) (Config, error) {
 		AdminEmails:           splitList(getenv("ADMIN_EMAILS")),
 		DevLogin:              getenv("DEV_LOGIN") == "true",
 		TrustProxyHeaders:     getenv("TRUST_PROXY_HEADERS") == "true",
+		CulqiSecretKey:        getenv("CULQI_SECRET_KEY"),
+		CulqiPublicKey:        getenv("CULQI_PUBLIC_KEY"),
+		CulqiWebhookSecret:    getenv("CULQI_WEBHOOK_SECRET"),
+		CulqiBaseURL:          getenv("CULQI_BASE_URL"),
+		BankDetails:           getenv("BANK_DETAILS"),
 	}
 
 	timeout, err := durationOr(getenv("SHUTDOWN_TIMEOUT"), 15*time.Second)
@@ -105,13 +119,19 @@ func load(getenv func(string) string) (Config, error) {
 		return Config{}, errors.New("WEB_BASE_URL must use https outside local")
 	}
 	var missing []string
-	for name, v := range map[string]string{"MYSQL_DSN": cfg.MySQLDSN, "S3_MEDIA_BUCKET": cfg.MediaBucket, "MEDIA_BASE_URL": cfg.MediaBaseURL} {
+	for name, v := range map[string]string{
+		"MYSQL_DSN": cfg.MySQLDSN, "S3_MEDIA_BUCKET": cfg.MediaBucket, "MEDIA_BASE_URL": cfg.MediaBaseURL,
+		"CULQI_SECRET_KEY": cfg.CulqiSecretKey, "CULQI_PUBLIC_KEY": cfg.CulqiPublicKey, "CULQI_WEBHOOK_SECRET": cfg.CulqiWebhookSecret,
+	} {
 		if v == "" {
 			missing = append(missing, name)
 		}
 	}
 	if len(missing) > 0 {
 		return Config{}, fmt.Errorf("required outside local: %v", missing)
+	}
+	if len(cfg.CulqiWebhookSecret) < 24 {
+		return Config{}, errors.New("CULQI_WEBHOOK_SECRET must be at least 24 characters")
 	}
 	if cfg.AdminToken != "" && len(cfg.AdminToken) < 32 {
 		return Config{}, errors.New("ADMIN_TOKEN must be at least 32 characters")

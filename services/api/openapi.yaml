@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Duradent API
-  version: 0.3.0
+  version: 0.4.0
   description: |
     HTTP API of the Duradent store. This file is the contract between the Go
     backend and apps/web: the web regenerates its types from it with
@@ -26,6 +26,11 @@ tags:
   - name: auth
   - name: me
   - name: admin-customers
+  - name: inventory
+  - name: admin-inventory
+  - name: cart
+  - name: orders
+  - name: admin-orders
 
 paths:
   /healthz:
@@ -773,6 +778,444 @@ paths:
         "204": { description: Saved }
         "409": { $ref: "#/components/responses/Problem" }
 
+  # --- Inventory -----------------------------------------------------------------
+  /v1/inventory/availability:
+    get:
+      summary: Sellable units per variant
+      operationId: getAvailability
+      tags: [inventory]
+      parameters:
+        - { name: variant_id, in: query, schema: { type: array, items: { type: string, format: uuid } }, style: form, explode: true }
+      responses:
+        "200":
+          description: Availability in request order
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required: [variant_id, available]
+                  properties:
+                    variant_id: { type: string, format: uuid }
+                    available: { type: integer }
+  /v1/admin/inventory:
+    get:
+      operationId: adminListStock
+      tags: [admin-inventory]
+      security: [{ admin: [] }, { session: [] }]
+      parameters:
+        - { name: variant_id, in: query, schema: { type: array, items: { type: string, format: uuid } }, style: form, explode: true }
+      responses:
+        "200":
+          description: Stock per variant
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/StockItem" } }
+  /v1/admin/inventory/{variant}/adjust:
+    parameters:
+      - { name: variant, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      summary: Change on-hand stock (purchase, count correction, return)
+      operationId: adminAdjustStock
+      tags: [admin-inventory]
+      security: [{ admin: [] }, { session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [delta, reason]
+              properties:
+                delta: { type: integer, description: Units to add (positive) or remove (negative) }
+                reason: { type: string, enum: [purchase, adjustment, return] }
+                note: { type: string, maxLength: 200 }
+      responses:
+        "200":
+          description: Stock after the change
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StockItem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /v1/admin/inventory/{variant}/reorder-point:
+    parameters:
+      - { name: variant, in: path, required: true, schema: { type: string, format: uuid } }
+    put:
+      operationId: adminSetReorderPoint
+      tags: [admin-inventory]
+      security: [{ admin: [] }, { session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [value]
+              properties:
+                value: { type: integer, minimum: 0 }
+      responses:
+        "200":
+          description: Stock after the change
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StockItem" }
+  /v1/admin/inventory/{variant}/movements:
+    parameters:
+      - { name: variant, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      operationId: adminStockMovements
+      tags: [admin-inventory]
+      security: [{ admin: [] }, { session: [] }]
+      responses:
+        "200":
+          description: Last 50 movements, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required: [delta, reason, reference, created_at]
+                  properties:
+                    delta: { type: integer }
+                    reason: { type: string }
+                    reference: { type: string }
+                    created_at: { type: string, format: date-time }
+
+  # --- Cart & checkout -------------------------------------------------------------
+  /v1/cart:
+    get:
+      summary: The caller's cart (account cart, or anonymous cart by X-Cart-Key)
+      operationId: getCart
+      tags: [cart]
+      security: [{}, { session: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/CartKey" }
+        - { name: currency, in: query, schema: { $ref: "#/components/schemas/Currency" } }
+        - { $ref: "#/components/parameters/Locale" }
+      responses:
+        "200": { $ref: "#/components/responses/Cart" }
+  /v1/cart/items:
+    post:
+      summary: Add units of a variant; returns the cart (with its key for anonymous visitors)
+      operationId: addCartItem
+      tags: [cart]
+      security: [{}, { session: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/CartKey" }
+        - { name: currency, in: query, schema: { $ref: "#/components/schemas/Currency" } }
+        - { $ref: "#/components/parameters/Locale" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [variant_id, qty]
+              properties:
+                variant_id: { type: string, format: uuid }
+                qty: { type: integer, minimum: 1, maximum: 9999 }
+      responses:
+        "200": { $ref: "#/components/responses/Cart" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /v1/cart/items/{variant}:
+    parameters:
+      - { name: variant, in: path, required: true, schema: { type: string, format: uuid } }
+      - { $ref: "#/components/parameters/CartKey" }
+      - { name: currency, in: query, schema: { $ref: "#/components/schemas/Currency" } }
+      - { $ref: "#/components/parameters/Locale" }
+    put:
+      summary: Set a line's quantity (0 removes it)
+      operationId: setCartItem
+      tags: [cart]
+      security: [{}, { session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [qty]
+              properties:
+                qty: { type: integer, minimum: 0, maximum: 9999 }
+      responses:
+        "200": { $ref: "#/components/responses/Cart" }
+        "422": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: removeCartItem
+      tags: [cart]
+      security: [{}, { session: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/Cart" }
+  /v1/cart/merge:
+    post:
+      summary: Move an anonymous cart into the signed-in account's cart
+      operationId: mergeCart
+      tags: [cart]
+      security: [{ session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [key]
+              properties:
+                key: { type: string }
+      responses:
+        "200": { $ref: "#/components/responses/Cart" }
+  /v1/checkout/quote:
+    post:
+      summary: Price the cart with delivery and IGV
+      operationId: quoteCheckout
+      tags: [orders]
+      security: [{ session: [] }]
+      requestBody: { $ref: "#/components/requestBodies/CheckoutInput" }
+      responses:
+        "200":
+          description: Quote
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [cart, shipping, shipping_amount, tax, total, billing, igv_percent]
+                properties:
+                  cart: { $ref: "#/components/schemas/Cart" }
+                  shipping: { $ref: "#/components/schemas/OrderShipping" }
+                  shipping_amount: { $ref: "#/components/schemas/Decimal" }
+                  tax: { $ref: "#/components/schemas/Decimal" }
+                  total: { $ref: "#/components/schemas/Decimal" }
+                  billing:
+                    oneOf: [{ $ref: "#/components/schemas/OrderBilling" }, { type: "null" }]
+                  igv_percent: { type: integer }
+        "422": { $ref: "#/components/responses/Problem" }
+  /v1/orders:
+    get:
+      operationId: myOrders
+      tags: [orders]
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/Page" }]
+      responses:
+        "200":
+          description: The caller's orders, newest first
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OrderPage" }
+    post:
+      summary: Place an order from the cart (freezes prices, reserves stock)
+      description: Send an `Idempotency-Key` header; retries with the same key return the same order.
+      operationId: placeOrder
+      tags: [orders]
+      security: [{ session: [] }]
+      parameters:
+        - { name: Idempotency-Key, in: header, schema: { type: string, maxLength: 128 } }
+      requestBody: { $ref: "#/components/requestBodies/CheckoutInput" }
+      responses:
+        "201": { $ref: "#/components/responses/Order" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /v1/orders/{number}:
+    parameters:
+      - { name: number, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: myOrder
+      tags: [orders]
+      security: [{ session: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/Order" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /v1/orders/{number}/pay:
+    parameters:
+      - { name: number, in: path, required: true, schema: { type: string } }
+    post:
+      summary: Pay with a Culqi Checkout token (card tkn_… or Yape ype_…)
+      operationId: payOrder
+      tags: [orders]
+      security: [{ session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: { type: string }
+      responses:
+        "200": { $ref: "#/components/responses/Order" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+  /v1/orders/{number}/cancel:
+    parameters:
+      - { name: number, in: path, required: true, schema: { type: string } }
+    post:
+      summary: Cancel an unpaid order (releases stock)
+      operationId: cancelOrder
+      tags: [orders]
+      security: [{ session: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/Order" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /v1/payments/config:
+    get:
+      summary: Payment settings for the checkout page
+      operationId: paymentsConfig
+      tags: [orders]
+      responses:
+        "200":
+          description: Gateway in use, Culqi public key, bank transfer details
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [gateway, culqi_public_key, bank_details, yape_max_pen]
+                properties:
+                  gateway: { type: string, enum: [culqi, fake] }
+                  culqi_public_key: { type: string }
+                  bank_details: { type: string }
+                  yape_max_pen: { $ref: "#/components/schemas/Decimal" }
+  /v1/webhooks/culqi/{secret}:
+    parameters:
+      - { name: secret, in: path, required: true, schema: { type: string } }
+    post:
+      summary: Culqi events (configure in CulqiPanel → Eventos → Webhooks)
+      description: |
+        Culqi does not sign webhooks: the URL carries a secret and every charge
+        is re-read from Culqi's API before an order changes. Duplicates are harmless.
+      operationId: culqiWebhook
+      tags: [orders]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { description: Processed or ignored }
+        "404": { description: Wrong secret }
+        "500": { description: Temporary failure; Culqi retries }
+
+  # --- Admin: orders ---------------------------------------------------------------
+  /v1/admin/orders:
+    get:
+      operationId: adminListOrders
+      tags: [admin-orders]
+      security: [{ admin: [] }, { session: [] }]
+      parameters:
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/OrderStatus" } }
+        - { name: q, in: query, description: "Number, email, RUC/DNI or business name", schema: { type: string } }
+        - { $ref: "#/components/parameters/Page" }
+      responses:
+        "200":
+          description: Orders, newest first
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OrderPage" }
+  /v1/admin/orders/{id}:
+    parameters: [{ $ref: "#/components/parameters/ID" }]
+    get:
+      operationId: adminGetOrder
+      tags: [admin-orders]
+      security: [{ admin: [] }, { session: [] }]
+      responses:
+        "200":
+          description: Order with payments and status history
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [order, payments, history]
+                properties:
+                  order: { $ref: "#/components/schemas/Order" }
+                  payments: { type: array, items: { $ref: "#/components/schemas/Payment" } }
+                  history:
+                    type: array
+                    items:
+                      type: object
+                      required: [from, to, actor, note, at]
+                      properties:
+                        from: { type: string }
+                        to: { type: string }
+                        actor: { type: string }
+                        note: { type: string }
+                        at: { type: string, format: date-time }
+        "404": { $ref: "#/components/responses/Problem" }
+  /v1/admin/orders/{id}/confirm-transfer:
+    parameters: [{ $ref: "#/components/parameters/ID" }]
+    post:
+      operationId: adminConfirmTransfer
+      tags: [admin-orders]
+      security: [{ admin: [] }, { session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reference]
+              properties:
+                reference: { type: string, maxLength: 60, description: Bank operation number }
+      responses:
+        "200": { $ref: "#/components/responses/Order" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /v1/admin/orders/{id}/prepare:
+    parameters: [{ $ref: "#/components/parameters/ID" }]
+    post:
+      operationId: adminPrepareOrder
+      tags: [admin-orders]
+      security: [{ admin: [] }, { session: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/Order" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /v1/admin/orders/{id}/ship:
+    parameters: [{ $ref: "#/components/parameters/ID" }]
+    post:
+      operationId: adminShipOrder
+      tags: [admin-orders]
+      security: [{ admin: [] }, { session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                carrier: { type: string, maxLength: 60 }
+                tracking: { type: string, maxLength: 80 }
+      responses:
+        "200": { $ref: "#/components/responses/Order" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /v1/admin/orders/{id}/deliver:
+    parameters: [{ $ref: "#/components/parameters/ID" }]
+    post:
+      operationId: adminDeliverOrder
+      tags: [admin-orders]
+      security: [{ admin: [] }, { session: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/Order" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /v1/admin/orders/{id}/cancel:
+    parameters: [{ $ref: "#/components/parameters/ID" }]
+    post:
+      operationId: adminCancelOrder
+      tags: [admin-orders]
+      security: [{ admin: [] }, { session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string, maxLength: 200 }
+      responses:
+        "200": { $ref: "#/components/responses/Order" }
+        "409": { $ref: "#/components/responses/Problem" }
+
 components:
   securitySchemes:
     admin: { type: http, scheme: bearer, description: "ADMIN_TOKEN, for automation" }
@@ -783,6 +1226,11 @@ components:
       description: "Session <token>"
 
   parameters:
+    CartKey:
+      name: X-Cart-Key
+      in: header
+      description: Anonymous cart key (ignored for signed-in callers)
+      schema: { type: string }
     Locale:
       name: locale
       in: query
@@ -799,6 +1247,18 @@ components:
       schema: { type: string, format: uuid }
 
   requestBodies:
+    CheckoutInput:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              currency: { $ref: "#/components/schemas/Currency" }
+              address_id: { type: [string, "null"], format: uuid }
+              pickup: { type: boolean, description: Collect at Duradent's store }
+              payment_method: { type: string, enum: [culqi, bank_transfer] }
+              notes: { type: string, maxLength: 500 }
     AddressInput:
       required: true
       content:
@@ -865,6 +1325,16 @@ components:
               is_default: { type: boolean }
 
   responses:
+    Cart:
+      description: The cart
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Cart" }
+    Order:
+      description: The order
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Order" }
     Session:
       description: Signed in
       content:
@@ -943,6 +1413,129 @@ components:
 
     Locale: { type: string, enum: [es, en, pt-br] }
     Provider: { type: string, enum: [google, microsoft, dev] }
+    StockItem:
+      type: object
+      required: [variant_id, on_hand, reserved, available, reorder_point, low]
+      properties:
+        variant_id: { type: string, format: uuid }
+        on_hand: { type: integer }
+        reserved: { type: integer }
+        available: { type: integer }
+        reorder_point: { type: integer }
+        low: { type: boolean }
+    CartLine:
+      type: object
+      required: [variant_id, sku, product_name, product_slug, options, image_url, qty, unit_price, line_total, available, problem]
+      properties:
+        variant_id: { type: string, format: uuid }
+        sku: { type: string }
+        product_name: { type: string }
+        product_slug: { type: string }
+        options: { type: string }
+        image_url: { type: string }
+        qty: { type: integer }
+        unit_price: { oneOf: [{ $ref: "#/components/schemas/Decimal" }, { type: "null" }] }
+        line_total: { oneOf: [{ $ref: "#/components/schemas/Decimal" }, { type: "null" }] }
+        available: { type: integer }
+        problem: { type: string, enum: ["", unavailable, not_priced, insufficient_stock] }
+    Cart:
+      type: object
+      required: [currency, lines, subtotal, item_count, weight_g, ready]
+      properties:
+        key: { type: string, description: Anonymous carts only; keep it in a cookie }
+        currency: { $ref: "#/components/schemas/Currency" }
+        lines: { type: array, items: { $ref: "#/components/schemas/CartLine" } }
+        subtotal: { $ref: "#/components/schemas/Decimal" }
+        item_count: { type: integer }
+        weight_g: { type: integer }
+        ready: { type: boolean, description: Every line can be bought }
+    OrderStatus: { type: string, enum: [pending_payment, paid, preparing, shipped, delivered, cancelled] }
+    OrderBilling:
+      type: object
+      required: [customer_type, document_type, document_number, business_name, invoice_type]
+      properties:
+        customer_type: { type: string }
+        document_type: { type: string }
+        document_number: { type: string }
+        business_name: { type: string }
+        invoice_type: { type: string, enum: ["01", "03"] }
+    OrderShipping:
+      type: object
+      required: [pickup, zone]
+      properties:
+        pickup: { type: boolean }
+        zone: { type: string, enum: [lima, provincias, pickup, ""] }
+        recipient: { type: string }
+        line1: { type: string }
+        reference: { type: string }
+        district: { type: string }
+        province: { type: string }
+        department: { type: string }
+        phone: { type: string }
+    Order:
+      type: object
+      required: [id, number, status, payment_method, currency, email, lines, subtotal, shipping_amount, tax, total, billing, shipping, notes,
+        payment_deadline, payment_in_progress, carrier, tracking, cancel_reason, created_at, paid_at, shipped_at, delivered_at, cancelled_at]
+      properties:
+        id: { type: string, format: uuid }
+        number: { type: string, examples: [DD-000123] }
+        status: { $ref: "#/components/schemas/OrderStatus" }
+        payment_method: { type: string, enum: [culqi, bank_transfer] }
+        currency: { $ref: "#/components/schemas/Currency" }
+        email: { type: string }
+        lines:
+          type: array
+          items:
+            type: object
+            required: [variant_id, sku, name, options, unit_price, qty, line_total]
+            properties:
+              variant_id: { type: string, format: uuid }
+              sku: { type: string }
+              name: { type: string }
+              options: { type: string }
+              unit_price: { $ref: "#/components/schemas/Decimal" }
+              qty: { type: integer }
+              line_total: { $ref: "#/components/schemas/Decimal" }
+        subtotal: { $ref: "#/components/schemas/Decimal" }
+        shipping_amount: { $ref: "#/components/schemas/Decimal" }
+        tax: { $ref: "#/components/schemas/Decimal" }
+        total: { $ref: "#/components/schemas/Decimal" }
+        billing: { $ref: "#/components/schemas/OrderBilling" }
+        shipping: { $ref: "#/components/schemas/OrderShipping" }
+        notes: { type: string }
+        payment_deadline: { type: string, format: date-time }
+        payment_in_progress: { type: boolean }
+        carrier: { type: string }
+        tracking: { type: string }
+        cancel_reason: { type: string }
+        created_at: { type: string, format: date-time }
+        paid_at: { type: [string, "null"], format: date-time }
+        shipped_at: { type: [string, "null"], format: date-time }
+        delivered_at: { type: [string, "null"], format: date-time }
+        cancelled_at: { type: [string, "null"], format: date-time }
+    OrderPage:
+      type: object
+      required: [items, total, page, page_size]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Order" } }
+        total: { type: integer }
+        page: { type: integer }
+        page_size: { type: integer }
+    Payment:
+      type: object
+      required: [id, method, status, amount, currency, provider_ref, source_type, failure_code, failure_message, reference, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        method: { type: string, enum: [culqi, bank_transfer] }
+        status: { type: string, enum: [confirmed, failed] }
+        amount: { $ref: "#/components/schemas/Decimal" }
+        currency: { $ref: "#/components/schemas/Currency" }
+        provider_ref: { type: string }
+        source_type: { type: string }
+        failure_code: { type: string }
+        failure_message: { type: string }
+        reference: { type: string }
+        created_at: { type: string, format: date-time }
     Role: { type: string, enum: [customer, admin] }
     Account:
       type: object

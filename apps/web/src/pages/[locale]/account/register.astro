@@ -4,7 +4,7 @@ import ProviderButtons from '../../../components/account/ProviderButtons.astro';
 import { isLocale, localePath, useTranslations } from '../../../i18n';
 import { ApiError, unwrap } from '../../../lib/api/client';
 import { afterSignIn, apiErrorText } from '../../../lib/account';
-import { setSession } from '../../../lib/session';
+import { adoptCart, setSession } from '../../../lib/session';
 
 if (!isLocale(Astro.params.locale)) return new Response(null, { status: 404 });
 
@@ -26,6 +26,7 @@ if (Astro.request.method === 'POST') {
       }),
     );
     setSession(Astro.cookies, signed.token, signed.expires_at);
+    await adoptCart(Astro.cookies, signed.token, Astro.locals.clientIP);
     return Astro.redirect(next, 303);
   } catch (err) {
     error = apiErrorText(t, err);

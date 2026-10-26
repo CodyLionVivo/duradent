@@ -10,6 +10,7 @@ Plan completo y modelo de datos: ver `docs/plan.md`.
 ```
 apps/web/          Astro 7 SSR (adapter node standalone): tienda + /admin
 services/api/      Go: un binario `duradent` con modos api | worker | outbox-relay | migrate | seed
+                   (internal/wiring arma la app; internal/apitest la prueba end-to-end)
 infra/local/       Init de LocalStack (SNS, SQS+DLQ, S3) para docker compose
 infra/terraform/   AWS (Fase 6)
 Taskfile.yml       Todos los comandos
@@ -42,7 +43,14 @@ Mailpit http://localhost:8025 · LocalStack http://localhost:4566 · MySQL `loca
 El servidor de desarrollo de Astro fuera de Docker: `astro dev --background` (ver AGENTS.md).
 
 **Tienda**: `/{es|en|pt-br}`, `/…/catalog`, `/…/catalog/{categoría}`, `/…/product/{slug}`,
-`/…/account` (login, registro, perfil). `/` redirige según `Accept-Language`.
+`/…/cart`, `/…/checkout`, `/…/orders`, `/…/account` (login, registro, perfil). `/` redirige según
+`Accept-Language`.
+
+**Pagos en local**: sin `CULQI_SECRET_KEY` el API usa una pasarela simulada y la página del pedido
+muestra botones "Pago aprobado / Tarjeta rechazada / Yape". Con llaves sandbox de Culqi
+(`CULQI_PUBLIC_KEY=pk_test_…`, `CULQI_SECRET_KEY=sk_test_…` antes de `task up`) se abre el Culqi
+Checkout real. Webhook a configurar en CulqiPanel → Eventos → Webhooks:
+`https://<api>/v1/webhooks/culqi/<CULQI_WEBHOOK_SECRET>` (evento de cargos).
 
 **Admin**: http://localhost:4321/admin → pide iniciar sesión. En local usa el **acceso de desarrollo**
 de la página de login con `admin@duradent.local` (está en `ADMIN_EMAILS` del compose). Para scripts,
@@ -70,9 +78,20 @@ Estas reglas las verifica `internal/archtest` en cada `go test`. Si falla, corri
 no relajes la regla sin registrar la decisión abajo.
 
 Contextos implementados: **catalog** (productos, variantes, categorías, atributos, imágenes en S3),
-**pricing** (listas de precios con tramos por volumen) e **identity** (cuentas, OIDC Google/Microsoft,
-contraseña Argon2id, sesiones, perfil de facturación RUC/DNI/CE, direcciones, roles). Previstos:
-cart, orders, payments, inventory, shipping, invoicing, notifications.
+**pricing** (listas de precios con tramos por volumen), **identity** (cuentas, OIDC Google/Microsoft,
+contraseña Argon2id, sesiones, perfil de facturación RUC/DNI/CE, direcciones, roles), **inventory**
+(stock, reservas por pedido, movimientos), **shipping** (zonas Lima/Provincias/Recojo y tarifas por
+peso) y **orders** (carrito, pedidos, pagos Culqi y transferencia). Previstos: invoicing,
+notifications.
+
+**Composición**: `internal/wiring` construye todos los contextos y monta las rutas; lo usan
+`cmd/duradent` y `internal/apitest`, así los tests ejercitan exactamente el mismo cableado. Los
+*bridges* de `wiring/bridges.go` implementan los ports de `orders` sobre los servicios de los otros
+contextos: es el único lugar donde los contextos se tocan.
+
+**Unidad de trabajo**: `platform/mysql.UnitOfWork.InTx` deja la transacción en el `context`; los
+repositorios usan `mysql.Conn(ctx, db)`, así un pedido, su reserva de stock y su evento en el outbox
+se confirman juntos sin que un contexto conozca al otro. Eventos: `platform/outbox.Writer.Record`.
 
 **Autenticación**: `internal/platform/auth` resuelve `Authorization: Session <token>` en cada request y
 deja un `auth.Principal` (cuenta, rol, lista de precios) en el contexto. `auth.RequireUser` y
@@ -156,12 +175,32 @@ importan identity. La web guarda el token en la cookie httpOnly `dd_session` y l
     Con N tareas el límite efectivo es N veces mayor; aceptable a esta escala.
 22. **La redirect URI de OIDC sale de `WEB_BASE_URL`**, nunca del request; el `state` es de un solo uso
     (fila borrada en la misma transacción) y además va atado al navegador con la cookie `dd_oauth_state`.
+23. **Pagos dentro del contexto `orders`**: el ciclo de vida del pago está atado al pedido; Culqi queda
+    detrás del port `PaymentGateway` (adaptadores `culqi` y `fakegateway`).
+24. **Cobro en tres pasos**: transacción corta que marca el cargo "en vuelo" (`charging_until`, 90 s),
+    llamada a Culqi fuera de transacción, y transacción que confirma o registra el rechazo. Si la
+    respuesta de Culqi se pierde, el pedido queda en "verificando" y el webhook lo concilia; el
+    cliente no puede cobrar dos veces mientras tanto.
+25. **Webhook de Culqi sin firma**: Culqi no firma sus webhooks. La URL lleva un secreto y el API
+    vuelve a leer el cargo en Culqi (`GET /v2/charges/{id}`) antes de cambiar nada. Un cargo
+    confirmado se registra una sola vez (`payments.confirmed_ref` único), así las repeticiones no dañan.
+26. **3-D Secure**: un cargo que Culqi devuelve con `action_code: REVIEW` se trata como no pagado
+    (`3ds_required`). Integrar Culqi 3DS queda pendiente si los rechazos lo justifican.
+27. **Stock reservado al crear el pedido** (misma transacción) y vendido al pagar. Pedidos sin pagar
+    se cancelan solos: 2 h con Culqi, 48 h con transferencia (job del `worker` cada minuto). Las filas
+    de stock se bloquean en orden de `variant_id` para evitar deadlocks.
+28. **IGV 18 % sobre productos + envío**, redondeo al céntimo hacia arriba en la mitad. Los precios se
+    guardan y muestran sin IGV.
+29. **Idempotency-Key en `POST /v1/orders`**: la web genera una por carga del checkout; reintentos o
+    doble clic devuelven el mismo pedido.
+30. **Pedidos pagados no se cancelan en esta fase**: requieren reembolso (fase 5).
+31. **Yape**: solo PEN y hasta S/ 2 000 por pago (límite de Culqi); se valida antes de cobrar.
 
 ## Estado por fases
 
 - [x] Fase 1 — monorepo, Compose, CI
 - [x] Fase 2 — catálogo, pricing, frontend i18n, admin de catálogo
 - [x] Fase 3 — identidad (Google, Microsoft, email)
-- [ ] Fase 4 — carrito, envíos, pedidos, pagos Culqi + transferencia
+- [x] Fase 4 — carrito, envíos, pedidos, pagos Culqi + transferencia
 - [ ] Fase 5 — outbox relay, worker, inventario, emails, facturación
 - [ ] Fase 6 — Terraform, ALB, ECS, despliegue

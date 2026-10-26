@@ -70,6 +70,20 @@ func (m *memProducts) List(_ context.Context, f ports.ProductFilter) ([]*domain.
 	return out, len(out), nil
 }
 
+func (m *memProducts) ByVariantIDs(_ context.Context, ids []id.ID) ([]*domain.Product, error) {
+	var out []*domain.Product
+	for _, p := range m.byID {
+		for _, v := range p.Variants {
+			if slices.Contains(ids, v.ID) {
+				cp := p
+				out = append(out, &cp)
+				break
+			}
+		}
+	}
+	return out, nil
+}
+
 type memCategories struct{ all []*domain.Category }
 
 func (m *memCategories) Create(_ context.Context, c *domain.Category) error {

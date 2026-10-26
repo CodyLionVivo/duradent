@@ -123,6 +123,36 @@ func (s *Service) Attributes(ctx context.Context) ([]*domain.Attribute, error) {
 	return s.attributes.List(ctx)
 }
 
+// VariantRef is a variant with the product it belongs to.
+type VariantRef struct {
+	Product *domain.Product
+	Variant domain.Variant
+}
+
+// Variants finds variants by id (any status); unknown ids are absent.
+func (s *Service) Variants(ctx context.Context, variantIDs []id.ID) (map[id.ID]VariantRef, error) {
+	if len(variantIDs) > 500 {
+		return nil, apperr.Invalid("catalog.too_many_variants", "variant_id", "at most 500 variants per request")
+	}
+	products, err := s.products.ByVariantIDs(ctx, variantIDs)
+	if err != nil {
+		return nil, err
+	}
+	want := make(map[id.ID]bool, len(variantIDs))
+	for _, v := range variantIDs {
+		want[v] = true
+	}
+	out := make(map[id.ID]VariantRef, len(variantIDs))
+	for _, p := range products {
+		for _, v := range p.Variants {
+			if want[v.ID] {
+				out[v.ID] = VariantRef{Product: p, Variant: v}
+			}
+		}
+	}
+	return out, nil
+}
+
 // --- Admin: products -----------------------------------------------------------
 
 type AdminProductQuery struct {

@@ -270,6 +270,17 @@ func (r *Products) List(ctx context.Context, f ports.ProductFilter) ([]*domain.P
 	return ps, total, err
 }
 
+func (r *Products) ByVariantIDs(ctx context.Context, variantIDs []id.ID) ([]*domain.Product, error) {
+	if len(variantIDs) == 0 {
+		return nil, nil
+	}
+	args := make([]any, len(variantIDs))
+	for i, v := range variantIDs {
+		args[i] = v
+	}
+	return r.load(ctx, "SELECT DISTINCT product_id FROM variants WHERE id IN ("+mysql.Placeholders(len(args))+")", args...)
+}
+
 func localeOrDefault(l locale.Locale) locale.Locale {
 	if l == "" {
 		return locale.Default

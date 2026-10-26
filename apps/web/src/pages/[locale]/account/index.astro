@@ -84,9 +84,12 @@ const notice = (s: Section) =>
         <p class="text-sm text-muted">{t('account.title')}</p>
         <h1 class="text-3xl font-bold tracking-tight">{t('account.profile.greeting', { name: user.display_name })}</h1>
       </div>
-      <form method="post" action={localePath(locale, '/account/logout')}>
-        <button class="btn-secondary">{t('account.signOut')}</button>
-      </form>
+      <div class="flex gap-2">
+        <a href={localePath(locale, '/orders')} class="btn-secondary">{t('orders.title')}</a>
+        <form method="post" action={localePath(locale, '/account/logout')}>
+          <button class="btn-secondary">{t('account.signOut')}</button>
+        </form>
+      </div>
     </div>
 
     {c?.price_list_code && (
