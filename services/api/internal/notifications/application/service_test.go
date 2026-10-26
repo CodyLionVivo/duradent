@@ -98,6 +98,9 @@ func TestOrderPlacedEmailsTheCustomerInTheirLanguageOnce(t *testing.T) {
 			t.Errorf("text lacks %q:\n%s", want, m.Text)
 		}
 	}
+	if !strings.Contains(m.HTML, `src="https://duradent.pe/brand/logo-email.png"`) {
+		t.Error("the email header shows the logo")
+	}
 }
 
 func TestFailedSendIsRetried(t *testing.T) {

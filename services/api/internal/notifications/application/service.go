@@ -167,6 +167,7 @@ func (s *Service) send(ctx context.Context, eventID id.ID, kind domain.Kind, r p
 		s.d.Logger.WarnContext(ctx, "email skipped: no recipient", "kind", kind)
 		return nil
 	}
+	d.LogoURL = s.cfg.WebBaseURL + "/brand/logo-email.png"
 	m, err := domain.Render(kind, r.Locale, r.Email, d)
 	if err != nil {
 		return err

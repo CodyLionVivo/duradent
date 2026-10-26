@@ -48,6 +48,7 @@ type Data struct {
 	DocumentName string // "Factura F001-123"
 	PDFURL       string
 	Link         string // order page or verification link
+	LogoURL      string // absolute URL of the PNG logo (email clients do not show SVG)
 	SKU          string
 	Available    int
 }
@@ -114,11 +115,11 @@ const layout = `<!doctype html>
 <body style="margin:0;background:#f7f9fb;font-family:Arial,Helvetica,sans-serif;color:#1d2733">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="padding:24px 12px"><tr><td align="center">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border:1px solid #e3e8ee;border-radius:12px">
-<tr><td style="padding:24px 28px 8px"><span style="font-size:20px;font-weight:bold;color:#0c6a6b">Duradent</span></td></tr>
+<tr><td style="padding:24px 28px 8px">{{if .Logo}}<img src="{{.Logo}}" width="40" height="40" alt="" style="vertical-align:middle;border:0;margin-right:8px">{{end}}<span style="font-size:20px;font-weight:bold;color:#046880;vertical-align:middle">Duradent</span></td></tr>
 <tr><td style="padding:8px 28px 24px">
 <h1 style="font-size:20px;margin:0 0 12px">{{.Title}}</h1>
 {{range .Body}}<p style="font-size:15px;line-height:1.55;margin:0 0 12px">{{.}}</p>{{end}}
-{{if .Link}}<p style="margin:20px 0 4px"><a href="{{.Link}}" style="display:inline-block;background:#0c6a6b;color:#ffffff;text-decoration:none;font-weight:bold;padding:12px 20px;border-radius:8px">{{.Button}}</a></p>{{end}}
+{{if .Link}}<p style="margin:20px 0 4px"><a href="{{.Link}}" style="display:inline-block;background:#046880;color:#ffffff;text-decoration:none;font-weight:bold;padding:12px 20px;border-radius:8px">{{.Button}}</a></p>{{end}}
 </td></tr>
 <tr><td style="padding:16px 28px;border-top:1px solid #e3e8ee;font-size:12px;color:#52606d">Duradent SAC · Insumos de ortodoncia · Perú</td></tr>
 </table></td></tr></table></body></html>`
@@ -171,6 +172,7 @@ func Render(kind Kind, l locale.Locale, to string, d Data) (Message, error) {
 	var out bytes.Buffer
 	err = layoutTmpl.Execute(&out, map[string]any{
 		"Lang": string(l), "Subject": plain(string(subject)), "Title": title, "Body": body, "Link": d.Link, "Button": c.Button,
+		"Logo": d.LogoURL,
 	})
 	if err != nil {
 		return Message{}, err
