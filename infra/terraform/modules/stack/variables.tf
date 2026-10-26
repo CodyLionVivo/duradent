@@ -98,10 +98,6 @@ variable "invoice_series" {
   type    = object({ factura = string, boleta = string, credit_f = string, credit_b = string })
   default = { factura = "F001", boleta = "B001", credit_f = "FC01", credit_b = "BC01" }
 }
-variable "usd_exchange_rate" {
-  type    = string
-  default = "3.750"
-}
 
 variable "log_retention_days" {
   type    = number

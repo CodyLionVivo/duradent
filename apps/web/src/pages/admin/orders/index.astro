@@ -4,7 +4,7 @@ import Pagination from '../../../components/Pagination.astro';
 import OrderStatus from '../../../components/OrderStatus.astro';
 import { unwrap, type Schemas } from '../../../lib/api/client';
 import { errorMessage } from '../../../lib/admin';
-import { formatDate, formatMoney, useTranslations, type Currency } from '../../../i18n';
+import { formatDate, formatMoney, useTranslations } from '../../../i18n';
 
 const adminApi = Astro.locals.api;
 const t = useTranslations('es');
@@ -69,7 +69,7 @@ const tab = (s: string) => {
               <td class="px-4 py-3"><p>{o.billing.business_name}</p><p class="text-xs text-muted">{o.email} · {o.billing.document_type} {o.billing.document_number}</p></td>
               <td class="px-4 py-3">{t(`admin.orders.${o.payment_method}`)}</td>
               <td class="px-4 py-3"><OrderStatus status={o.status} /></td>
-              <td class="px-4 py-3 text-right font-semibold tabular-nums">{formatMoney(o.total, o.currency as Currency, 'es')}</td>
+              <td class="px-4 py-3 text-right font-semibold tabular-nums">{formatMoney(o.total, 'es')}</td>
               <td class="px-4 py-3 text-muted">{formatDate(o.created_at, 'es')}</td>
             </tr>
           ))}

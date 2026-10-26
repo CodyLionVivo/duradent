@@ -10,7 +10,7 @@ La entrevista cambió el brief original en puntos de fondo. Decisiones tomadas:
 |---|---|---|
 | Cliente | B2C | **B2B**: odontólogos y clínicas. Se pide RUC/COP en la cuenta, no bloquea la compra |
 | Pagos | Stripe | **Culqi** (Stripe no acepta comercios peruanos). Tarjeta + Yape. Además **transferencia bancaria** con confirmación manual. El puerto `PaymentGateway` queda listo para un adaptador Stripe si algún día hay entidad extranjera |
-| Precios | — | **Listas de precios por grupo de cliente**, en **PEN y USD**. Sin login se ve la lista pública |
+| Precios | — | **Listas de precios por grupo de cliente**, solo en **soles (PEN)** (al inicio también USD; se quitó después, ver "Cambio posterior"). Sin login se ve la lista pública |
 | Brasil / LATAM | Mercado | **Solo idioma** (es, en, pt-BR). Envíos solo a Perú; tarifa por zona (Lima, provincias, recojo en tienda) |
 | Facturación | SUNAT | Vía **OSE/PSE (Nubefact)**: factura (01) si hay RUC, boleta (03) si no |
 | Catálogo | — | Producto + **variantes** con atributos (prescripción, slot, pieza). Datos desde cero, cargados por el **panel admin** propio en Astro |
@@ -344,3 +344,12 @@ Cada fase termina con: compila, `golangci-lint` + `astro check` limpios, tests v
   - El ALB solo enruta `/v1/webhooks/*` al API; la web llama al API por ECS Service Connect.
   - El plan de los PRs usa un rol de solo lectura y los tfvars guardados junto al estado en S3.
   - Sin aplicar todavía: falta la cuenta AWS de Duradent (validado con `terraform validate`).
+
+## Cambio posterior: solo soles
+
+Duradent decidió vender solo en soles. Se quitó el dólar en todas las capas: el selector PEN/USD y la
+cookie de moneda de la tienda, las columnas USD del admin de precios, los precios USD del seed, la
+tarifa de envío en USD (migración 0009, que además borra los precios en USD), el tipo de cambio de la
+facturación (`USD_EXCHANGE_RATE`, también en Terraform) y el formato en dólares de los correos. La
+moneda sigue en el modelo de datos y en el API (siempre `PEN`) por si algún día vuelve. Ver ADR 46 en
+`CLAUDE.md`.

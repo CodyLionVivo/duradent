@@ -61,11 +61,10 @@ type Options struct {
 	AdminEmails []string
 	DevLogin    bool
 
-	WebBaseURL      string
-	BankDetails     string
-	OpsEmails       []string // receive stock and invoicing alerts
-	InvoiceSeries   invoicingdomain.Series
-	USDExchangeRate string
+	WebBaseURL    string
+	BankDetails   string
+	OpsEmails     []string // receive stock and invoicing alerts
+	InvoiceSeries invoicingdomain.Series
 }
 
 type App struct {
@@ -121,7 +120,7 @@ func Build(o Options) (*App, error) {
 	a.Invoicing, err = invoicingapp.NewService(invoicingapp.Deps{
 		Orders: invoicingOrders{a}, Invoices: invoicingmysql.New(db), Provider: o.OSE,
 		UoW: uow, Events: events, Log: o.Log, Now: o.Now,
-	}, invoicingapp.Config{Series: o.InvoiceSeries, USDExchangeRate: o.USDExchangeRate})
+	}, invoicingapp.Config{Series: o.InvoiceSeries})
 	if err != nil {
 		return nil, err
 	}

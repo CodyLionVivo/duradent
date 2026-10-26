@@ -51,7 +51,7 @@ func TestDevLoginOnlyLocal(t *testing.T) {
 	}
 	prod := map[string]string{"APP_ENV": "prod", "MYSQL_DSN": "x", "S3_MEDIA_BUCKET": "b", "MEDIA_BASE_URL": "https://cdn", "WEB_BASE_URL": "https://duradent.pe",
 		"CULQI_SECRET_KEY": "sk_live_x", "CULQI_PUBLIC_KEY": "pk_live_x", "CULQI_WEBHOOK_SECRET": "a-long-random-webhook-secret-123",
-		"NUBEFACT_URL": "https://api.nubefact.com/api/v1/x", "NUBEFACT_TOKEN": "t", "USD_EXCHANGE_RATE": "3.75", "MAIL_FROM": "Duradent <ventas@duradent.pe>"}
+		"NUBEFACT_URL": "https://api.nubefact.com/api/v1/x", "NUBEFACT_TOKEN": "t", "MAIL_FROM": "Duradent <ventas@duradent.pe>"}
 	if _, err := load(env(prod)); err != nil {
 		t.Fatalf("valid prod config: %v", err)
 	}
@@ -82,7 +82,7 @@ func TestEventsAndInvoicingSettings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.SeriesFactura != "F001" || cfg.SeriesCreditB != "BC01" || cfg.USDExchangeRate != "3.750" || cfg.OpsEmails[0] != "jefa@duradent.pe" {
+	if cfg.SeriesFactura != "F001" || cfg.SeriesCreditB != "BC01" || cfg.OpsEmails[0] != "jefa@duradent.pe" {
 		t.Fatalf("%+v", cfg)
 	}
 }

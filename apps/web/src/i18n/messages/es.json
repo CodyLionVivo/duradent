@@ -13,18 +13,12 @@
     "searchLabel": "Buscar productos",
     "searchPlaceholder": "Buscar por nombre o SKU…",
     "language": "Idioma",
-    "currency": "Moneda",
     "openMenu": "Abrir menú",
     "closeMenu": "Cerrar menú",
     "mainNav": "Navegación principal",
     "account": "Mi cuenta",
     "cart": "Carrito",
     "orders": "Mis pedidos"
-  },
-  "currency": {
-    "PEN": "Soles (S/)",
-    "USD": "Dólares (US$)",
-    "change": "Cambiar moneda"
   },
   "home": {
     "eyebrow": "Distribuidor de ortodoncia en Perú",
@@ -216,8 +210,7 @@
       "pricesTitle": "Precios: {name}",
       "pricesHint": "Precio unitario sin IGV. Deja vacío para no vender la variante en esta lista. El precio por volumen aplica desde 10 unidades.",
       "variant": "Variante",
-      "pen": "PEN",
-      "usd": "USD",
+      "pen": "S/",
       "base": "1+ unid.",
       "volume": "10+ unid.",
       "saveRow": "Guardar fila",
@@ -248,10 +241,10 @@
       "catalog.too_many_images": "Máximo 12 imágenes por producto.",
       "catalog.too_many_variants": "Demasiadas variantes para un producto.",
       "pricing.amount_invalid": "El precio debe ser mayor que cero y tener como máximo 2 decimales.",
-      "pricing.base_tier_missing": "Cada moneda necesita un precio desde 1 unidad.",
+      "pricing.base_tier_missing": "Falta el precio desde 1 unidad.",
       "pricing.tier_not_decreasing": "El precio por volumen no puede ser mayor que el precio base.",
       "pricing.tier_duplicate": "Hay dos precios para la misma cantidad mínima.",
-      "pricing.currency_invalid": "Moneda no admitida (usa PEN o USD).",
+      "pricing.currency_invalid": "Los precios solo se registran en soles (PEN).",
       "pricing.min_qty_invalid": "La cantidad mínima debe estar entre 1 y 100 000.",
       "pricing.code_invalid": "El código solo admite minúsculas, números, '-' y '_'.",
       "pricing.code_taken": "Ya existe una lista con ese código.",
@@ -521,7 +514,7 @@
       "cannot_cancel_paid": "Un pedido pagado se cancela con reembolso: escríbenos.",
       "idempotency_mismatch": "Recarga la página e inténtalo de nuevo.",
       "token_invalid": "Falta el token de pago.",
-      "currency_invalid": "Moneda no disponible.",
+      "currency_invalid": "Solo vendemos en soles (S/).",
       "invalid_transition": "Este pedido no admite esa acción."
     }
   },

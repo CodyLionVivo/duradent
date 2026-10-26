@@ -3,7 +3,7 @@
 import es from './messages/es.json';
 import en from './messages/en.json';
 import ptBR from './messages/pt-br.json';
-import { DEFAULT_LOCALE, INTL_LOCALE, type Currency, type Locale } from './locales';
+import { CURRENCY, DEFAULT_LOCALE, INTL_LOCALE, type Locale } from './locales';
 
 export * from './locales';
 
@@ -44,19 +44,18 @@ export function useTranslations(locale: Locale): Translate {
 
 const moneyFormats = new Map<string, Intl.NumberFormat>();
 
-/** Formats a decimal string from the API ("85.00") in the visitor's locale. */
-export function formatMoney(amount: string, currency: Currency, locale: Locale): string {
-  const key = `${locale}:${currency}`;
-  let fmt = moneyFormats.get(key);
+/** Formats a decimal string from the API ("85.00") in soles, in the visitor's locale. */
+export function formatMoney(amount: string, locale: Locale): string {
+  let fmt = moneyFormats.get(locale);
   if (!fmt) {
     fmt = new Intl.NumberFormat(INTL_LOCALE[locale], {
       style: 'currency',
-      currency,
+      currency: CURRENCY,
       currencyDisplay: 'symbol',
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     });
-    moneyFormats.set(key, fmt);
+    moneyFormats.set(locale, fmt);
   }
   return fmt.format(Number(amount));
 }

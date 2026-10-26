@@ -15,7 +15,7 @@ func NewService(r ports.RateRepository) *Service { return &Service{rates: r} }
 
 // Quote prices delivery to a department (INEI code), or pickup when
 // department is empty and pickup is true.
-func (s *Service) Quote(ctx context.Context, department string, pickup bool, weightG int, c money.Currency) (domain.Zone, money.Money, error) {
+func (s *Service) Quote(ctx context.Context, department string, pickup bool, weightG int) (domain.Zone, money.Money, error) {
 	zone := domain.ZonePickup
 	if !pickup {
 		zone = domain.ZoneFor(department)
@@ -24,7 +24,7 @@ func (s *Service) Quote(ctx context.Context, department string, pickup bool, wei
 	if err != nil {
 		return "", money.Money{}, err
 	}
-	amount, err := domain.Quote(rates, zone, weightG, c)
+	amount, err := domain.Quote(rates, zone, weightG)
 	return zone, amount, err
 }
 

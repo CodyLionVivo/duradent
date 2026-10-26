@@ -1,19 +1,15 @@
 import { defineMiddleware } from 'astro:middleware';
-import { DEFAULT_CURRENCY, DEFAULT_LOCALE, isCurrency, isLocale } from './i18n';
+import { DEFAULT_LOCALE, isLocale } from './i18n';
 import { createApi } from './lib/api/client';
 import { CART_COOKIE, SESSION_COOKIE, clearSession } from './lib/session';
 import { proxiedClientIP } from './lib/urls';
 import { TRUST_PROXY } from 'astro:env/server';
-
-export const CURRENCY_COOKIE = 'currency';
 
 export const onRequest = defineMiddleware(async (context, next) => {
   const { url, cookies, locals, request } = context;
   const first = url.pathname.split('/')[1];
 
   locals.locale = isLocale(first) ? first : DEFAULT_LOCALE;
-  const currency = cookies.get(CURRENCY_COOKIE)?.value;
-  locals.currency = isCurrency(currency) ? currency : DEFAULT_CURRENCY;
 
   // Every page talks to the API as the visitor: their session decides which
   // price list they see and what they may do; anonymous visitors carry the
@@ -57,7 +53,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
     }
   } else if ((session || cartKey) && request.method === 'GET' && isLocale(first)) {
     // Item count for the header's cart link.
-    const res = await locals.api.GET('/v1/cart', { params: { query: { currency: locals.currency } } });
+    const res = await locals.api.GET('/v1/cart');
     if (res.data) locals.cartCount = res.data.item_count;
   }
 

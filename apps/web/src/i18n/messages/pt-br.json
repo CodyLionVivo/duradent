@@ -13,18 +13,12 @@
     "searchLabel": "Buscar produtos",
     "searchPlaceholder": "Buscar por nome ou SKU…",
     "language": "Idioma",
-    "currency": "Moeda",
     "openMenu": "Abrir menu",
     "closeMenu": "Fechar menu",
     "mainNav": "Navegação principal",
     "account": "Minha conta",
     "cart": "Carrinho",
     "orders": "Meus pedidos"
-  },
-  "currency": {
-    "PEN": "Soles peruanos (S/)",
-    "USD": "Dólares (US$)",
-    "change": "Alterar moeda"
   },
   "home": {
     "eyebrow": "Distribuidor de ortodontia no Peru",
@@ -270,7 +264,7 @@
       "cannot_cancel_paid": "Pedidos pagos são cancelados com reembolso: fale conosco.",
       "idempotency_mismatch": "Recarregue a página e tente novamente.",
       "token_invalid": "Falta o token de pagamento.",
-      "currency_invalid": "Moeda indisponível.",
+      "currency_invalid": "Vendemos apenas em soles peruanos (S/).",
       "invalid_transition": "Este pedido não permite essa ação."
     }
   },

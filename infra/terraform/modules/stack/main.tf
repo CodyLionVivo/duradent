@@ -163,7 +163,6 @@ locals {
     INVOICE_SERIES_BOLETA   = var.invoice_series.boleta
     INVOICE_SERIES_CREDIT_F = var.invoice_series.credit_f
     INVOICE_SERIES_CREDIT_B = var.invoice_series.credit_b
-    USD_EXCHANGE_RATE       = var.usd_exchange_rate
   }
 }
 

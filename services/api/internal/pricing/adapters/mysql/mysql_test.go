@@ -37,8 +37,7 @@ func TestPricingAgainstMySQL(t *testing.T) {
 
 	v := id.New()
 	pen, _ := money.Parse("15.90", money.PEN)
-	usd, _ := money.Parse("4.30", money.USD)
-	if _, err := svc.SetVariantPrices(ctx, public.ID, v, []domain.Tier{{MinQty: 1, Unit: pen}, {MinQty: 1, Unit: usd}}); err != nil {
+	if _, err := svc.SetVariantPrices(ctx, public.ID, v, []domain.Tier{{MinQty: 1, Unit: pen}}); err != nil {
 		t.Fatal(err)
 	}
 	tier1, _ := money.Parse("12.50", money.PEN)
@@ -50,10 +49,6 @@ func TestPricingAgainstMySQL(t *testing.T) {
 	q, err := svc.Quote(ctx, application.QuoteQuery{ListCode: "clinica", Currency: money.PEN, VariantIDs: []id.ID{v}, Qty: 12})
 	if err != nil || q[v].Unit.Decimal() != "11.00" || len(q[v].Tiers) != 2 {
 		t.Fatalf("clinic quote: %+v %v", q[v], err)
-	}
-	q, _ = svc.Quote(ctx, application.QuoteQuery{ListCode: "clinica", Currency: money.USD, VariantIDs: []id.ID{v}})
-	if q[v].Unit.Decimal() != "4.30" || q[v].ListCode != "public" {
-		t.Fatalf("USD falls back to the default list: %+v", q[v])
 	}
 
 	// Replacing tiers removes the old ones.

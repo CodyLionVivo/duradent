@@ -125,8 +125,8 @@ func (b stockBridge) Restock(ctx context.Context, orderID id.ID) error {
 
 type shippingBridge struct{ svc *shippingapp.Service }
 
-func (b shippingBridge) Quote(ctx context.Context, department string, pickup bool, weightG int, c money.Currency) (string, money.Money, error) {
-	zone, amount, err := b.svc.Quote(ctx, department, pickup, weightG, c)
+func (b shippingBridge) Quote(ctx context.Context, department string, pickup bool, weightG int) (string, money.Money, error) {
+	zone, amount, err := b.svc.Quote(ctx, department, pickup, weightG)
 	return string(zone), amount, err
 }
 

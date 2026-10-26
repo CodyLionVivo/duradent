@@ -14,7 +14,7 @@ interface Props {
 
 const PAGE_SIZE = 24;
 const { categorySlug } = Astro.props;
-const { locale, currency } = Astro.locals;
+const { locale } = Astro.locals;
 const t = useTranslations(locale);
 
 const q = (Astro.url.searchParams.get('q') ?? '').trim().slice(0, 100);
@@ -30,7 +30,7 @@ try {
     state = 'notFound';
   } else {
     result = await browseProducts(Astro.locals.api, { locale, category: categorySlug, q, page, pageSize: PAGE_SIZE });
-    quotes = await getQuotes(Astro.locals.api, result.items.map((p) => p.default_variant_id ?? ''), currency);
+    quotes = await getQuotes(Astro.locals.api, result.items.map((p) => p.default_variant_id ?? ''));
   }
 } catch (err) {
   state = err instanceof ApiError && err.status === 404 ? 'notFound' : 'unavailable';

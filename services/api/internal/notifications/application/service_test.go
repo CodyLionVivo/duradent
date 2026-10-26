@@ -135,7 +135,4 @@ func TestFormatMoney(t *testing.T) {
 			t.Errorf("%d: %s", in, got)
 		}
 	}
-	if got := domain.FormatMoney(money.New(100000, money.USD)); got != "US$ 1,000.00" {
-		t.Error(got)
-	}
 }

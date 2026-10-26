@@ -213,7 +213,6 @@ func build(ctx context.Context, cfg config.Config, awsCfg aws.Config, db *sql.DB
 		InvoiceSeries: invoicingdomain.Series{
 			Factura: cfg.SeriesFactura, Boleta: cfg.SeriesBoleta, CreditNoteF: cfg.SeriesCreditF, CreditNoteB: cfg.SeriesCreditB,
 		},
-		USDExchangeRate: cfg.USDExchangeRate,
 	})
 }
 

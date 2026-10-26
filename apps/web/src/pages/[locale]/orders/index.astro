@@ -2,7 +2,7 @@
 import Layout from '../../../layouts/Layout.astro';
 import OrderStatus from '../../../components/OrderStatus.astro';
 import Pagination from '../../../components/Pagination.astro';
-import { formatDate, formatMoney, isLocale, localePath, useTranslations, type Currency } from '../../../i18n';
+import { formatDate, formatMoney, isLocale, localePath, useTranslations } from '../../../i18n';
 import { unwrap, type Schemas } from '../../../lib/api/client';
 
 if (!isLocale(Astro.params.locale)) return new Response(null, { status: 404 });
@@ -40,7 +40,7 @@ try {
               </div>
               <div class="flex items-center gap-4">
                 <OrderStatus status={o.status} />
-                <span class="font-semibold">{formatMoney(o.total, o.currency as Currency, locale)}</span>
+                <span class="font-semibold">{formatMoney(o.total, locale)}</span>
               </div>
             </a>
           </li>

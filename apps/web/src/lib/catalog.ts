@@ -1,6 +1,6 @@
 // Server-side data access for store pages.
 import { unwrap, type ApiClient, type Schemas } from './api/client';
-import type { Currency, Locale } from '../i18n';
+import type { Locale } from '../i18n';
 
 export type Category = Schemas['Category'];
 export type ProductSummary = Schemas['ProductSummary'];
@@ -60,9 +60,9 @@ export async function getProduct(api: ApiClient, slug: string, locale: Locale): 
  * Prices for the visitor keyed by variant id: the signed-in customer's list,
  * or the public list. Variants without a price are absent.
  */
-export async function getQuotes(api: ApiClient, variantIds: string[], currency: Currency): Promise<Map<string, Quote>> {
+export async function getQuotes(api: ApiClient, variantIds: string[]): Promise<Map<string, Quote>> {
   const ids = [...new Set(variantIds)].filter(Boolean);
   if (ids.length === 0) return new Map();
-  const data = unwrap(await api.GET('/v1/pricing/quotes', { params: { query: { currency, variant_id: ids } } }));
+  const data = unwrap(await api.GET('/v1/pricing/quotes', { params: { query: { variant_id: ids } } }));
   return new Map(data.items.map((q) => [q.variant_id, q]));
 }

@@ -54,7 +54,7 @@ func (h *Handler) quotes(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	currency, err := money.ParseCurrency(valueOr(q.Get("currency"), string(money.PEN)))
 	if err != nil {
-		h.fail(w, r, apperr.Invalid("pricing.currency_invalid", "currency", "use PEN or USD"))
+		h.fail(w, r, apperr.Invalid("pricing.currency_invalid", "currency", "prices are in soles (PEN)"))
 		return
 	}
 	qty, err := httpserver.QueryInt(r, "qty", 1, 100_000)
@@ -225,7 +225,7 @@ func (h *Handler) adminSetVariantPrices(w http.ResponseWriter, r *http.Request) 
 	for _, p := range in.Prices {
 		c, err := money.ParseCurrency(string(p.Currency))
 		if err != nil {
-			h.fail(w, r, apperr.Invalid("pricing.currency_invalid", "prices", "use PEN or USD"))
+			h.fail(w, r, apperr.Invalid("pricing.currency_invalid", "prices", "prices are in soles (PEN)"))
 			return
 		}
 		unit, err := money.Parse(p.UnitPrice, c)

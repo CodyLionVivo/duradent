@@ -3,27 +3,32 @@ import Layout from '../../../layouts/Layout.astro';
 import ErrorState from '../../../components/ErrorState.astro';
 import VariantPicker, { type PickerLabels, type PickerQuote } from '../../../components/islands/VariantPicker';
 import { INTL_LOCALE, formatMoney, isLocale, localePath, useTranslations } from '../../../i18n';
-import { getProduct, getQuotes, type ProductDetail, type Quote } from '../../../lib/catalog';
+import { getCategories, getProduct, getQuotes, type Category, type ProductDetail, type Quote } from '../../../lib/catalog';
+import { artKind, artTint } from '../../../lib/art';
+import ProductArt from '../../../components/ProductArt.astro';
 
 if (!isLocale(Astro.params.locale)) return new Response(null, { status: 404 });
 
-const { locale, currency } = Astro.locals;
+const { locale } = Astro.locals;
 const t = useTranslations(locale);
 
 let product: ProductDetail | null = null;
 let quotes = new Map<string, Quote>();
 let availability: Record<string, number> = {};
+let categories: Category[] = [];
 let state: 'ok' | 'notFound' | 'unavailable' = 'ok';
 try {
   product = await getProduct(Astro.locals.api, Astro.params.slug ?? '', locale);
   if (!product) state = 'notFound';
   else {
     const ids = product.variants.map((v) => v.id);
-    const [q, avail] = await Promise.all([
-      getQuotes(Astro.locals.api, ids, currency),
+    const [q, avail, cats] = await Promise.all([
+      getQuotes(Astro.locals.api, ids),
       Astro.locals.api.GET('/v1/inventory/availability', { params: { query: { variant_id: ids } } }),
+      getCategories(Astro.locals.api, locale).catch(() => [] as Category[]),
     ]);
     quotes = q;
+    categories = cats;
     availability = Object.fromEntries((avail.data ?? []).map((a) => [a.variant_id, a.available]));
   }
 } catch {
@@ -86,9 +91,7 @@ const hero = product?.images[0];
             {hero ? (
               <img src={hero.url} alt={hero.alt} width="800" height="800" class="h-full w-full object-contain p-6" fetchpriority="high" />
             ) : (
-              <div class="flex h-full items-center justify-center text-brand-200" role="img" aria-label={t('product.noImage')}>
-                <svg aria-hidden="true" viewBox="0 0 48 48" class="h-28 w-28" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M15 10c3.5-2 6.2-1 9 .6 2.8-1.6 5.5-2.6 9-.6 4 2.5 3.8 8.4 2.3 13.5-1.4 4.8-2.4 11.5-5 11.5-2.4 0-2.7-6-6.3-6s-3.9 6-6.3 6c-2.6 0-3.6-6.7-5-11.5C11.2 18.4 11 12.5 15 10Z" /></svg>
-              </div>
+              <ProductArt kind={artKind(categories, product.category?.id)} tint={artTint(product.slug)} label={t('product.noImage')} />
             )}
           </div>
           {product.images.length > 1 && (
@@ -116,7 +119,6 @@ const hero = product?.images[0];
               availability={availability}
               cartAction={localePath(locale, '/cart')}
               initialVariantId={initial?.id ?? ''}
-              currency={currency}
               intlLocale={INTL_LOCALE[locale]}
               labels={labels}
             />
@@ -145,7 +147,7 @@ const hero = product?.images[0];
                     <tr>
                       <td class="px-4 py-3 font-mono text-xs">{v.sku}</td>
                       {product!.options.map((o) => <td class="px-4 py-3">{optionLabel(o.code, v.options[o.code] ?? '')}</td>)}
-                      <td class="px-4 py-3 text-right font-semibold">{q ? formatMoney(q.unit_price, currency, locale) : <span class="font-normal text-muted">{t('product.priceOnRequest')}</span>}</td>
+                      <td class="px-4 py-3 text-right font-semibold">{q ? formatMoney(q.unit_price, locale) : <span class="font-normal text-muted">{t('product.priceOnRequest')}</span>}</td>
                       <td class="px-4 py-3 text-right">
                         <a class="text-brand-700 hover:underline" href={`?variant=${v.id}`} aria-label={`${t('product.viewOption')} ${v.sku}`}>{t('product.viewOption')}</a>
                       </td>

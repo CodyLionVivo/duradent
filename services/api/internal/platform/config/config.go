@@ -76,13 +76,12 @@ type Config struct {
 
 	// Nubefact (OSE). Without a URL in local development a fake accepts
 	// every document.
-	NubefactURL     string
-	NubefactToken   string
-	SeriesFactura   string
-	SeriesBoleta    string
-	SeriesCreditF   string
-	SeriesCreditB   string
-	USDExchangeRate string
+	NubefactURL   string
+	NubefactToken string
+	SeriesFactura string
+	SeriesBoleta  string
+	SeriesCreditF string
+	SeriesCreditB string
 }
 
 // Load reads configuration from the environment, applying defaults suitable
@@ -132,7 +131,6 @@ func load(getenv func(string) string) (Config, error) {
 		SeriesBoleta:       valueOr(getenv("INVOICE_SERIES_BOLETA"), "B001"),
 		SeriesCreditF:      valueOr(getenv("INVOICE_SERIES_CREDIT_F"), "FC01"),
 		SeriesCreditB:      valueOr(getenv("INVOICE_SERIES_CREDIT_B"), "BC01"),
-		USDExchangeRate:    getenv("USD_EXCHANGE_RATE"),
 	}
 	if len(cfg.OpsEmails) == 0 {
 		cfg.OpsEmails = cfg.AdminEmails
@@ -154,9 +152,6 @@ func load(getenv func(string) string) (Config, error) {
 		if cfg.MediaBaseURL == "" {
 			cfg.MediaBaseURL = "http://localhost:4566/" + cfg.MediaBucket
 		}
-		if cfg.USDExchangeRate == "" {
-			cfg.USDExchangeRate = "3.750"
-		}
 		return cfg, nil
 	}
 
@@ -170,7 +165,7 @@ func load(getenv func(string) string) (Config, error) {
 	for name, v := range map[string]string{
 		"MYSQL_DSN": cfg.MySQLDSN, "S3_MEDIA_BUCKET": cfg.MediaBucket, "MEDIA_BASE_URL": cfg.MediaBaseURL,
 		"CULQI_SECRET_KEY": cfg.CulqiSecretKey, "CULQI_PUBLIC_KEY": cfg.CulqiPublicKey, "CULQI_WEBHOOK_SECRET": cfg.CulqiWebhookSecret,
-		"NUBEFACT_URL": cfg.NubefactURL, "NUBEFACT_TOKEN": cfg.NubefactToken, "USD_EXCHANGE_RATE": cfg.USDExchangeRate,
+		"NUBEFACT_URL": cfg.NubefactURL, "NUBEFACT_TOKEN": cfg.NubefactToken,
 		"MAIL_FROM": getenv("MAIL_FROM"),
 	} {
 		if v == "" {

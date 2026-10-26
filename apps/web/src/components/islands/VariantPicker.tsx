@@ -2,6 +2,7 @@
 // with the initial variant; on the client it reacts to option changes and keeps
 // ?variant= in the URL so a selection can be shared.
 import { useMemo, useState } from 'preact/hooks';
+import { CURRENCY } from '../../i18n/locales';
 
 export interface PickerOption {
   code: string;
@@ -46,7 +47,6 @@ interface Props {
   /** Form target that adds to the cart (works without JavaScript too). */
   cartAction: string;
   initialVariantId: string;
-  currency: string;
   intlLocale: string;
   labels: PickerLabels;
 }
@@ -57,14 +57,14 @@ function matches(v: PickerVariant, selection: Record<string, string>): boolean {
   return Object.entries(selection).every(([k, val]) => v.options[k] === val);
 }
 
-export default function VariantPicker({ options, variants, quotes, availability, cartAction, initialVariantId, currency, intlLocale, labels }: Props) {
+export default function VariantPicker({ options, variants, quotes, availability, cartAction, initialVariantId, intlLocale, labels }: Props) {
   const initial = variants.find((v) => v.id === initialVariantId) ?? variants[0];
   const [selection, setSelection] = useState<Record<string, string>>({ ...(initial?.options ?? {}) });
   const [qty, setQty] = useState(1);
 
   const money = useMemo(
-    () => new Intl.NumberFormat(intlLocale, { style: 'currency', currency, minimumFractionDigits: 2 }),
-    [intlLocale, currency],
+    () => new Intl.NumberFormat(intlLocale, { style: 'currency', currency: CURRENCY, minimumFractionDigits: 2 }),
+    [intlLocale],
   );
   const current = variants.find((v) => matches(v, selection) && Object.keys(v.options).length === Object.keys(selection).length);
   const quote = current ? quotes[current.id] : undefined;

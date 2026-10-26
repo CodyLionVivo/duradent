@@ -1,6 +1,6 @@
 // Package domain models price lists. Duradent sells B2B: each customer is
 // assigned a list (public, clínica, distribuidor…) and every list prices each
-// variant in PEN and USD, optionally with volume tiers.
+// variant in soles, optionally with volume tiers.
 package domain
 
 import (

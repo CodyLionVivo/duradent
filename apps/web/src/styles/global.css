@@ -76,3 +76,126 @@
 @utility container-page {
   @apply mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8;
 }
+
+/* --- Visual effects of the store (home page) ----------------------------------- */
+
+/* Primary call to action with a soft brand glow. */
+@utility btn-glow {
+  box-shadow: 0 10px 24px -10px rgb(4 104 128 / 0.6);
+  transition: box-shadow 0.3s ease, transform 0.3s ease, background-color 0.2s ease;
+  &:hover {
+    box-shadow: 0 14px 32px -10px rgb(4 104 128 / 0.75);
+    transform: translateY(-1px);
+  }
+}
+
+/* Category card: lifts and shows a gradient ring on hover. */
+@utility category-card {
+  position: relative;
+  display: flex;
+  height: 100%;
+  gap: 1rem;
+  align-items: flex-start;
+  padding: 1.25rem;
+  border-radius: var(--radius-card);
+  border: 1px solid transparent;
+  background:
+    linear-gradient(#ffffff, #ffffff) padding-box,
+    linear-gradient(135deg, var(--color-line), var(--color-line)) border-box;
+  transition: transform 0.3s ease, box-shadow 0.3s ease, background 0.3s ease;
+  &:hover,
+  &:focus-visible {
+    transform: translateY(-3px);
+    background:
+      linear-gradient(#ffffff, #ffffff) padding-box,
+      linear-gradient(135deg, var(--color-brand-500), #046880) border-box;
+    box-shadow: 0 16px 34px -18px rgb(4 104 128 / 0.55);
+  }
+}
+
+@utility category-art-tile {
+  display: flex;
+  flex-shrink: 0;
+  height: 4.75rem;
+  width: 4.75rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 1rem;
+  background:
+    radial-gradient(circle at 1px 1px, rgb(4 104 128 / 0.1) 1px, transparent 0) 0 0 / 10px 10px,
+    linear-gradient(150deg, var(--color-brand-50), #e7f3f8);
+}
+
+/* "Why Duradent" band in the logo colour with a dotted texture. */
+@utility values-band {
+  position: relative;
+  overflow: hidden;
+  border-radius: 1.5rem;
+  padding: 2.5rem 1.5rem;
+  background:
+    radial-gradient(circle at 1px 1px, rgb(255 255 255 / 0.12) 1px, transparent 0) 0 0 / 18px 18px,
+    radial-gradient(60% 120% at 100% 0%, rgb(19 163 160 / 0.55), transparent 70%),
+    linear-gradient(135deg, #046880 0%, #0c6a6b 60%, #0f5557 100%);
+  @media (width >= 48rem) {
+    padding: 3rem;
+  }
+}
+
+@utility value-tile {
+  display: flex;
+  gap: 1rem;
+  padding: 1.25rem;
+  border-radius: 1rem;
+  background: rgb(255 255 255 / 0.08);
+  border: 1px solid rgb(255 255 255 / 0.16);
+  backdrop-filter: blur(6px);
+  transition: background 0.3s ease, transform 0.3s ease;
+  &:hover {
+    background: rgb(255 255 255 / 0.13);
+    transform: translateY(-2px);
+  }
+}
+
+/* Fades sections in as they scroll into view, where the browser supports
+   scroll-driven animations; elsewhere (and with reduced motion) they simply show. */
+@utility reveal {
+  @supports (animation-timeline: view()) {
+    @media (prefers-reduced-motion: no-preference) {
+      animation: reveal-in linear both;
+      animation-timeline: view();
+      animation-range: entry 0% cover 22%;
+    }
+  }
+}
+
+/* Never fully transparent: pages captured without scrolling (link previews,
+   print) still show every section. */
+@keyframes reveal-in {
+  from {
+    opacity: 0.35;
+    transform: translateY(16px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Hero headline enters once on load. */
+.hero-copy > * {
+  animation: hero-in 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.hero-copy > :nth-child(2) { animation-delay: 0.08s; }
+.hero-copy > :nth-child(3) { animation-delay: 0.16s; }
+.hero-copy > :nth-child(4) { animation-delay: 0.24s; }
+@keyframes hero-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero-copy > * {
+    animation: none;
+  }
+}

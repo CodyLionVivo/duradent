@@ -154,7 +154,7 @@ test con LocalStack real (outbox → SNS con filtro → SQS → consumidor, rein
 ## Decisiones de arquitectura (ADR)
 
 1. **Pagos con Culqi, no Stripe.** Stripe no acepta comercios constituidos en Perú. Culqi cubre
-   tarjetas y Yape en PEN/USD. El puerto `PaymentGateway` permite añadir Stripe si existe una
+   tarjetas y Yape en soles (ver ADR 46). El puerto `PaymentGateway` permite añadir Stripe si existe una
    entidad extranjera. Además, transferencia bancaria con confirmación manual en el admin.
 2. **B2B con listas de precios por cliente.** Se pide RUC/COP en la cuenta, no bloquea la compra.
    Factura (01) con RUC, boleta (03) sin él.
@@ -235,8 +235,7 @@ test con LocalStack real (outbox → SNS con filtro → SQS → consumidor, rein
 35. **Factura si el cliente pidió factura con RUC; si no, boleta.** Series por defecto F001/B001 y notas
     de crédito FC01/BC01 (`INVOICE_SERIES_*`). El IGV se calcula por línea y la diferencia de redondeo
     va a la línea mayor, así las líneas suman exactamente el IGV cobrado. El envío va como línea de
-    servicio (`ZZ`). Pedidos en USD usan `USD_EXCHANGE_RATE` (la SUNAT pide el tipo de cambio SBS del
-    día: operaciones debe actualizarlo; automatizarlo queda pendiente).
+    servicio (`ZZ`). Todos los comprobantes van en soles (`moneda` 1), sin tipo de cambio.
 36. **El enlace de verificación de correo no viaja por el bus**: identity lo envía en el momento a través
     del mailer de notifications (bridge). Token aleatorio de 32 bytes, solo se guarda su SHA-256, vale
     24 h, un uso, máx. 3 envíos por hora. La página `/…/account/verify` confirma con POST (los escáneres
@@ -265,6 +264,12 @@ test con LocalStack real (outbox → SNS con filtro → SQS → consumidor, rein
     tareas de web y API con autoescalado por CPU (60 %).
 45. **Imágenes por CloudFront con OAC** (bucket privado). La web sube con PUT prefirmado; el CORS del
     bucket solo acepta el origen de la tienda.
+46. **Solo soles (PEN).** Duradent vende solo en soles: sin selector de moneda en la tienda, precios y
+    tarifas de envío en PEN, comprobantes sin tipo de cambio. La moneda sigue en el modelo (`currency`
+    en tablas, `money.Currency`, campo `currency` del API) pero `money.Supported` solo acepta PEN y el
+    API rechaza cualquier otra con `*.currency_invalid`. La migración 0009 borra los precios en USD y la
+    columna `shipping_rates.amount_usd`. Volver a vender en dólares exige reintroducirlos en el dominio,
+    el admin de precios, las tarifas y la facturación (tipo de cambio SBS).
 
 ## Estado por fases
 
@@ -345,4 +350,3 @@ reintentar no duplica correos ni comprobantes. Comprobantes rechazados: admin �
 - Shell en un contenedor: `aws ecs execute-command --cluster duradent-<env> --task <id> --container app --interactive --command sh`
   (solo la web tiene shell; las imágenes Go son distroless).
 - Logs: CloudWatch `/ecs/duradent-<env>-<servicio>`; los errores (`level=ERROR`) tienen alarma propia.
-- Tipo de cambio USD: `usd_exchange_rate` en tfvars → `terraform apply` → redeploy.

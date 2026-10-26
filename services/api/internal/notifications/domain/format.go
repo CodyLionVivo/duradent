@@ -12,12 +12,9 @@ import (
 // lima is Peru's time zone (no daylight saving), used for every date in emails.
 var lima = time.FixedZone("PET", -5*60*60)
 
-// FormatMoney writes an amount the way the store shows it: "S/ 1,234.56".
+// FormatMoney writes an amount in soles the way the store shows it: "S/ 1,234.56".
 func FormatMoney(m money.Money) string {
-	symbol := "S/"
-	if m.Currency == money.USD {
-		symbol = "US$"
-	}
+	const symbol = "S/"
 	d := m.Decimal()
 	sign := ""
 	if strings.HasPrefix(d, "-") {

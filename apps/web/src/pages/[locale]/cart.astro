@@ -7,7 +7,7 @@ import { setCartKey } from '../../lib/session';
 
 if (!isLocale(Astro.params.locale)) return new Response(null, { status: 404 });
 
-const { locale, currency, api, user } = Astro.locals;
+const { locale, api, user } = Astro.locals;
 const t = useTranslations(locale);
 const here = localePath(locale, '/cart');
 let error = '';
@@ -19,14 +19,14 @@ if (Astro.request.method === 'POST') {
   const qty = Math.trunc(Number(form.get('qty') ?? 1));
   try {
     if (intent === 'add') {
-      const cart = unwrap(await api.POST('/v1/cart/items', { params: { query: { currency, locale } }, body: { variant_id: variant, qty } }));
+      const cart = unwrap(await api.POST('/v1/cart/items', { params: { query: { locale } }, body: { variant_id: variant, qty } }));
       if (cart.key) setCartKey(Astro.cookies, cart.key);
       return Astro.redirect(`${here}?added=1`, 303);
     }
     if (intent === 'set') {
-      unwrap(await api.PUT('/v1/cart/items/{variant}', { params: { path: { variant }, query: { currency, locale } }, body: { qty } }));
+      unwrap(await api.PUT('/v1/cart/items/{variant}', { params: { path: { variant }, query: { locale } }, body: { qty } }));
     } else if (intent === 'remove') {
-      unwrap(await api.DELETE('/v1/cart/items/{variant}', { params: { path: { variant }, query: { currency, locale } } }));
+      unwrap(await api.DELETE('/v1/cart/items/{variant}', { params: { path: { variant }, query: { locale } } }));
     }
     return Astro.redirect(here, 303);
   } catch (err) {
@@ -37,7 +37,7 @@ if (Astro.request.method === 'POST') {
 
 let cart: Schemas['Cart'] | null = null;
 try {
-  cart = unwrap(await api.GET('/v1/cart', { params: { query: { currency, locale } } }));
+  cart = unwrap(await api.GET('/v1/cart', { params: { query: { locale } } }));
 } catch (err) {
   error ||= apiErrorText(t, err);
 }
@@ -95,8 +95,8 @@ const checkoutHref = user ? localePath(locale, '/checkout') : `${localePath(loca
                 </div>
               </div>
               <div class="text-right">
-                {l.line_total && <p class="font-semibold">{formatMoney(l.line_total, currency, locale)}</p>}
-                {l.unit_price && <p class="text-xs text-muted">{formatMoney(l.unit_price, currency, locale)} {t('product.perUnit')}</p>}
+                {l.line_total && <p class="font-semibold">{formatMoney(l.line_total, locale)}</p>}
+                {l.unit_price && <p class="text-xs text-muted">{formatMoney(l.unit_price, locale)} {t('product.perUnit')}</p>}
               </div>
             </li>
           ))}
@@ -106,7 +106,7 @@ const checkoutHref = user ? localePath(locale, '/checkout') : `${localePath(loca
           <h2 id="summary-title" class="text-lg font-semibold">{t('checkout.summary')}</h2>
           <dl class="mt-4 space-y-2 text-sm">
             <div class="flex justify-between"><dt>{t('cart.items', { count: cart.item_count })}</dt><dd></dd></div>
-            <div class="flex justify-between text-base font-semibold"><dt>{t('cart.subtotal')}</dt><dd>{formatMoney(cart.subtotal, currency, locale)}</dd></div>
+            <div class="flex justify-between text-base font-semibold"><dt>{t('cart.subtotal')}</dt><dd>{formatMoney(cart.subtotal, locale)}</dd></div>
           </dl>
           <p class="mt-2 text-xs text-muted">{t('cart.taxNote')}</p>
           {!cart.ready && <p class="mt-4 text-sm text-red-700">{t('cart.fixProblems')}</p>}

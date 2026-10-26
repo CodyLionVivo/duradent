@@ -32,7 +32,7 @@ func sale() Sale {
 func TestBuildDocumentLinesAddUpToTheOrder(t *testing.T) {
 	s := sale()
 	inv := NewInvoice(s.OrderID, s.Number, SaleType(s.Customer), "F001", 7, s.Total, nil, time.Now())
-	d, err := BuildDocument(inv, s, nil, "", "", time.Date(2026, 10, 27, 3, 0, 0, 0, time.UTC))
+	d, err := BuildDocument(inv, s, nil, "", time.Date(2026, 10, 27, 3, 0, 0, 0, time.UTC))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +74,7 @@ func TestBoletaAndCreditNote(t *testing.T) {
 		t.Fatal("credit note of a boleta uses the B series")
 	}
 	nc := NewInvoice(s.OrderID, s.Number, CreditNote, "BC01", 1, s.Total, b, time.Now())
-	d, err := BuildDocument(nc, s, b, "", "", time.Now())
+	d, err := BuildDocument(nc, s, b, "", time.Now())
 	if err != nil || d.RefSeries != "B001" || d.RefNumber != 1 || d.Reason == "" {
 		t.Fatalf("%+v %v", d, err)
 	}
@@ -83,16 +83,12 @@ func TestBoletaAndCreditNote(t *testing.T) {
 	}
 }
 
-func TestUSDNeedsExchangeRate(t *testing.T) {
+func TestDocumentsAreInSoles(t *testing.T) {
 	s := sale()
-	usd := func(m money.Money) money.Money { return money.New(m.Minor, money.USD) }
-	s.Total, s.Tax, s.Shipping = usd(s.Total), usd(s.Tax), usd(s.Shipping)
+	s.Total = money.New(s.Total.Minor, "USD")
 	inv := NewInvoice(s.OrderID, s.Number, Factura, "F001", 1, s.Total, nil, time.Now())
-	if _, err := BuildDocument(inv, s, nil, "", "", time.Now()); err == nil {
-		t.Fatal("missing exchange rate")
-	}
-	if d, err := BuildDocument(inv, s, nil, "", "3.750", time.Now()); err != nil || d.ExchangeRate != "3.750" {
-		t.Fatal(err)
+	if _, err := BuildDocument(inv, s, nil, "", time.Now()); err == nil {
+		t.Fatal("only soles can be invoiced")
 	}
 }
 

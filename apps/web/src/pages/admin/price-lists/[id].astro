@@ -17,8 +17,6 @@ const VOLUME_QTY = 10;
 const cells = [
   { name: 'pen_1', currency: 'PEN', min: 1 },
   { name: 'pen_10', currency: 'PEN', min: VOLUME_QTY },
-  { name: 'usd_1', currency: 'USD', min: 1 },
-  { name: 'usd_10', currency: 'USD', min: VOLUME_QTY },
 ] as const;
 let error = '';
 
@@ -96,8 +94,6 @@ const valueOf = (variantId: string, currency: string, min: number) =>
               <th scope="col" class="px-4 py-2 font-semibold">{t('admin.pricing.variant')}</th>
               <th scope="col" class="px-2 py-2 font-semibold">{t('admin.pricing.pen')} {t('admin.pricing.base')}</th>
               <th scope="col" class="px-2 py-2 font-semibold">{t('admin.pricing.pen')} {t('admin.pricing.volume')}</th>
-              <th scope="col" class="px-2 py-2 font-semibold">{t('admin.pricing.usd')} {t('admin.pricing.base')}</th>
-              <th scope="col" class="px-2 py-2 font-semibold">{t('admin.pricing.usd')} {t('admin.pricing.volume')}</th>
               <th scope="col" class="px-4 py-2"><span class="sr-only">{t('admin.common.actions')}</span></th>
             </tr>
           </thead>

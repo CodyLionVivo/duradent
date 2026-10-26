@@ -8,7 +8,8 @@ info:
     `task web:gen-api`. Each bounded context adds its paths here as it lands.
 
     Money is always a decimal string with two places ("85.00") plus a
-    currency (PEN or USD). Errors use RFC 9457 `application/problem+json`
+    currency, always PEN: the store sells only in soles. The optional
+    `currency` request parameters accept only PEN. Errors use RFC 9457 `application/problem+json`
     with a stable `code` (e.g. `catalog.sku_taken`).
 
     Signed-in customers send `Authorization: Session <token>` (the web keeps
@@ -1723,7 +1724,7 @@ components:
         ubigeo: { type: string }
         phone: { type: string }
         is_default: { type: boolean }
-    Currency: { type: string, enum: [PEN, USD] }
+    Currency: { type: string, enum: [PEN], description: "Soles: the only currency of the store" }
     Decimal: { type: string, pattern: "^-?\\d+\\.\\d{2}$", examples: ["85.00"] }
     LocalizedString:
       type: object

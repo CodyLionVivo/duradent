@@ -4,7 +4,7 @@ import OrderStatus from '../../../components/OrderStatus.astro';
 import { ApiError, unwrap, type Schemas } from '../../../lib/api/client';
 import { errorMessage, savedRedirect, str } from '../../../lib/admin';
 import { departmentName } from '../../../lib/account';
-import { formatDate, formatMoney, useTranslations, type Currency } from '../../../i18n';
+import { formatDate, formatMoney, useTranslations } from '../../../i18n';
 
 const adminApi = Astro.locals.api;
 const t = useTranslations('es');
@@ -61,8 +61,7 @@ const o = d?.order;
 const invoices = o ? ((await adminApi.GET('/v1/admin/orders/{id}/invoices', { params: { path: { id } } })).data?.items ?? []) : [];
 const paid = d?.payments.some((p) => p.status === 'confirmed') ?? false;
 const refundable = !!o && paid && !o.refunded_at && ['paid', 'preparing', 'cancelled'].includes(o.status);
-const cur = (o?.currency ?? 'PEN') as Currency;
-const money = (v: string) => formatMoney(v, cur, 'es');
+const money = (v: string) => formatMoney(v, 'es');
 const statusLabel = (s: string) => (s ? t(`status.${s as 'paid'}`) : '—');
 ---
 

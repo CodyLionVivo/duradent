@@ -23,14 +23,14 @@ func TestParse(t *testing.T) {
 func TestDecimal(t *testing.T) {
 	cases := map[int64]string{12050: "120.50", 7: "0.07", 0: "0.00", -310: "-3.10"}
 	for in, want := range cases {
-		if got := New(in, USD).Decimal(); got != want {
+		if got := New(in, PEN).Decimal(); got != want {
 			t.Errorf("Decimal(%d) = %q, want %q", in, got, want)
 		}
 	}
 }
 
 func TestAddRejectsMixedCurrencies(t *testing.T) {
-	if _, err := New(100, PEN).Add(New(100, USD)); !errors.Is(err, ErrCurrency) {
+	if _, err := New(100, PEN).Add(New(100, Currency("USD"))); !errors.Is(err, ErrCurrency) {
 		t.Fatalf("expected ErrCurrency, got %v", err)
 	}
 	sum, err := New(150, PEN).Add(New(250, PEN))
@@ -45,5 +45,14 @@ func TestParseCurrency(t *testing.T) {
 	}
 	if _, err := ParseCurrency("BRL"); !errors.Is(err, ErrCurrency) {
 		t.Fatal("BRL is not sold in phase 1")
+	}
+}
+
+func TestOnlySolesAreSupported(t *testing.T) {
+	if c, err := ParseCurrency(" pen "); err != nil || c != PEN {
+		t.Fatalf("PEN: %v %v", c, err)
+	}
+	if _, err := ParseCurrency("USD"); !errors.Is(err, ErrCurrency) {
+		t.Fatalf("USD must be rejected, got %v", err)
 	}
 }

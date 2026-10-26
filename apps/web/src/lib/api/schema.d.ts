@@ -1516,8 +1516,11 @@ export interface components {
             phone: string;
             is_default: boolean;
         };
-        /** @enum {string} */
-        Currency: "PEN" | "USD";
+        /**
+         * @description Soles: the only currency of the store
+         * @enum {string}
+         */
+        Currency: "PEN";
         /** @example 85.00 */
         Decimal: string;
         /** @description Text per locale; es is required where the text is. */

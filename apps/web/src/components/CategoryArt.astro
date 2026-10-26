@@ -1,0 +1,124 @@
+---
+// Line illustrations of orthodontic supplies, one per top-level category, in
+// the brand palette. Decorative: the caller provides the accessible name.
+import type { ArtKind } from '../lib/art';
+
+interface Props {
+  kind: ArtKind;
+  class?: string;
+}
+
+const { kind, class: className = '' } = Astro.props;
+// Gradient ids must be unique when several illustrations share a page.
+const uid = `art-${Math.random().toString(36).slice(2, 9)}`;
+const deep = '#046880';
+const teal = '#0c6a6b';
+const mid = '#13a3a0';
+const light = '#aeeae7';
+const pale = '#effcfb';
+---
+
+<svg viewBox="0 0 200 200" aria-hidden="true" class:list={['category-art', className]} fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <defs>
+    <linearGradient id={`${uid}-metal`} x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffffff" />
+      <stop offset="0.55" stop-color={pale} />
+      <stop offset="1" stop-color={light} />
+    </linearGradient>
+    <linearGradient id={`${uid}-wire`} x1="0" x2="1">
+      <stop offset="0" stop-color={mid} />
+      <stop offset="1" stop-color={deep} />
+    </linearGradient>
+  </defs>
+
+  {kind === 'brackets' && (
+    <g>
+      <path d="M18 120 Q100 150 182 120" stroke={`url(#${uid}-wire)`} stroke-width="5" />
+      {[52, 100, 148].map((x, i) => {
+        const y = i === 1 ? 116 : 112;
+        return (
+          <g transform={`translate(${x - 21} ${y - 24})`}>
+            <rect x="4" y="0" width="34" height="10" rx="4" fill={light} stroke={teal} stroke-width="2.5" />
+            <rect x="4" y="38" width="34" height="10" rx="4" fill={light} stroke={teal} stroke-width="2.5" />
+            <rect x="0" y="8" width="42" height="32" rx="9" fill={`url(#${uid}-metal)`} stroke={teal} stroke-width="3" />
+            <rect x="7" y="20" width="28" height="8" rx="3" fill={deep} opacity="0.85" />
+            <circle cx="21" cy="24" r="17" stroke={mid} stroke-width="2.5" stroke-dasharray="4 5" opacity="0.7" />
+          </g>
+        );
+      })}
+    </g>
+  )}
+
+  {kind === 'tubos-bandas' && (
+    <g>
+      <ellipse cx="96" cy="112" rx="58" ry="40" fill={`url(#${uid}-metal)`} stroke={teal} stroke-width="4" />
+      <ellipse cx="96" cy="112" rx="40" ry="24" fill="#ffffff" stroke={mid} stroke-width="3" />
+      <path d="M60 86c10-6 22-9 36-9s26 3 36 9" stroke="#ffffff" stroke-width="4" opacity="0.9" />
+      <g transform="rotate(-8 150 104)">
+        <rect x="128" y="92" width="50" height="22" rx="7" fill={`url(#${uid}-metal)`} stroke={teal} stroke-width="3.5" />
+        <ellipse cx="172" cy="103" rx="4" ry="6" fill={deep} />
+        <path d="M134 103h30" stroke={mid} stroke-width="2.5" stroke-dasharray="3 4" />
+      </g>
+    </g>
+  )}
+
+  {kind === 'arcos' && (
+    <g>
+      <path d="M52 52C52 150 148 150 148 52" stroke={light} stroke-width="14" opacity="0.6" />
+      <path d="M52 52C52 150 148 150 148 52" stroke={`url(#${uid}-wire)`} stroke-width="6" />
+      <path d="M66 58C68 128 132 128 134 58" stroke={mid} stroke-width="2.5" stroke-dasharray="2 7" opacity="0.8" />
+      <circle cx="52" cy="50" r="5" fill={deep} />
+      <circle cx="148" cy="50" r="5" fill={deep} />
+    </g>
+  )}
+
+  {kind === 'elasticos' && (
+    <g>
+      <path d="M26 104h148" stroke={light} stroke-width="10" />
+      {[40, 80, 120, 160].map((x, i) => (
+        <circle cx={x} cy="104" r="16" stroke={i % 2 ? deep : mid} stroke-width="8" fill="#ffffff" />
+      ))}
+      <path d="M58 150c20 12 64 12 84 0" stroke={mid} stroke-width="5" opacity="0.55" />
+      <circle cx="100" cy="58" r="20" stroke={teal} stroke-width="7" fill={pale} />
+    </g>
+  )}
+
+  {kind === 'instrumental' && (
+    <g>
+      {/* Handles with rubber grips */}
+      <path d="M95 104C86 128 74 150 62 176" stroke={teal} stroke-width="13" />
+      <path d="M105 104C114 128 126 150 138 176" stroke={deep} stroke-width="13" />
+      <path d="M84 134C78 148 71 162 64 174" stroke={light} stroke-width="7" />
+      <path d="M116 134C122 148 129 162 136 174" stroke={light} stroke-width="7" />
+      {/* Short, stout cutting jaws meeting at the tip */}
+      <path d="M92 100 80 52c-2-9 6-16 14-12l12 58z" fill={`url(#${uid}-metal)`} stroke={teal} stroke-width="4" />
+      <path d="M108 100 120 52c2-9-6-16-14-12L94 98z" fill={`url(#${uid}-metal)`} stroke={deep} stroke-width="4" />
+      <path d="M100 44v34" stroke={mid} stroke-width="2.5" opacity="0.7" />
+      <circle cx="100" cy="100" r="11" fill="#ffffff" stroke={teal} stroke-width="4.5" />
+      <circle cx="100" cy="100" r="3.5" fill={deep} />
+    </g>
+  )}
+
+  {kind === 'adhesivos' && (
+    <g transform="rotate(-35 100 100)">
+      <rect x="70" y="60" width="60" height="96" rx="12" fill={`url(#${uid}-metal)`} stroke={teal} stroke-width="4" />
+      <rect x="78" y="96" width="44" height="52" rx="7" fill={mid} opacity="0.75" />
+      <path d="M84 84h32M84 98h20M84 112h32M84 126h20" stroke={teal} stroke-width="2.5" opacity="0.6" />
+      <path d="M92 60V36h16v24" fill={pale} stroke={teal} stroke-width="4" />
+      <path d="M100 36V14" stroke={deep} stroke-width="5" />
+      <path d="M80 156h40l-8 22H88z" fill={light} stroke={teal} stroke-width="4" />
+    </g>
+  )}
+
+  {kind === 'tooth' && (
+    <g>
+      <path
+        d="M64 52c14-9 26-5 36 1 10-6 22-10 36-1 16 11 15 34 9 54-5 18-9 46-20 46-9 0-11-24-25-24s-16 24-25 24c-11 0-15-28-20-46-6-20-7-43 9-54Z"
+        fill={`url(#${uid}-metal)`}
+        stroke={teal}
+        stroke-width="5"
+      />
+      <path d="M84 70c6-3 11-2 16 1" stroke="#ffffff" stroke-width="5" />
+    </g>
+  )}
+</svg>

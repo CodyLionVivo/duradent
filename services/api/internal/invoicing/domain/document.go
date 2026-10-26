@@ -68,17 +68,15 @@ func (l DocLine) UnitPrice() string {
 
 // Document is an electronic document ready to send to the OSE.
 type Document struct {
-	Type         DocType
-	Series       string
-	Number       int
-	IssueDate    time.Time
-	Currency     money.Currency
-	ExchangeRate string // PEN per USD, required for USD documents
-	Customer     Customer
-	Lines        []DocLine
-	TaxedTotal   int64 // total gravada
-	IGV          int64
-	Total        int64
+	Type       DocType
+	Series     string
+	Number     int
+	IssueDate  time.Time
+	Customer   Customer
+	Lines      []DocLine
+	TaxedTotal int64 // total gravada
+	IGV        int64
+	Total      int64
 	// Credit notes
 	RefType   DocType
 	RefSeries string
@@ -92,20 +90,17 @@ var lima = time.FixedZone("PET", -5*60*60)
 // BuildDocument turns a sale into document lines. IGV is computed per line
 // and the rounding difference goes to the largest line, so lines add up to
 // exactly the IGV the customer paid (SUNAT checks the sums).
-func BuildDocument(inv *Invoice, s Sale, ref *Invoice, reason string, exchangeRate string, now time.Time) (Document, error) {
+func BuildDocument(inv *Invoice, s Sale, ref *Invoice, reason string, now time.Time) (Document, error) {
 	if s.Customer.DocNumber == "" || s.Customer.Name == "" {
 		return Document{}, apperr.Invalid("invoicing.customer_missing", "billing", "the order has no billing document")
 	}
-	if s.Total.Currency == money.USD && exchangeRate == "" {
-		return Document{}, apperr.Invalid("invoicing.exchange_rate_missing", "currency", "USD documents need an exchange rate")
+	if s.Total.Currency != money.PEN {
+		return Document{}, apperr.Invalid("invoicing.currency_invalid", "currency", "documents are issued in soles")
 	}
 	d := Document{
 		Type: inv.Type, Series: inv.Series, Number: inv.Number, IssueDate: now.In(lima),
-		Currency: s.Total.Currency, Customer: s.Customer,
-		IGV: s.Tax.Minor, Total: s.Total.Minor,
-	}
-	if s.Total.Currency == money.USD {
-		d.ExchangeRate = exchangeRate
+		Customer: s.Customer,
+		IGV:      s.Tax.Minor, Total: s.Total.Minor,
 	}
 	for _, l := range s.Lines {
 		d.Lines = append(d.Lines, DocLine{

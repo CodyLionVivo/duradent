@@ -2,12 +2,16 @@
 import Layout from '../../layouts/Layout.astro';
 import ProductCard from '../../components/ProductCard.astro';
 import ErrorState from '../../components/ErrorState.astro';
+import HeroBackdrop from '../../components/HeroBackdrop.astro';
+import HeroScene from '../../components/HeroScene.astro';
+import CategoryArt from '../../components/CategoryArt.astro';
+import { artKind } from '../../lib/art';
 import { isLocale, localePath, useTranslations } from '../../i18n';
 import { browseProducts, getCategories, getQuotes, topLevel, type Category, type ProductSummary, type Quote } from '../../lib/catalog';
 
 if (!isLocale(Astro.params.locale)) return new Response(null, { status: 404 });
 
-const { locale, currency } = Astro.locals;
+const { locale } = Astro.locals;
 const t = useTranslations(locale);
 
 let categories: Category[] = [];
@@ -19,7 +23,7 @@ try {
     getCategories(Astro.locals.api, locale).then(topLevel),
     browseProducts(Astro.locals.api, { locale, category: 'brackets', pageSize: 8 }),
   ]);
-  quotes = await getQuotes(Astro.locals.api, featured.map((p) => p.default_variant_id ?? ''), currency);
+  quotes = await getQuotes(Astro.locals.api, featured.map((p) => p.default_variant_id ?? ''));
 } catch {
   failed = true;
   Astro.response.status = 503;
@@ -37,36 +41,24 @@ const values = [
     <ErrorState kind="unavailable" />
   ) : (
     <>
-      <section class="relative overflow-hidden bg-gradient-to-b from-brand-50 to-white">
-        <div class="container-page grid items-center gap-10 py-16 sm:py-20 lg:grid-cols-2">
-          <div>
-            <p class="text-sm font-semibold uppercase tracking-wider text-brand-700">{t('home.eyebrow')}</p>
-            <h1 class="mt-3 text-4xl font-bold tracking-tight text-ink sm:text-5xl">{t('home.heroTitle')}</h1>
+      <section class="relative isolate overflow-hidden">
+        <HeroBackdrop />
+        <div class="container-page relative grid items-center gap-10 py-16 sm:py-20 lg:grid-cols-[1fr_1.05fr] lg:py-24">
+          <div class="hero-copy">
+            <p class="inline-flex items-center gap-2 rounded-full border border-brand-200 bg-white/70 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-brand-700 backdrop-blur">
+              <span class="h-1.5 w-1.5 rounded-full bg-brand-500"></span>{t('home.eyebrow')}
+            </p>
+            <h1 class="mt-5 text-4xl font-bold tracking-tight text-ink sm:text-5xl lg:text-6xl">
+              {t('home.heroTitle')}
+            </h1>
             <p class="mt-5 max-w-xl text-lg text-muted">{t('home.heroSubtitle')}</p>
             <div class="mt-8 flex flex-wrap gap-3">
-              <a href={localePath(locale, '/catalog')} class="btn-primary px-6 py-3 text-base">{t('home.heroCta')}</a>
-              <a href={localePath(locale, '/catalog/brackets')} class="btn-secondary px-6 py-3 text-base">{t('home.heroSecondary')}</a>
+              <a href={localePath(locale, '/catalog')} class="btn-primary btn-glow px-6 py-3 text-base">{t('home.heroCta')} <span aria-hidden="true">→</span></a>
+              <a href={localePath(locale, '/catalog/brackets')} class="btn-secondary bg-white/80 px-6 py-3 text-base backdrop-blur">{t('home.heroSecondary')}</a>
             </div>
           </div>
-          <div class="hidden lg:block" aria-hidden="true">
-            <svg viewBox="0 0 480 360" class="w-full">
-              <defs>
-                <linearGradient id="arch" x1="0" x2="1">
-                  <stop offset="0" stop-color="#13a3a0" />
-                  <stop offset="1" stop-color="#0c6a6b" />
-                </linearGradient>
-              </defs>
-              <path d="M40 120 Q240 320 440 120" fill="none" stroke="url(#arch)" stroke-width="6" stroke-linecap="round" />
-              {[60, 110, 165, 240, 315, 370, 420].map((x, i) => {
-                const y = 120 + Math.sin(((x - 40) / 400) * Math.PI) * 100;
-                return (
-                  <g transform={`translate(${x - 26} ${y - 34 - (i === 3 ? 6 : 0)})`}>
-                    <rect width="52" height="68" rx="20" fill="white" stroke="#d5f5f3" stroke-width="3" />
-                    <rect x="14" y="26" width="24" height="16" rx="4" fill="#aeeae7" stroke="#0b8584" stroke-width="2" />
-                  </g>
-                );
-              })}
-            </svg>
+          <div class="hidden lg:block">
+            <HeroScene chips={values.map((v) => ({ label: v.title, icon: v.icon }))} />
           </div>
         </div>
       </section>
@@ -75,11 +67,16 @@ const values = [
         <h2 id="cat-title" class="text-2xl font-bold tracking-tight">{t('home.categoriesTitle')}</h2>
         <ul class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3" role="list">
           {categories.map((c) => (
-            <li>
-              <a href={localePath(locale, `/catalog/${c.slug}`)} class="card group flex h-full flex-col p-5 transition-colors hover:border-brand-500">
-                <span class="text-lg font-semibold text-ink group-hover:text-brand-700">{c.name}</span>
-                {c.description && <span class="mt-1 text-sm text-muted">{c.description}</span>}
-                <span aria-hidden="true" class="mt-4 text-sm font-semibold text-brand-700">→</span>
+            <li class="reveal">
+              <a href={localePath(locale, `/catalog/${c.slug}`)} class="category-card group">
+                <span class="category-art-tile">
+                  <CategoryArt kind={artKind(categories, c.id)} class="h-16 w-16 transition-transform duration-500 group-hover:-translate-y-1 group-hover:rotate-[-4deg] group-hover:scale-110" />
+                </span>
+                <span class="flex min-w-0 flex-1 flex-col">
+                  <span class="text-lg font-semibold text-ink group-hover:text-brand-700">{c.name}</span>
+                  {c.description && <span class="mt-1 text-sm text-muted">{c.description}</span>}
+                </span>
+                <span aria-hidden="true" class="self-center text-lg font-semibold text-brand-700 transition-transform duration-300 group-hover:translate-x-1">→</span>
               </a>
             </li>
           ))}
@@ -94,27 +91,29 @@ const values = [
           </div>
           <ul class="mt-6 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4" role="list">
             {featured.map((p, i) => (
-              <li><ProductCard product={p} quote={quotes.get(p.default_variant_id ?? '')} eager={i < 4} /></li>
+              <li class="reveal"><ProductCard product={p} quote={quotes.get(p.default_variant_id ?? '')} eager={i < 4} /></li>
             ))}
           </ul>
         </section>
       )}
 
       <section class="container-page py-14" aria-labelledby="values-title">
-        <h2 id="values-title" class="sr-only">{t('home.valuesTitle')}</h2>
-        <ul class="grid gap-6 md:grid-cols-3" role="list">
-          {values.map((v) => (
-            <li class="flex gap-4">
-              <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-700">
-                <svg aria-hidden="true" viewBox="0 0 24 24" class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d={v.icon} /></svg>
-              </span>
-              <div>
-                <h3 class="font-semibold text-ink">{v.title}</h3>
-                <p class="mt-1 text-sm text-muted">{v.text}</p>
-              </div>
-            </li>
-          ))}
-        </ul>
+        <div class="values-band reveal">
+          <h2 id="values-title" class="text-2xl font-bold tracking-tight text-white">{t('home.valuesTitle')}</h2>
+          <ul class="mt-8 grid gap-5 md:grid-cols-3" role="list">
+            {values.map((v) => (
+              <li class="value-tile">
+                <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/15 text-white ring-1 ring-white/25">
+                  <svg aria-hidden="true" viewBox="0 0 24 24" class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d={v.icon} /></svg>
+                </span>
+                <div>
+                  <h3 class="font-semibold text-white">{v.title}</h3>
+                  <p class="mt-1 text-sm text-brand-50">{v.text}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
       </section>
     </>
   )}
