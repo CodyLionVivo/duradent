@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { safeReturnPath } from './urls';
+import { proxiedClientIP, safeReturnPath } from './urls';
 
 describe('safeReturnPath', () => {
   it('keeps same-site paths', () => {
@@ -12,4 +12,13 @@ describe('safeReturnPath', () => {
       expect(safeReturnPath(value)).toBe('/');
     },
   );
+});
+
+describe('proxiedClientIP', () => {
+  it('takes the address the load balancer appended', () => {
+    expect(proxiedClientIP('1.2.3.4, 190.40.1.9')).toBe('190.40.1.9');
+    expect(proxiedClientIP('190.40.1.9')).toBe('190.40.1.9');
+    expect(proxiedClientIP(null)).toBeUndefined();
+    expect(proxiedClientIP('')).toBeUndefined();
+  });
 });

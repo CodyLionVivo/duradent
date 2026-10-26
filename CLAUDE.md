@@ -12,7 +12,8 @@ apps/web/          Astro 7 SSR (adapter node standalone): tienda + /admin
 services/api/      Go: un binario `duradent` con modos api | worker | outbox-relay | migrate | seed
                    (internal/wiring arma la app; internal/apitest la prueba end-to-end)
 infra/local/       Init de LocalStack (SNS, SQS+DLQ, S3) para docker compose
-infra/terraform/   AWS (Fase 6)
+infra/terraform/   AWS: shared (ECR, roles de GitHub), envs/{staging,prod}, modules/*
+infra/scripts/     deploy.sh (migración + rollout de una imagen)
 Taskfile.yml       Todos los comandos
 ```
 
@@ -36,6 +37,9 @@ Requisitos: Go 1.27, Node 24, Docker Desktop, `task` y `golangci-lint`
 | Recargar demo desde cero | `task reset && task up` |
 | Tests web (Vitest) | `task web:test` |
 | Regenerar tipos TS del API | `task web:gen-api` (después de editar `services/api/openapi.yaml`) |
+| Validar Terraform (sin AWS) | `task tf:validate` · formatear: `task tf:fmt` |
+| Plan de un entorno | `task tf:plan -- staging` (necesita credenciales y `backend.hcl`) |
+| Desplegar una imagen | `task deploy -- staging <sha>` (normalmente lo hace GitHub Actions) |
 
 URLs locales: web http://localhost:4321 · API http://localhost:8080 (`/healthz`, `/readyz`, `/metrics`) ·
 Mailpit http://localhost:8025 · LocalStack http://localhost:4566 · MySQL `localhost:3307` (duradent/duradent; cambia con `MYSQL_HOST_PORT`).
@@ -239,6 +243,28 @@ test con LocalStack real (outbox → SNS con filtro → SQS → consumidor, rein
     de enlaces del correo no lo consumen). Verificar un correo listado en `ADMIN_EMAILS` da admin.
 37. **`CustomerRegistered` en la misma transacción que la cuenta** (`Accounts.Create` se une a la unidad
     de trabajo).
+38. **Terraform para la infraestructura, `deploy.sh` para las versiones.** Los servicios ECS ignoran
+    cambios de `task_definition`; el script copia la última revisión de cada familia con la imagen
+    nueva, corre `migrate` como tarea única y solo si sale bien actualiza api → worker → relay → web.
+    El circuit breaker de ECS revierte un rollout que no arranca. Imágenes con tag inmutable (SHA).
+39. **Solo el webhook de Culqi entra por el ALB al API** (`POST /v1/webhooks/*`); todo lo demás va a la
+    web, que llama al API dentro de la VPC por ECS Service Connect (`http://api:8080`). El navegador
+    nunca habla con el API.
+40. **IP del visitante detrás del ALB**: la web toma la **última** entrada de `X-Forwarded-For` (la que
+    añade el ALB) con `TRUST_PROXY=true` y se la pasa al API, que confía en ella
+    (`TRUST_PROXY_HEADERS`) porque solo la web y el webhook llegan a él.
+41. **TLS a RDS verificado**: `require_secure_transport=1`, la imagen incluye el bundle de CA de RDS y el
+    DSN usa `tls=rds` (`MYSQL_CA_FILE`). La contraseña la genera Terraform y el DSN completo vive en
+    Secrets Manager (`duradent-<env>/mysql-dsn`).
+42. **Un secreto JSON por entorno para terceros** (`duradent-<env>/app`): Terraform crea el contenedor y
+    operaciones carga los valores; ECS los inyecta por clave. Nada sensible en tfvars ni en el estado.
+43. **GitHub Actions entra a AWS por OIDC**: `duradent-github-deploy` (solo `main` y los entornos
+    `staging`/`prod`) y `duradent-github-plan` (solo lectura, PRs). Sin llaves de AWS guardadas.
+44. **Staging barato**: un NAT gateway, RDS single-AZ `db.t4g.micro`, una tarea por servicio, sin
+    protección de borrado. Prod: NAT por AZ, RDS Multi-AZ con protección y snapshot final, mínimo dos
+    tareas de web y API con autoescalado por CPU (60 %).
+45. **Imágenes por CloudFront con OAC** (bucket privado). La web sube con PUT prefirmado; el CORS del
+    bucket solo acepta el origen de la tienda.
 
 ## Estado por fases
 
@@ -247,4 +273,76 @@ test con LocalStack real (outbox → SNS con filtro → SQS → consumidor, rein
 - [x] Fase 3 — identidad (Google, Microsoft, email)
 - [x] Fase 4 — carrito, envíos, pedidos, pagos Culqi + transferencia
 - [x] Fase 5 — outbox relay, worker, emails, facturación SUNAT, reembolsos, verificación de correo
-- [ ] Fase 6 — Terraform, ALB, ECS, despliegue
+- [x] Fase 6 — Terraform, ALB, ECS, despliegue (sin aplicar: falta la cuenta AWS de Duradent)
+
+## Runbook (AWS)
+
+Región `us-east-1` (Duradent no necesita datos en Perú y ahí están todos los servicios). Dominio
+supuesto `duradent.pe` / `staging.duradent.pe`: cámbialo en `envs/*/main.tf` si es otro.
+
+### Primera vez (una sola vez por cuenta)
+
+1. Bucket de estado y tabla de locks (fuera de Terraform):
+   `aws s3api create-bucket --bucket duradent-terraform-state-<cuenta>` (con versionado y cifrado) y
+   `aws dynamodb create-table --table-name duradent-terraform-locks --attribute-definitions AttributeName=LockID,AttributeType=S --key-schema AttributeName=LockID,KeyType=HASH --billing-mode PAY_PER_REQUEST`.
+   Copia `infra/terraform/backend.hcl.example` a `backend.hcl`.
+2. `cd infra/terraform/shared && terraform init -backend-config=../backend.hcl -backend-config="key=shared.tfstate"` y
+   `terraform apply -var github_repository=<owner/repo> -var state_bucket=… -var lock_table=…`: crea ECR y
+   los roles de GitHub. En GitHub: variables `AWS_REGION`, `AWS_DEPLOY_ROLE_ARN`, `AWS_PLAN_ROLE_ARN`,
+   `TF_STATE_BUCKET`, `TF_LOCK_TABLE`; entornos `staging` y `prod` (este con revisor obligatorio).
+3. Certificados ACM (validación DNS) para `staging.duradent.pe` y `duradent.pe` en us-east-1.
+4. Sube una imagen: un push a `main` corre el job *build* (el deploy fallará hasta el paso 6, es normal).
+5. Por entorno, **prod primero** (crea la identidad SES del dominio): copia `terraform.tfvars.example` a
+   `terraform.tfvars` y rellénalo (`image_tag` = el SHA subido);
+   `terraform init -backend-config=../../backend.hcl -backend-config="key=<env>.tfstate"`; `terraform apply`;
+   guarda la copia aplicada con `aws s3 cp terraform.tfvars s3://<bucket>/tfvars/<env>.tfvars` (la usa
+   el plan de los PRs).
+6. Carga los secretos de terceros (todas las claves, vacías si no aplican):
+   `aws secretsmanager put-secret-value --secret-id duradent-<env>/app --secret-string file://app.json`
+   con `CULQI_SECRET_KEY`, `CULQI_WEBHOOK_SECRET` (24 caracteres aleatorios o más), `NUBEFACT_URL`,
+   `NUBEFACT_TOKEN`, `GOOGLE_CLIENT_SECRET`, `MICROSOFT_CLIENT_SECRET`, `ADMIN_TOKEN` (32 o más, o vacío).
+   Borra `app.json` después.
+7. DNS: CNAME/alias del dominio al `alb_dns_name`; registros de `ses_dns_records` (DKIM, MAIL FROM,
+   DMARC). Pide a AWS sacar SES del sandbox. Confirma el correo de suscripción a las alarmas (SNS).
+8. Webhook en CulqiPanel: `culqi_webhook_url_prefix` + `CULQI_WEBHOOK_SECRET`. Redirect URIs de
+   Google/Microsoft: `https://<dominio>/auth/<google|microsoft>/callback`.
+9. Despliega con `task deploy -- <env> <sha>` o re-ejecutando el workflow. Prueba: pedido con tarjeta de
+   prueba de Culqi en staging, correo recibido, comprobante en la demo de Nubefact.
+
+### Despliegue normal
+
+Merge a `main` → imágenes `duradent/{api,web}:<sha>` → staging automático (migración + rollout).
+Prod: Actions → *Deploy* → *Run workflow* con `environment=prod` y el mismo SHA → aprobación del
+revisor. Cambios de infraestructura: PR (el plan sale en el job *Terraform plan*) y `terraform apply`
+local tras el merge; actualiza la copia de tfvars en S3 si cambió.
+
+### Rollback
+
+`task deploy -- prod <sha-anterior>` (o el workflow con ese SHA). Las migraciones no se revierten:
+escríbelas compatibles hacia atrás (añadir columnas; renombrar o borrar en dos versiones). Si un
+rollout no arranca, el circuit breaker de ECS vuelve solo a la revisión anterior.
+
+### Rotar secretos
+
+- Terceros (Culqi, Nubefact, OIDC, `ADMIN_TOKEN`): `put-secret-value` con el JSON nuevo y
+  `aws ecs update-service --cluster duradent-<env> --service <servicio> --force-new-deployment` para api,
+  worker y outbox-relay (los contenedores leen los secretos al arrancar). Si cambia
+  `CULQI_WEBHOOK_SECRET`, actualiza también la URL en CulqiPanel.
+- Base de datos: `terraform apply -replace=module.stack.module.db.random_password.db` (cambia la
+  contraseña en RDS y el secreto del DSN) y fuerza el redeploy de los cuatro servicios Go.
+
+### Mensajes en la DLQ
+
+La alarma `duradent-<env>-<consumidor>-dlq-not-empty` avisa por correo. Busca el error en
+`/ecs/duradent-<env>-worker` (mensaje `handle message (will retry)`), corrige la causa y devuelve los
+mensajes a la cola: consola SQS → la DLQ → *Start DLQ redrive* (o
+`aws sqs start-message-move-task --source-arn <arn-de-la-dlq>`). Los consumidores son idempotentes:
+reintentar no duplica correos ni comprobantes. Comprobantes rechazados: admin → pedido →
+*Comprobantes electrónicos* → *Reintentar*.
+
+### Otros
+
+- Shell en un contenedor: `aws ecs execute-command --cluster duradent-<env> --task <id> --container app --interactive --command sh`
+  (solo la web tiene shell; las imágenes Go son distroless).
+- Logs: CloudWatch `/ecs/duradent-<env>-<servicio>`; los errores (`level=ERROR`) tienen alarma propia.
+- Tipo de cambio USD: `usd_exchange_rate` en tfvars → `terraform apply` → redeploy.

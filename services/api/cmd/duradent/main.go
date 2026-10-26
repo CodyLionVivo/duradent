@@ -84,6 +84,11 @@ func run(ctx context.Context, mode string, cfg config.Config, log *slog.Logger) 
 		return fmt.Errorf("unknown command %q\n%s", mode, usage)
 	}
 
+	if cfg.MySQLCAFile != "" {
+		if err := mysql.RegisterCA(cfg.MySQLCAFile); err != nil {
+			return err
+		}
+	}
 	db, err := mysql.Open(ctx, cfg.MySQLDSN)
 	if err != nil {
 		return err

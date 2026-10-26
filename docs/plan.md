@@ -337,3 +337,10 @@ Cada fase termina con: compila, `golangci-lint` + `astro check` limpios, tests v
   - PDF/XML de comprobantes: se enlazan los de Nubefact (no se copian a S3 todavía).
   - El correo de stock bajo muestra el id de la variante (el evento `StockLow` aún no lleva SKU).
   - Tipo de cambio USD por configuración (`USD_EXCHANGE_RATE`), no por API de la SBS.
+- **Fase 6**:
+  - Región `us-east-1`; dominio supuesto `duradent.pe` (configurable).
+  - Las versiones no se despliegan con `terraform apply` sino con `infra/scripts/deploy.sh`
+    (Terraform crea la infraestructura y la primera revisión de cada tarea).
+  - El ALB solo enruta `/v1/webhooks/*` al API; la web llama al API por ECS Service Connect.
+  - El plan de los PRs usa un rol de solo lectura y los tfvars guardados junto al estado en S3.
+  - Sin aplicar todavía: falta la cuenta AWS de Duradent (validado con `terraform validate`).

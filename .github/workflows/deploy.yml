@@ -1,0 +1,177 @@
+name: Deploy
+
+# main → images to ECR → staging (automatic).
+# prod → manual "Run workflow" with the tag (git SHA) already running in staging;
+#        the "prod" GitHub environment requires a reviewer's approval.
+# Pull requests that touch infra/terraform get a `terraform plan` of both environments.
+#
+# Repository settings (Settings → Secrets and variables → Actions → Variables):
+#   AWS_REGION, AWS_DEPLOY_ROLE_ARN, AWS_PLAN_ROLE_ARN, TF_STATE_BUCKET, TF_LOCK_TABLE
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths: ["infra/terraform/**", ".github/workflows/deploy.yml"]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment
+        type: choice
+        options: [prod, staging]
+        default: prod
+      tag:
+        description: Image tag (full git SHA) to deploy
+        required: true
+
+permissions:
+  contents: read
+  id-token: write # OIDC → AWS, no stored keys
+
+concurrency:
+  group: deploy-${{ github.event.inputs.environment || 'staging' }}
+  cancel-in-progress: false # never cut a rollout in half
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+  TF_VERSION: 1.6.2
+
+jobs:
+  terraform-check:
+    name: Terraform fmt + validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+      - run: terraform fmt -check -recursive infra/terraform
+      - name: Validate
+        run: |
+          for d in infra/terraform/shared infra/terraform/envs/staging infra/terraform/envs/prod; do
+            terraform -chdir="$d" init -backend=false -input=false
+            terraform -chdir="$d" validate
+          done
+
+  plan:
+    name: Terraform plan (${{ matrix.env }})
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    needs: terraform-check
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        env: [staging, prod]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_PLAN_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Plan
+        working-directory: infra/terraform/envs/${{ matrix.env }}
+        run: |
+          terraform init -input=false \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="dynamodb_table=${{ vars.TF_LOCK_TABLE }}" \
+            -backend-config="region=${{ env.AWS_REGION }}" \
+            -backend-config="key=${{ matrix.env }}.tfstate"
+          # terraform.tfvars is not committed; operations keeps the applied copy
+          # next to the state (see the runbook).
+          aws s3 cp "s3://${{ vars.TF_STATE_BUCKET }}/tfvars/${{ matrix.env }}.tfvars" terraform.tfvars
+          terraform plan -input=false -lock-timeout=5m -no-color
+
+  build:
+    name: Build and push images
+    if: github.event_name == 'push'
+    needs: terraform-check
+    runs-on: ubuntu-latest
+    environment: staging
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: meta
+        run: echo "tag=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      - uses: docker/setup-buildx-action@v3
+      - name: API image
+        uses: docker/build-push-action@v6
+        with:
+          context: services/api
+          target: runtime
+          push: true
+          tags: ${{ steps.ecr.outputs.registry }}/duradent/api:${{ steps.meta.outputs.tag }}
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
+      - name: Web image
+        uses: docker/build-push-action@v6
+        with:
+          context: apps/web
+          target: runtime
+          push: true
+          tags: ${{ steps.ecr.outputs.registry }}/duradent/web:${{ steps.meta.outputs.tag }}
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,mode=max,scope=web
+
+  deploy-staging:
+    name: Deploy to staging
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+      url: https://staging.duradent.pe
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false # deploy.sh parses `terraform output -json`
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Read environment outputs
+        run: |
+          terraform -chdir=infra/terraform/envs/staging init -input=false \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="dynamodb_table=${{ vars.TF_LOCK_TABLE }}" \
+            -backend-config="region=${{ env.AWS_REGION }}" \
+            -backend-config="key=staging.tfstate"
+      - run: infra/scripts/deploy.sh staging "${{ needs.build.outputs.tag }}"
+
+  deploy-manual:
+    name: Deploy ${{ github.event.inputs.tag }} to ${{ github.event.inputs.environment }}
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ github.event.inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: The image exists
+        run: |
+          aws ecr describe-images --repository-name duradent/api --image-ids imageTag="${{ github.event.inputs.tag }}" >/dev/null
+          aws ecr describe-images --repository-name duradent/web --image-ids imageTag="${{ github.event.inputs.tag }}" >/dev/null
+      - name: Read environment outputs
+        run: |
+          terraform -chdir=infra/terraform/envs/${{ github.event.inputs.environment }} init -input=false \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="dynamodb_table=${{ vars.TF_LOCK_TABLE }}" \
+            -backend-config="region=${{ env.AWS_REGION }}" \
+            -backend-config="key=${{ github.event.inputs.environment }}.tfstate"
+      - run: infra/scripts/deploy.sh "${{ github.event.inputs.environment }}" "${{ github.event.inputs.tag }}"

@@ -2,6 +2,8 @@ import { defineMiddleware } from 'astro:middleware';
 import { DEFAULT_CURRENCY, DEFAULT_LOCALE, isCurrency, isLocale } from './i18n';
 import { createApi } from './lib/api/client';
 import { CART_COOKIE, SESSION_COOKIE, clearSession } from './lib/session';
+import { proxiedClientIP } from './lib/urls';
+import { TRUST_PROXY } from 'astro:env/server';
 
 export const CURRENCY_COOKIE = 'currency';
 
@@ -19,10 +21,14 @@ export const onRequest = defineMiddleware(async (context, next) => {
   let session = cookies.get(SESSION_COOKIE)?.value;
   const cartKey = cookies.get(CART_COOKIE)?.value;
   let clientIP: string | undefined;
-  try {
-    clientIP = context.clientAddress;
-  } catch {
-    // Not available during prerendering.
+  if (TRUST_PROXY) {
+    clientIP = proxiedClientIP(request.headers.get('x-forwarded-for'));
+  } else {
+    try {
+      clientIP = context.clientAddress;
+    } catch {
+      // Not available during prerendering.
+    }
   }
   const userAgent = request.headers.get('user-agent') ?? undefined;
   locals.clientIP = clientIP;

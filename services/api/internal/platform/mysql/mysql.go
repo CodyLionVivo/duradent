@@ -3,17 +3,39 @@ package mysql
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"database/sql"
 	"errors"
 	"fmt"
 	"io/fs"
+	"os"
 	"time"
 
-	_ "github.com/go-sql-driver/mysql" // driver registration
+	drv "github.com/go-sql-driver/mysql"
 	"github.com/golang-migrate/migrate/v4"
 	migratemysql "github.com/golang-migrate/migrate/v4/database/mysql"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
 )
+
+// TLSConfigName is the DSN value (tls=rds) that selects the CA registered by
+// RegisterCA.
+const TLSConfigName = "rds"
+
+// RegisterCA trusts the PEM bundle at path for MySQL connections whose DSN
+// says tls=rds. RDS certificates are signed by Amazon's own CA, which is not
+// in the system pool; the image ships its bundle.
+func RegisterCA(path string) error {
+	pem, err := os.ReadFile(path) //nolint:gosec // operator-set path (MYSQL_CA_FILE), not user input
+	if err != nil {
+		return fmt.Errorf("mysql CA: %w", err)
+	}
+	pool := x509.NewCertPool()
+	if !pool.AppendCertsFromPEM(pem) {
+		return fmt.Errorf("mysql CA: no certificates in %s", path)
+	}
+	return drv.RegisterTLSConfig(TLSConfigName, &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12})
+}
 
 // Open creates a pool and verifies connectivity, retrying while MySQL starts up.
 func Open(ctx context.Context, dsn string) (*sql.DB, error) {

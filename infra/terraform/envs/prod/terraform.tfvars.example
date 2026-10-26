@@ -1,0 +1,12 @@
+# Copy to terraform.tfvars (not committed). image_tag only matters on the
+# first apply; afterwards infra/scripts/deploy.sh rolls new images.
+image_tag          = "<git sha of a pushed image>"
+certificate_arn    = "arn:aws:acm:us-east-1:<account>:certificate/<id>"
+api_repository_url = "<account>.dkr.ecr.us-east-1.amazonaws.com/duradent/api"
+web_repository_url = "<account>.dkr.ecr.us-east-1.amazonaws.com/duradent/web"
+alarm_email        = "operaciones@duradent.pe"
+admin_emails       = ["gerencia@duradent.pe"]
+culqi_public_key   = "pk_live_..."
+google_client_id   = ""
+microsoft_client_id = ""
+bank_details       = "BCP · Duradent SAC · RUC ... · Cta. cte. soles ... · CCI ..."

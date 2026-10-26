@@ -110,3 +110,26 @@ tasks:
     desc: Regenerate TS types from services/api/openapi.yaml
     dir: "{{.WEB_DIR}}"
     cmds: [npm run gen:api]
+
+  # --- infrastructure (phase 6) ------------------------------------------------------
+
+  tf:fmt:
+    desc: Format Terraform
+    cmds: [terraform fmt -recursive infra/terraform]
+
+  tf:validate:
+    desc: Validate every Terraform root (no AWS credentials needed)
+    cmds:
+      - for: [shared, envs/staging, envs/prod]
+        cmd: terraform -chdir=infra/terraform/{{.ITEM}} init -backend=false -input=false >/dev/null && terraform -chdir=infra/terraform/{{.ITEM}} validate
+
+  tf:plan:
+    desc: "Plan one environment: task tf:plan -- staging"
+    dir: infra/terraform/envs/{{.CLI_ARGS}}
+    cmds:
+      - terraform init -input=false -backend-config=../../backend.hcl -backend-config="key={{.CLI_ARGS}}.tfstate"
+      - terraform plan -input=false
+
+  deploy:
+    desc: "Roll an image tag out: task deploy -- staging <git-sha>"
+    cmds: ["bash infra/scripts/deploy.sh {{.CLI_ARGS}}"]

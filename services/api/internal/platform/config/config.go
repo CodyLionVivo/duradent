@@ -13,9 +13,12 @@ import (
 )
 
 type Config struct {
-	Env             string // local | staging | prod
-	HTTPAddr        string
-	MySQLDSN        string
+	Env      string // local | staging | prod
+	HTTPAddr string
+	MySQLDSN string
+	// MySQLCAFile is a PEM bundle to verify the database certificate (RDS);
+	// the DSN selects it with tls=rds.
+	MySQLCAFile     string
 	LogLevel        string
 	ShutdownTimeout time.Duration
 
@@ -93,6 +96,7 @@ func load(getenv func(string) string) (Config, error) {
 		Env:               valueOr(getenv("APP_ENV"), "local"),
 		HTTPAddr:          valueOr(getenv("HTTP_ADDR"), ":8080"),
 		MySQLDSN:          getenv("MYSQL_DSN"),
+		MySQLCAFile:       getenv("MYSQL_CA_FILE"),
 		LogLevel:          valueOr(getenv("LOG_LEVEL"), "info"),
 		AdminToken:        getenv("ADMIN_TOKEN"),
 		AWSRegion:         valueOr(getenv("AWS_REGION"), "us-east-1"),
