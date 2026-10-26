@@ -37,7 +37,6 @@ variable "microsoft_client_id" {
   default = ""
 }
 variable "bank_details" { type = string }
-variable "company_ruc" { type = string }
 
 # Staging is smaller: one NAT gateway, single-AZ database, one task each.
 module "stack" {
@@ -65,7 +64,7 @@ module "stack" {
   bank_details           = var.bank_details
   company = {
     name    = "Duradent S.A.C."
-    ruc     = var.company_ruc
+    ruc     = "20268534866"
     address = "Av. Emancipación 271, tiendas 108 y 126, Cercado de Lima, Lima"
   }
   log_retention_days = 14

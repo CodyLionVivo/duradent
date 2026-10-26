@@ -284,8 +284,8 @@ test con LocalStack real (outbox → SNS con filtro → SQS → consumidor, rein
     con o sin sesión, registra un reclamo o una queja en `/…/complaints-book`; el aviso (libro abierto y la
     frase "Libro de Reclamaciones") está en el pie de todas las páginas, también en la de inicio. Cada hoja:
     número correlativo por año en hora de Lima (`000001-2026`, tabla `complaint_sequences` como las series
-    de comprobantes), datos del proveedor congelados (`COMPANY_NAME/RUC/ADDRESS`; el RUC es obligatorio
-    fuera de local), `Idempotency-Key` por carga del formulario y 10 envíos por hora por IP. El consumidor
+    de comprobantes), datos del proveedor congelados (`COMPANY_NAME/RUC/ADDRESS`; RUC 20268534866, fijado
+    en `envs/*/main.tf` y obligatorio fuera de local), `Idempotency-Key` por carga del formulario y 10 envíos por hora por IP. El consumidor
     recibe al momento la hoja en pantalla (imprimible) y una copia por correo (`ComplaintFiled`);
     operaciones recibe una alerta. La respuesta se registra una sola vez en `/admin/complaints` y viaja por
     correo con la hoja completa (`ComplaintAnswered`); si pidió carta, el admin además la imprime y la envía.
@@ -319,8 +319,7 @@ supuesto `duradent.pe` / `staging.duradent.pe`: cámbialo en `envs/*/main.tf` si
 3. Certificados ACM (validación DNS) para `staging.duradent.pe` y `duradent.pe` en us-east-1.
 4. Sube una imagen: un push a `main` corre el job *build* (el deploy fallará hasta el paso 6, es normal).
 5. Por entorno, **prod primero** (crea la identidad SES del dominio): copia `terraform.tfvars.example` a
-   `terraform.tfvars` y rellénalo (`image_tag` = el SHA subido; `company_ruc` = RUC de Duradent S.A.C.,
-   sale en cada hoja del Libro de Reclamaciones);
+   `terraform.tfvars` y rellénalo (`image_tag` = el SHA subido);
    `terraform init -backend-config=../../backend.hcl -backend-config="key=<env>.tfstate"`; `terraform apply`;
    guarda la copia aplicada con `aws s3 cp terraform.tfvars s3://<bucket>/tfvars/<env>.tfvars` (la usa
    el plan de los PRs).

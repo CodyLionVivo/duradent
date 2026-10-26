@@ -44,12 +44,11 @@ x-api-env: &api-env
   CULQI_SECRET_KEY: ${CULQI_SECRET_KEY:-}
   CULQI_WEBHOOK_SECRET: ${CULQI_WEBHOOK_SECRET:-local-webhook-secret-change-me}
   BANK_DETAILS: |-
-    Banco de Crédito del Perú (BCP) · Duradent SAC · RUC 20000000000
+    Banco de Crédito del Perú (BCP) · Duradent SAC · RUC 20268534866
     Cuenta corriente soles: 000-0000000-0-00 · CCI: 002-000-000000000000-00
     (datos de ejemplo para desarrollo)
-  # Company printed on the Libro de Reclamaciones sheets (example RUC; the
-  # real one is required outside local).
-  COMPANY_RUC: ${COMPANY_RUC:-20000000000}
+  # Company printed on the Libro de Reclamaciones sheets.
+  COMPANY_RUC: 20268534866
 
 services:
   mysql:

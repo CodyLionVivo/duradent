@@ -10,6 +10,7 @@ These terms govern the use of the **Duradent S.A.C.** ("Duradent") online store 
 
 Duradent S.A.C. is a Peruvian company that imports and sells orthodontic products.
 
+- **RUC (tax ID):** 20268534866.
 - **Store:** Av. Emancipación 271, stores 108 and 126, Cercado de Lima, Peru.
 - **Phone:** [+51 933 741 379](tel:+51933741379).
 

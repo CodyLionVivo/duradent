@@ -10,6 +10,7 @@ Estes termos regulam o uso da loja on-line da **Duradent S.A.C.** ("Duradent") e
 
 A Duradent S.A.C. é uma empresa peruana que importa e vende produtos ortodônticos.
 
+- **RUC (cadastro fiscal):** 20268534866.
 - **Loja:** Av. Emancipación 271, lojas 108 e 126, Cercado de Lima, Peru.
 - **Telefone:** [+51 933 741 379](tel:+51933741379).
 

@@ -9,6 +9,4 @@ admin_emails       = ["gerencia@duradent.pe"]
 culqi_public_key   = "pk_live_..."
 google_client_id   = ""
 microsoft_client_id = ""
-bank_details       = "BCP · Duradent SAC · RUC ... · Cta. cte. soles ... · CCI ..."
-# RUC printed on the Libro de Reclamaciones sheets (11 digits).
-company_ruc        = "20XXXXXXXXX"
+bank_details       = "BCP · Duradent SAC · RUC 20268534866 · Cta. cte. soles ... · CCI ..."

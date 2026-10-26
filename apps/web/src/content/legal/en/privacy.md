@@ -8,7 +8,7 @@ At Duradent we take care of your personal data. This policy explains what data w
 
 ## 1. Data controller
 
-**Duradent S.A.C.**, Av. Emancipación 271, stores 108 and 126, Cercado de Lima, Peru. Phone: [+51 933 741 379](tel:+51933741379).
+**Duradent S.A.C.** (RUC 20268534866), Av. Emancipación 271, stores 108 and 126, Cercado de Lima, Peru. Phone: [+51 933 741 379](tel:+51933741379).
 
 ## 2. What data we process
 

@@ -2,7 +2,7 @@
 import Logo from './Logo.astro';
 import { localePath, useTranslations } from '../i18n';
 import { getCategories, topLevel, type Category } from '../lib/catalog';
-import { LEGAL_PAGES, PHONE } from '../lib/legal';
+import { LEGAL_PAGES, PHONE, RUC } from '../lib/legal';
 
 const { locale } = Astro.locals;
 const t = useTranslations(locale);
@@ -101,6 +101,6 @@ try {
     </div>
   </div>
   <div class="border-t border-line">
-    <p class="container-page py-5 text-xs text-muted">© {year} {t('footer.company')}. {t('footer.rights')}</p>
+    <p class="container-page py-5 text-xs text-muted">© {year} {t('footer.company')} · RUC {RUC}. {t('footer.rights')}</p>
   </div>
 </footer>

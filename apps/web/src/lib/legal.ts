@@ -8,4 +8,7 @@ export function isLegalPage(value: string | undefined): value is LegalPage {
 }
 
 /** Store phone, shown in the footer and the legal pages. */
+/** Tax ID of Duradent S.A.C., shown in the footer and the legal pages. */
+export const RUC = '20268534866';
+
 export const PHONE = { display: '+51 933 741 379', href: 'tel:+51933741379' };

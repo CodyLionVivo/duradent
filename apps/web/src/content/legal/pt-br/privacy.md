@@ -8,7 +8,7 @@ Na Duradent cuidamos dos seus dados pessoais. Esta política explica quais dados
 
 ## 1. Responsável pelo tratamento
 
-**Duradent S.A.C.**, Av. Emancipación 271, lojas 108 e 126, Cercado de Lima, Peru. Telefone: [+51 933 741 379](tel:+51933741379).
+**Duradent S.A.C.** (RUC 20268534866), Av. Emancipación 271, lojas 108 e 126, Cercado de Lima, Peru. Telefone: [+51 933 741 379](tel:+51933741379).
 
 ## 2. Quais dados tratamos
 

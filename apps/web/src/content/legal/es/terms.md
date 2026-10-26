@@ -10,6 +10,7 @@ Estos términos regulan el uso de la tienda en línea de **Duradent S.A.C.** (en
 
 Duradent S.A.C. es una empresa peruana dedicada a la importación y venta de productos de ortodoncia.
 
+- **RUC:** 20268534866.
 - **Tienda:** Av. Emancipación 271, tiendas 108 y 126, Cercado de Lima, Perú.
 - **Teléfono:** [+51 933 741 379](tel:+51933741379).
 
