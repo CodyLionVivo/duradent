@@ -55,7 +55,8 @@ jobs:
 
   plan:
     name: Terraform plan (${{ matrix.env }})
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    # Skipped until the AWS account exists (see the runbook in CLAUDE.md).
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && vars.AWS_PLAN_ROLE_ARN != ''
     needs: terraform-check
     runs-on: ubuntu-latest
     strategy:
@@ -85,7 +86,7 @@ jobs:
 
   build:
     name: Build and push images
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' && vars.AWS_DEPLOY_ROLE_ARN != ''
     needs: terraform-check
     runs-on: ubuntu-latest
     environment: staging
