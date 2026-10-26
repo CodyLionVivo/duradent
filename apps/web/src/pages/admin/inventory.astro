@@ -1,0 +1,120 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import Pagination from '../../components/Pagination.astro';
+import { unwrap, type Schemas } from '../../lib/api/client';
+import { errorMessage, int, str } from '../../lib/admin';
+import { useTranslations } from '../../i18n';
+
+const adminApi = Astro.locals.api;
+const t = useTranslations('es');
+const PAGE_SIZE = 10;
+const q = Astro.url.searchParams.get('q') ?? '';
+const page = Math.max(1, Number.parseInt(Astro.url.searchParams.get('page') ?? '1', 10) || 1);
+let error = '';
+let notice = '';
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const variant = str(form, 'variant_id');
+  try {
+    if (str(form, 'intent') === 'reorder') {
+      unwrap(await adminApi.PUT('/v1/admin/inventory/{variant}/reorder-point', { params: { path: { variant } }, body: { value: int(form, 'value') } }));
+    } else {
+      unwrap(await adminApi.POST('/v1/admin/inventory/{variant}/adjust', {
+        params: { path: { variant } },
+        body: { delta: int(form, 'delta'), reason: str(form, 'reason') as 'purchase', note: str(form, 'note') },
+      }));
+    }
+    notice = t('admin.common.saved');
+  } catch (err) {
+    error = errorMessage(err);
+    Astro.response.status = 422;
+  }
+}
+
+let products: Schemas['AdminProduct'][] = [];
+let total = 0;
+const stock = new Map<string, Schemas['StockItem']>();
+try {
+  const list = unwrap(await adminApi.GET('/v1/admin/catalog/products', { params: { query: { q: q || undefined, page, page_size: PAGE_SIZE } } }));
+  total = list.total;
+  products = await Promise.all(list.items.map((p) => adminApi.GET('/v1/admin/catalog/products/{id}', { params: { path: { id: p.id } } }).then(unwrap)));
+  const ids = products.flatMap((p) => p.variants.filter((v) => !v.archived).map((v) => v.id));
+  if (ids.length) {
+    for (const s of unwrap(await adminApi.GET('/v1/admin/inventory', { params: { query: { variant_id: ids } } }))) stock.set(s.variant_id, s);
+  }
+} catch (err) {
+  error ||= errorMessage(err);
+}
+---
+
+<AdminLayout title={t('admin.inventory.title')} error={error}>
+  {notice && !error && <p role="status" class="mb-4 rounded-lg border border-brand-200 bg-brand-50 px-4 py-3 text-sm text-brand-900">{notice}</p>}
+  <p class="text-sm text-muted">{t('admin.inventory.hint')}</p>
+  <form method="get" class="mt-4 flex items-end gap-2">
+    <div>
+      <label for="q" class="label">{t('admin.common.search')}</label>
+      <input id="q" name="q" type="search" value={q} class="input w-72" />
+    </div>
+    <button class="btn-secondary">{t('admin.common.search')}</button>
+  </form>
+
+  <div class="mt-6 space-y-6">
+    {products.map((p) => (
+      <section class="card overflow-x-auto">
+        <h2 class="border-b border-line px-4 py-3 font-semibold"><a href={`/admin/products/${p.id}`} class="hover:text-brand-700">{p.texts.es?.name}</a></h2>
+        <table class="w-full min-w-[56rem] text-sm">
+          <thead class="bg-surface text-left text-xs uppercase tracking-wide text-muted">
+            <tr>
+              <th class="px-4 py-2">{t('admin.inventory.variant')}</th>
+              <th class="px-3 py-2 text-right">{t('admin.inventory.onHand')}</th>
+              <th class="px-3 py-2 text-right">{t('admin.inventory.reserved')}</th>
+              <th class="px-3 py-2 text-right">{t('admin.inventory.available')}</th>
+              <th class="px-3 py-2">{t('admin.inventory.adjust')}</th>
+              <th class="px-3 py-2">{t('admin.inventory.reorder')}</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-line">
+            {p.variants.filter((v) => !v.archived).map((v) => {
+              const s = stock.get(v.id);
+              return (
+                <tr class:list={[s?.low && 'bg-amber-50/60']}>
+                  <td class="px-4 py-2 font-mono text-xs">{v.sku}{s?.low && <span class="ml-2 rounded bg-amber-100 px-1.5 py-0.5 font-sans text-[10px] font-semibold text-amber-900">{t('admin.inventory.low')}</span>}</td>
+                  <td class="px-3 py-2 text-right tabular-nums">{s?.on_hand ?? 0}</td>
+                  <td class="px-3 py-2 text-right tabular-nums">{s?.reserved ?? 0}</td>
+                  <td class="px-3 py-2 text-right font-semibold tabular-nums">{s?.available ?? 0}</td>
+                  <td class="px-3 py-2">
+                    <form method="post" class="flex items-center gap-1">
+                      <input type="hidden" name="variant_id" value={v.id} />
+                      <label class="sr-only" for={`d-${v.id}`}>{t('admin.inventory.delta')} {v.sku}</label>
+                      <input id={`d-${v.id}`} name="delta" type="number" required class="input w-20" placeholder="+10" />
+                      <label class="sr-only" for={`r-${v.id}`}>{t('admin.inventory.reason')}</label>
+                      <select id={`r-${v.id}`} name="reason" class="input w-36">
+                        <option value="purchase">{t('admin.inventory.purchase')}</option>
+                        <option value="adjustment">{t('admin.inventory.adjustment')}</option>
+                        <option value="return">{t('admin.inventory.return')}</option>
+                      </select>
+                      <label class="sr-only" for={`n-${v.id}`}>{t('admin.inventory.note')}</label>
+                      <input id={`n-${v.id}`} name="note" maxlength="200" class="input w-32" placeholder={t('admin.inventory.note')} />
+                      <button class="btn-secondary px-2 py-1.5 text-xs">{t('admin.inventory.save')}</button>
+                    </form>
+                  </td>
+                  <td class="px-3 py-2">
+                    <form method="post" class="flex items-center gap-1">
+                      <input type="hidden" name="intent" value="reorder" />
+                      <input type="hidden" name="variant_id" value={v.id} />
+                      <label class="sr-only" for={`ro-${v.id}`}>{t('admin.inventory.reorder')} {v.sku}</label>
+                      <input id={`ro-${v.id}`} name="value" type="number" min="0" value={s?.reorder_point ?? 0} class="input w-16" />
+                      <button class="btn-secondary px-2 py-1.5 text-xs">{t('admin.inventory.save')}</button>
+                    </form>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </section>
+    ))}
+  </div>
+  <Pagination page={page} pageSize={PAGE_SIZE} total={total} />
+</AdminLayout>

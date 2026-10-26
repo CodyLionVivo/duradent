@@ -1,0 +1,224 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import OrderStatus from '../../../components/OrderStatus.astro';
+import CulqiPay from '../../../components/islands/CulqiPay';
+import { formatDate, formatMoney, isLocale, localePath, useTranslations, type Currency } from '../../../i18n';
+import { ApiError, unwrap, type Schemas } from '../../../lib/api/client';
+import { apiErrorText, departmentName } from '../../../lib/account';
+
+if (!isLocale(Astro.params.locale)) return new Response(null, { status: 404 });
+
+const { locale, api, user } = Astro.locals;
+const t = useTranslations(locale);
+const number = Astro.params.number ?? '';
+const here = localePath(locale, `/orders/${number}`);
+if (!user) return Astro.redirect(`${localePath(locale, '/account/login')}?next=${encodeURIComponent(here)}`, 302);
+
+let error = '';
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  try {
+    if (form.get('intent') === 'cancel') {
+      unwrap(await api.POST('/v1/orders/{number}/cancel', { params: { path: { number } } }));
+      return Astro.redirect(here, 303);
+    }
+    // The hidden input (Culqi island) and a simulation button may both send "token".
+    const token = form.getAll('token').map(String).find((v) => v !== '') ?? '';
+    unwrap(await api.POST('/v1/orders/{number}/pay', { params: { path: { number } }, body: { token } }));
+    return Astro.redirect(`${here}?paid=1`, 303);
+  } catch (err) {
+    error = apiErrorText(t, err);
+    // Culqi's own decline message (in Spanish) is meant for the cardholder.
+    if (err instanceof ApiError && err.problem?.code === 'orders.payment_declined' && err.problem.detail && locale === 'es') {
+      error = `${error} ${err.problem.detail}`;
+    }
+    Astro.response.status = err instanceof ApiError ? err.status : 500;
+  }
+}
+
+let order: Schemas['Order'] | null = null;
+try {
+  order = unwrap(await api.GET('/v1/orders/{number}', { params: { path: { number } } }));
+} catch (err) {
+  if (err instanceof ApiError && err.status === 404) return new Response(null, { status: 404 });
+  error ||= apiErrorText(t, err);
+}
+let config: { gateway: string; culqi_public_key: string; bank_details: string; yape_max_pen: string } | null = null;
+if (order?.status === 'pending_payment') {
+  config = (await api.GET('/v1/payments/config')).data ?? null;
+}
+// Electronic documents appear once the worker has issued them.
+const invoiced = !!order && (order.paid_at !== null || order.refunded_at !== null);
+const invoices = invoiced
+  ? ((await api.GET('/v1/orders/{number}/invoices', { params: { path: { number } } })).data?.items ?? [])
+  : [];
+const cur = (order?.currency ?? 'PEN') as Currency;
+const money = (v: string) => formatMoney(v, cur, locale);
+const date = (v: string) => formatDate(v, locale);
+const payable = order?.status === 'pending_payment' && order.payment_method === 'culqi' && !order.payment_in_progress;
+const yapeAllowed = !!order && order.currency === 'PEN' && config !== null && Number(order.total) <= Number(config.yape_max_pen);
+const ship = order?.shipping;
+---
+
+<Layout title={order ? t('orders.number', { number: order.number }) : t('orders.title')}>
+  <div class="container-page py-10">
+    <a href={localePath(locale, '/orders')} class="text-sm text-muted hover:text-ink">← {t('orders.title')}</a>
+    {error && <p role="alert" class="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</p>}
+    {Astro.url.searchParams.get('paid') === '1' && order?.status !== 'pending_payment' && (
+      <p role="status" class="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-900">{t('orders.paid')}</p>
+    )}
+
+    {order && (
+      <>
+        <div class="mt-4 flex flex-wrap items-center gap-3">
+          <h1 class="text-3xl font-bold tracking-tight">{t('orders.number', { number: order.number })}</h1>
+          <OrderStatus status={order.status} />
+        </div>
+        <p class="mt-1 text-sm text-muted">{t('orders.placedOn', { date: date(order.created_at) })}</p>
+
+        <div class="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1fr)_24rem]">
+          <div class="space-y-6">
+            {order.status === 'pending_payment' && order.payment_method === 'culqi' && (
+              <section class="card border-brand-200 p-6" aria-labelledby="pay-title">
+                <h2 id="pay-title" class="text-lg font-semibold">{t('orders.payTitle')}</h2>
+                <p class="mt-1 text-sm text-muted">{t('orders.payHint')}</p>
+                <p class="mt-1 text-sm text-muted">{t('orders.payDeadline', { date: date(order.payment_deadline) })}</p>
+                {order.payment_in_progress && <p class="mt-3 text-sm font-medium text-amber-800">{t('orders.paymentInProgress')}</p>}
+                <form method="post" id="pay-form" class="mt-4">
+                  <input type="hidden" name="token" value="" />
+                </form>
+                {payable && config?.gateway === 'culqi' && config.culqi_public_key && (
+                  <CulqiPay
+                    client:visible
+                    publicKey={config.culqi_public_key}
+                    amountCents={Math.round(Number(order.total) * 100)}
+                    currency={order.currency}
+                    email={order.email}
+                    title={`Duradent · ${order.number}`}
+                    formId="pay-form"
+                    allowYape={yapeAllowed}
+                    lang={locale === 'en' ? 'en' : 'es'}
+                    labels={{ payNow: `${t('orders.payNow')} · ${money(order.total)}`, paying: t('orders.paying'), failed: t('codes.orders.payment_declined') }}
+                  />
+                )}
+                {payable && config?.gateway === 'fake' && (
+                  <div class="rounded-lg border border-dashed border-amber-300 bg-amber-50 p-4">
+                    <p class="text-sm font-semibold text-amber-900">{t('orders.simulateTitle')}</p>
+                    <p class="text-xs text-amber-800">{t('orders.simulateHint')}</p>
+                    <div class="mt-3 flex flex-wrap gap-2">
+                      {[['tkn_test_ok', t('orders.simulateOk')], ['tkn_test_declined', t('orders.simulateDeclined')], ['ype_test_ok', t('orders.simulateYape')]].map(([token, label]) => (
+                        <button form="pay-form" name="token" value={token} class="btn-secondary">{label}</button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {payable && config?.gateway === 'culqi' && !config.culqi_public_key && <p class="text-sm text-red-700">{t('orders.culqiMissing')}</p>}
+              </section>
+            )}
+
+            {order.status === 'pending_payment' && order.payment_method === 'bank_transfer' && (
+              <section class="card border-brand-200 p-6" aria-labelledby="transfer-title">
+                <h2 id="transfer-title" class="text-lg font-semibold">{t('orders.transferTitle')}</h2>
+                <p class="mt-1 text-sm text-muted">{t('orders.transferHint')}</p>
+                {config?.bank_details && <pre class="mt-3 whitespace-pre-wrap rounded-lg bg-surface p-4 font-sans text-sm">{config.bank_details}</pre>}
+                <p class="mt-3 text-sm"><strong>{t('checkout.total')}:</strong> {money(order.total)} · <strong>{order.number}</strong></p>
+                <p class="mt-1 text-sm text-muted">{t('orders.transferDeadline', { date: date(order.payment_deadline) })}</p>
+              </section>
+            )}
+
+            {order.refunded_at && (
+              <p role="status" class="card border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+                {t('orders.refunded', { date: date(order.refunded_at), amount: money(order.total) })}
+              </p>
+            )}
+
+            {order.tracking && <p class="card p-4 text-sm">{t('orders.tracking', { carrier: order.carrier, tracking: order.tracking })}</p>}
+
+            <section class="card overflow-x-auto" aria-labelledby="items-title">
+              <h2 id="items-title" class="border-b border-line px-4 py-3 font-semibold">{t('orders.items')}</h2>
+              <table class="w-full min-w-[32rem] text-sm">
+                <thead class="bg-surface text-left text-xs uppercase tracking-wide text-muted">
+                  <tr>
+                    <th scope="col" class="px-4 py-2">{t('orders.items')}</th>
+                    <th scope="col" class="px-4 py-2 text-right">{t('orders.unitPrice')}</th>
+                    <th scope="col" class="px-4 py-2 text-right">{t('orders.qty')}</th>
+                    <th scope="col" class="px-4 py-2 text-right">{t('orders.lineTotal')}</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-line">
+                  {order.lines.map((l) => (
+                    <tr>
+                      <td class="px-4 py-2"><span class="font-medium">{l.name}</span>{l.options && <span class="block text-xs text-muted">{l.options}</span>}<span class="block font-mono text-xs text-muted">{l.sku}</span></td>
+                      <td class="px-4 py-2 text-right">{money(l.unit_price)}</td>
+                      <td class="px-4 py-2 text-right">{l.qty}</td>
+                      <td class="px-4 py-2 text-right">{money(l.line_total)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
+          </div>
+
+          <aside class="space-y-6">
+            <section class="card p-6" aria-labelledby="totals-title">
+              <h2 id="totals-title" class="sr-only">{t('checkout.summary')}</h2>
+              <dl class="space-y-2 text-sm">
+                <div class="flex justify-between"><dt>{t('orders.subtotal')}</dt><dd>{money(order.subtotal)}</dd></div>
+                <div class="flex justify-between"><dt>{t('orders.shipping')}</dt><dd>{money(order.shipping_amount)}</dd></div>
+                <div class="flex justify-between"><dt>{t('orders.tax')}</dt><dd>{money(order.tax)}</dd></div>
+                <div class="flex justify-between border-t border-line pt-2 text-base font-bold"><dt>{t('orders.total')}</dt><dd>{money(order.total)}</dd></div>
+              </dl>
+            </section>
+            <section class="card p-6 text-sm">
+              <h2 class="font-semibold">{t('orders.deliverTo')}</h2>
+              {ship?.pickup ? (
+                <p class="mt-1 text-muted">{t('checkout.zone_pickup')}</p>
+              ) : (
+                <address class="mt-1 not-italic text-muted">
+                  {ship?.recipient}<br />{ship?.line1}<br />{ship?.district}, {ship?.province}, {departmentName(ship?.department ?? '')}
+                </address>
+              )}
+              <h2 class="mt-4 font-semibold">{t('orders.billing')}</h2>
+              <p class="mt-1 text-muted">
+                {order.billing.business_name}<br />{order.billing.document_type} {order.billing.document_number}<br />
+                {order.billing.invoice_type === '01' ? t('orders.invoice01') : t('orders.invoice03')}
+              </p>
+              {order.notes && <><h2 class="mt-4 font-semibold">{t('orders.notes')}</h2><p class="mt-1 text-muted">{order.notes}</p></>}
+            </section>
+            {invoiced && (
+              <section class="card p-6 text-sm" aria-labelledby="invoices-title">
+                <h2 id="invoices-title" class="font-semibold">{t('orders.invoices')}</h2>
+                {invoices.length === 0 ? (
+                  <p class="mt-1 text-muted">{t('orders.invoicesPending')}</p>
+                ) : (
+                  <ul class="mt-2 space-y-2">
+                    {invoices.map((inv) => (
+                      <li class="flex items-center justify-between gap-3">
+                        <span>{inv.name}</span>
+                        {inv.pdf_url && <a href={inv.pdf_url} target="_blank" rel="noopener noreferrer" class="font-medium text-brand-700 hover:underline">{t('orders.downloadPdf')}</a>}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+            )}
+            {order.status === 'pending_payment' && !order.payment_in_progress && (
+              <form method="post" data-confirm={t('orders.cancelConfirm')}>
+                <input type="hidden" name="intent" value="cancel" />
+                <button class="btn-danger w-full">{t('orders.cancel')}</button>
+              </form>
+            )}
+          </aside>
+        </div>
+      </>
+    )}
+  </div>
+</Layout>
+
+<script>
+  document.querySelectorAll<HTMLFormElement>('form[data-confirm]').forEach((form) => {
+    form.addEventListener('submit', (e) => {
+      if (!confirm(form.dataset.confirm ?? '')) e.preventDefault();
+    });
+  });
+</script>

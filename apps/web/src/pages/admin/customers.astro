@@ -1,0 +1,123 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import Pagination from '../../components/Pagination.astro';
+import { unwrap, type Schemas } from '../../lib/api/client';
+import { errorMessage, savedRedirect, str } from '../../lib/admin';
+import { formatDate, useTranslations } from '../../i18n';
+
+const adminApi = Astro.locals.api;
+const t = useTranslations('es');
+const PAGE_SIZE = 50;
+const q = Astro.url.searchParams.get('q') ?? '';
+const page = Math.max(1, Number.parseInt(Astro.url.searchParams.get('page') ?? '1', 10) || 1);
+let error = '';
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const id = str(form, 'account_id');
+  try {
+    if (str(form, 'intent') === 'role') {
+      unwrap(await adminApi.PUT('/v1/admin/customers/{id}/role', { params: { path: { id } }, body: { role: str(form, 'role') as 'customer' } }));
+    } else {
+      unwrap(await adminApi.PUT('/v1/admin/customers/{id}/price-list', { params: { path: { id } }, body: { code: str(form, 'code') } }));
+    }
+    const back = new URL(Astro.url);
+    back.searchParams.delete('notice');
+    return Astro.redirect(savedRedirect(back) + `#c-${id}`, 303);
+  } catch (err) {
+    error = errorMessage(err);
+    Astro.response.status = 422;
+  }
+}
+
+type Row = { account: Schemas['Account']; customer?: Schemas['Customer'] | null; created_at: string };
+let rows: Row[] = [];
+let total = 0;
+let lists: Schemas['PriceList'][] = [];
+try {
+  const [data, priceLists] = await Promise.all([
+    adminApi.GET('/v1/admin/customers', { params: { query: { q: q || undefined, page, page_size: PAGE_SIZE } } }).then(unwrap),
+    adminApi.GET('/v1/admin/pricing/price-lists').then(unwrap),
+  ]);
+  rows = data.items;
+  total = data.total;
+  lists = priceLists;
+} catch (err) {
+  error ||= errorMessage(err);
+}
+const me = Astro.locals.user;
+---
+
+<AdminLayout title={t('admin.customers.title')} error={error}>
+  <form method="get" class="flex flex-wrap items-end gap-2">
+    <div>
+      <label for="q" class="label">{t('admin.common.search')}</label>
+      <input id="q" name="q" type="search" value={q} placeholder={t('admin.customers.search')} class="input w-80" />
+    </div>
+    <button class="btn-secondary">{t('admin.common.search')}</button>
+  </form>
+  <p class="mt-4 text-sm text-muted">{t('admin.customers.count', { count: total })}</p>
+
+  {rows.length === 0 ? (
+    <p class="card mt-4 p-8 text-center text-muted">{t('admin.customers.empty')}</p>
+  ) : (
+    <div class="card mt-4 overflow-x-auto">
+      <table class="w-full min-w-[56rem] text-sm">
+        <thead class="bg-surface text-left text-xs uppercase tracking-wide text-muted">
+          <tr>
+            <th scope="col" class="px-4 py-3 font-semibold">{t('admin.customers.account')}</th>
+            <th scope="col" class="px-4 py-3 font-semibold">{t('admin.customers.billing')}</th>
+            <th scope="col" class="px-4 py-3 font-semibold">{t('admin.customers.priceList')}</th>
+            <th scope="col" class="px-4 py-3 font-semibold">{t('admin.customers.role')}</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-line">
+          {rows.map(({ account: a, customer: c, created_at }) => (
+            <tr id={`c-${a.id}`} class="align-top">
+              <td class="px-4 py-3">
+                <p class="font-medium">{a.display_name}</p>
+                <p class="text-xs text-muted">{a.email} · {a.email_verified ? t('admin.customers.verified') : t('admin.customers.unverified')}</p>
+                <p class="text-xs text-muted">{t('admin.customers.since')} {formatDate(created_at, 'es')}</p>
+              </td>
+              <td class="px-4 py-3">
+                {c ? (
+                  <>
+                    <p>{c.business_name || '—'}</p>
+                    <p class="font-mono text-xs text-muted">{c.document_type} {c.document_number}{c.cop_number && ` · COP ${c.cop_number}`}</p>
+                  </>
+                ) : (
+                  <span class="text-xs text-muted">{t('admin.customers.noProfile')}</span>
+                )}
+              </td>
+              <td class="px-4 py-3">
+                <form method="post" class="flex items-center gap-2">
+                  <input type="hidden" name="intent" value="price_list" />
+                  <input type="hidden" name="account_id" value={a.id} />
+                  <label class="sr-only" for={`pl-${a.id}`}>{t('admin.customers.priceList')} {a.email}</label>
+                  <select id={`pl-${a.id}`} name="code" class="input w-48" disabled={!c}>
+                    <option value="">{t('admin.customers.publicList')}</option>
+                    {lists.filter((l) => !l.is_default).map((l) => <option value={l.code} selected={c?.price_list_code === l.code}>{l.name}</option>)}
+                  </select>
+                  <button class="btn-secondary px-3 py-1.5 text-xs" disabled={!c}>{t('admin.common.save')}</button>
+                </form>
+              </td>
+              <td class="px-4 py-3">
+                <form method="post" class="flex items-center gap-2">
+                  <input type="hidden" name="intent" value="role" />
+                  <input type="hidden" name="account_id" value={a.id} />
+                  <label class="sr-only" for={`role-${a.id}`}>{t('admin.customers.role')} {a.email}</label>
+                  <select id={`role-${a.id}`} name="role" class="input w-40" disabled={a.id === me?.id}>
+                    <option value="customer" selected={a.role === 'customer'}>{t('admin.customers.customer')}</option>
+                    <option value="admin" selected={a.role === 'admin'}>{t('admin.customers.admin')}</option>
+                  </select>
+                  <button class="btn-secondary px-3 py-1.5 text-xs" disabled={a.id === me?.id}>{t('admin.common.save')}</button>
+                </form>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )}
+  <Pagination page={page} pageSize={PAGE_SIZE} total={total} />
+</AdminLayout>

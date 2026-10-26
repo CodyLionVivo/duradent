@@ -1,0 +1,1962 @@
+openapi: 3.1.0
+info:
+  title: Duradent API
+  version: 0.4.0
+  description: |
+    HTTP API of the Duradent store. This file is the contract between the Go
+    backend and apps/web: the web regenerates its types from it with
+    `task web:gen-api`. Each bounded context adds its paths here as it lands.
+
+    Money is always a decimal string with two places ("85.00") plus a
+    currency (PEN or USD). Errors use RFC 9457 `application/problem+json`
+    with a stable `code` (e.g. `catalog.sku_taken`).
+
+    Signed-in customers send `Authorization: Session <token>` (the web keeps
+    the token in an httpOnly cookie and forwards it). Admin routes
+    (`/v1/admin/*`) accept a session whose account has role `admin`, or
+    `Authorization: Bearer <ADMIN_TOKEN>` for automation.
+servers:
+  - url: http://localhost:8080
+tags:
+  - name: ops
+  - name: catalog
+  - name: pricing
+  - name: admin-catalog
+  - name: admin-pricing
+  - name: auth
+  - name: me
+  - name: admin-customers
+  - name: inventory
+  - name: admin-inventory
+  - name: cart
+  - name: orders
+  - name: admin-orders
+
+paths:
+  /healthz:
+    get:
+      summary: Liveness probe
+      description: Answers as long as the process runs. Never checks dependencies.
+      operationId: liveness
+      tags: [ops]
+      responses:
+        "200":
+          description: Process is up
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Liveness" }
+  /readyz:
+    get:
+      summary: Readiness probe
+      description: Checks every dependency (MySQL, later SQS/SNS) with a 2s timeout.
+      operationId: readiness
+      tags: [ops]
+      responses:
+        "200":
+          description: All dependencies are up
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Readiness" }
+        "503":
+          description: At least one dependency is down
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Readiness" }
+
+  # --- Store ---------------------------------------------------------------
+  /v1/catalog/categories:
+    get:
+      summary: Category tree (flat list with parent ids)
+      operationId: listCategories
+      tags: [catalog]
+      parameters: [{ $ref: "#/components/parameters/Locale" }]
+      responses:
+        "200":
+          description: Categories ordered by sort order
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/Category" } }
+  /v1/catalog/attributes:
+    get:
+      summary: Attributes variants are described by
+      operationId: listAttributes
+      tags: [catalog]
+      parameters: [{ $ref: "#/components/parameters/Locale" }]
+      responses:
+        "200":
+          description: Attributes with their values
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/Option" } }
+  /v1/catalog/products:
+    get:
+      summary: Browse active products
+      operationId: browseProducts
+      tags: [catalog]
+      parameters:
+        - { $ref: "#/components/parameters/Locale" }
+        - { name: category, in: query, description: Category slug; includes subcategories, schema: { type: string } }
+        - { name: q, in: query, description: Matches product names and SKUs, schema: { type: string } }
+        - { $ref: "#/components/parameters/Page" }
+        - { name: page_size, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 24 } }
+      responses:
+        "200":
+          description: One page of products
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProductPage" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /v1/catalog/products/{slug}:
+    get:
+      summary: Active product with its variants
+      operationId: getProduct
+      tags: [catalog]
+      parameters:
+        - { name: slug, in: path, required: true, schema: { type: string } }
+        - { $ref: "#/components/parameters/Locale" }
+      responses:
+        "200":
+          description: Product detail
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProductDetail" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /v1/pricing/quotes:
+    get:
+      summary: Prices of variants for the caller
+      description: |
+        Signed-in customers get their assigned price list (falling back to the
+        public list for variants it does not price); anonymous visitors get the
+        public list. Customer lists are confidential and never selectable by
+        parameter. Variants without a price are omitted ("price on request").
+      operationId: getQuotes
+      tags: [pricing]
+      security: [{}, { session: [] }]
+      parameters:
+        - { name: currency, in: query, schema: { $ref: "#/components/schemas/Currency" } }
+        - { name: qty, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - name: variant_id
+          in: query
+          description: Repeat the parameter or pass a comma-separated list (max 200).
+          schema: { type: array, items: { type: string, format: uuid } }
+          style: form
+          explode: true
+      responses:
+        "200":
+          description: Quotes in request order
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Quotes" }
+        "422": { $ref: "#/components/responses/Problem" }
+
+  # --- Admin: catalog ---------------------------------------------------------
+  /v1/admin/catalog/products:
+    get:
+      operationId: adminListProducts
+      tags: [admin-catalog]
+      security: [{ admin: [] }]
+      parameters:
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/ProductStatus" } }
+        - { name: q, in: query, schema: { type: string } }
+        - { $ref: "#/components/parameters/Page" }
+        - { name: page_size, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+      responses:
+        "200":
+          description: Products in every status
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminProductPage" }
+        "401": { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: adminCreateProduct
+      tags: [admin-catalog]
+      security: [{ admin: [] }]
+      requestBody: { $ref: "#/components/requestBodies/ProductInput" }
+      responses:
+        "201": { $ref: "#/components/responses/AdminProduct" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /v1/admin/catalog/products/{id}:
+    parameters: [{ $ref: "#/components/parameters/ID" }]
+    get:
+      operationId: adminGetProduct
+      tags: [admin-catalog]
+      security: [{ admin: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/AdminProduct" }
+        "404": { $ref: "#/components/responses/Problem" }
+    put:
+      operationId: adminUpdateProduct
+      tags: [admin-catalog]
+      security: [{ admin: [] }]
+      requestBody: { $ref: "#/components/requestBodies/ProductInput" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminProduct" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /v1/admin/catalog/products/{id}/status:
+    parameters: [{ $ref: "#/components/parameters/ID" }]
+    post:
+      summary: Publish, unpublish or archive
+      operationId: adminChangeProductStatus
+      tags: [admin-catalog]
+      security: [{ admin: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties: { status: { $ref: "#/components/schemas/ProductStatus" } }
+      responses:
+        "200": { $ref: "#/components/responses/AdminProduct" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /v1/admin/catalog/products/{id}/variants:
+    parameters: [{ $ref: "#/components/parameters/ID" }]
+    post:
+      operationId: adminAddVariant
+      tags: [admin-catalog]
+      security: [{ admin: [] }]
+      requestBody: { $ref: "#/components/requestBodies/VariantInput" }
+      responses:
+        "201": { $ref: "#/components/responses/AdminProduct" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /v1/admin/catalog/products/{id}/variants/{variant}:
+    parameters:
+      - { $ref: "#/components/parameters/ID" }
+      - { name: variant, in: path, required: true, schema: { type: string, format: uuid } }
+    put:
+      operationId: adminUpdateVariant
+      tags: [admin-catalog]
+      security: [{ admin: [] }]
+      requestBody: { $ref: "#/components/requestBodies/VariantInput" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminProduct" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+    delete:
+      summary: Archive a variant (it is kept for prices, stock and orders)
+      operationId: adminRemoveVariant
+      tags: [admin-catalog]
+      security: [{ admin: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/AdminProduct" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /v1/admin/catalog/products/{id}/variants/{variant}/default:
+    parameters:
+      - { $ref: "#/components/parameters/ID" }
+      - { name: variant, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      operationId: adminSetDefaultVariant
+      tags: [admin-catalog]
+      security: [{ admin: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/AdminProduct" }
+  /v1/admin/catalog/products/{id}/images/uploads:
+    parameters: [{ $ref: "#/components/parameters/ID" }]
+    post:
+      summary: Get a presigned URL to upload an image directly to S3
+      operationId: adminRequestImageUpload
+      tags: [admin-catalog]
+      security: [{ admin: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content_type]
+              properties:
+                content_type: { type: string, enum: [image/jpeg, image/png, image/webp, image/avif] }
+      responses:
+        "200":
+          description: Upload target; PUT the file there, then attach the key
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ImageUpload" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /v1/admin/catalog/products/{id}/images:
+    parameters: [{ $ref: "#/components/parameters/ID" }]
+    post:
+      operationId: adminAttachImage
+      tags: [admin-catalog]
+      security: [{ admin: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [key]
+              properties:
+                key: { type: string }
+                alt: { $ref: "#/components/schemas/LocalizedString" }
+      responses:
+        "201": { $ref: "#/components/responses/AdminProduct" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /v1/admin/catalog/products/{id}/images/{image}:
+    parameters:
+      - { $ref: "#/components/parameters/ID" }
+      - { name: image, in: path, required: true, schema: { type: string, format: uuid } }
+    delete:
+      operationId: adminRemoveImage
+      tags: [admin-catalog]
+      security: [{ admin: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/AdminProduct" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /v1/admin/catalog/categories:
+    get:
+      operationId: adminListCategories
+      tags: [admin-catalog]
+      security: [{ admin: [] }]
+      responses:
+        "200":
+          description: Categories with every translation
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/AdminCategory" } }
+    post:
+      operationId: adminCreateCategory
+      tags: [admin-catalog]
+      security: [{ admin: [] }]
+      requestBody: { $ref: "#/components/requestBodies/CategoryInput" }
+      responses:
+        "201": { $ref: "#/components/responses/AdminCategory" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /v1/admin/catalog/categories/{id}:
+    parameters: [{ $ref: "#/components/parameters/ID" }]
+    put:
+      operationId: adminUpdateCategory
+      tags: [admin-catalog]
+      security: [{ admin: [] }]
+      requestBody: { $ref: "#/components/requestBodies/CategoryInput" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminCategory" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /v1/admin/catalog/attributes:
+    get:
+      operationId: adminListAttributes
+      tags: [admin-catalog]
+      security: [{ admin: [] }]
+      responses:
+        "200":
+          description: Attributes with every translation
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/AdminAttribute" } }
+    post:
+      operationId: adminCreateAttribute
+      tags: [admin-catalog]
+      security: [{ admin: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, names]
+              properties:
+                code: { type: string, pattern: "^[a-z0-9][a-z0-9_]{0,31}$" }
+                names: { $ref: "#/components/schemas/LocalizedString" }
+                sort_order: { type: integer }
+      responses:
+        "201": { $ref: "#/components/responses/AdminAttribute" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /v1/admin/catalog/attributes/{code}/values:
+    parameters:
+      - { name: code, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: adminAddAttributeValue
+      tags: [admin-catalog]
+      security: [{ admin: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, labels]
+              properties:
+                code: { type: string, pattern: "^[a-z0-9][a-z0-9_]{0,31}$" }
+                labels: { $ref: "#/components/schemas/LocalizedString" }
+      responses:
+        "201": { $ref: "#/components/responses/AdminAttribute" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+
+  # --- Admin: pricing ---------------------------------------------------------
+  /v1/admin/pricing/price-lists:
+    get:
+      operationId: adminListPriceLists
+      tags: [admin-pricing]
+      security: [{ admin: [] }]
+      responses:
+        "200":
+          description: Price lists, default first
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/PriceList" } }
+    post:
+      operationId: adminCreatePriceList
+      tags: [admin-pricing]
+      security: [{ admin: [] }]
+      requestBody: { $ref: "#/components/requestBodies/PriceListInput" }
+      responses:
+        "201": { $ref: "#/components/responses/PriceList" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /v1/admin/pricing/price-lists/{id}:
+    parameters: [{ $ref: "#/components/parameters/ID" }]
+    put:
+      operationId: adminUpdatePriceList
+      tags: [admin-pricing]
+      security: [{ admin: [] }]
+      requestBody: { $ref: "#/components/requestBodies/PriceListInput" }
+      responses:
+        "200": { $ref: "#/components/responses/PriceList" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /v1/admin/pricing/price-lists/{id}/prices:
+    parameters:
+      - { $ref: "#/components/parameters/ID" }
+      - name: variant_id
+        in: query
+        schema: { type: array, items: { type: string, format: uuid } }
+        style: form
+        explode: true
+    get:
+      operationId: adminListPrices
+      tags: [admin-pricing]
+      security: [{ admin: [] }]
+      responses:
+        "200":
+          description: Every tier of each requested variant in this list
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/VariantPrices" } }
+  /v1/admin/pricing/price-lists/{id}/variants/{variant}:
+    parameters:
+      - { $ref: "#/components/parameters/ID" }
+      - { name: variant, in: path, required: true, schema: { type: string, format: uuid } }
+    put:
+      summary: Replace every tier of a variant in a list (empty removes it)
+      operationId: adminSetVariantPrices
+      tags: [admin-pricing]
+      security: [{ admin: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [prices]
+              properties:
+                prices: { type: array, items: { $ref: "#/components/schemas/Price" } }
+      responses:
+        "200":
+          description: Saved tiers
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VariantPrices" }
+        "422": { $ref: "#/components/responses/Problem" }
+
+  # --- Auth & profile -----------------------------------------------------------
+  /v1/auth/providers:
+    get:
+      summary: Enabled sign-in providers
+      operationId: authProviders
+      tags: [auth]
+      responses:
+        "200":
+          description: Providers, e.g. ["google","microsoft"]; "dev" only in local development
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [providers]
+                properties:
+                  providers: { type: array, items: { $ref: "#/components/schemas/Provider" } }
+  /v1/auth/register:
+    post:
+      summary: Create a password account and sign in
+      operationId: authRegister
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, minLength: 10, maxLength: 128 }
+                name: { type: string }
+                locale: { $ref: "#/components/schemas/Locale" }
+      responses:
+        "201": { $ref: "#/components/responses/Session" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+  /v1/auth/login:
+    post:
+      summary: Sign in with email and password
+      operationId: authLogin
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string }
+                password: { type: string }
+      responses:
+        "200": { $ref: "#/components/responses/Session" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+  /v1/auth/dev/login:
+    post:
+      summary: Password-less sign-in by email (local development only)
+      operationId: authDevLogin
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string }
+                name: { type: string }
+      responses:
+        "200": { $ref: "#/components/responses/Session" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /v1/auth/oidc/{provider}/start:
+    parameters:
+      - { name: provider, in: path, required: true, schema: { $ref: "#/components/schemas/Provider" } }
+    post:
+      summary: Begin an OIDC sign-in (authorization code + PKCE)
+      description: |
+        Returns the provider URL to redirect the browser to and the state,
+        which the web binds to the browser with a short-lived cookie. The
+        redirect URI is fixed by configuration (WEB_BASE_URL).
+      operationId: authOidcStart
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                return_to: { type: string, description: Same-site path to return to after sign-in }
+      responses:
+        "200":
+          description: Authorization request
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [authorization_url, state]
+                properties:
+                  authorization_url: { type: string }
+                  state: { type: string }
+        "404": { $ref: "#/components/responses/Problem" }
+  /v1/auth/oidc/{provider}/callback:
+    parameters:
+      - { name: provider, in: path, required: true, schema: { $ref: "#/components/schemas/Provider" } }
+    post:
+      summary: Complete an OIDC sign-in
+      operationId: authOidcCallback
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, state]
+              properties:
+                code: { type: string }
+                state: { type: string }
+      responses:
+        "200": { $ref: "#/components/responses/Session" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /v1/auth/logout:
+    post:
+      summary: End the current session
+      operationId: authLogout
+      tags: [auth]
+      security: [{ session: [] }]
+      responses:
+        "204": { description: Signed out }
+  /v1/auth/verify-email:
+    post:
+      summary: Confirm an email with the token from the emailed link
+      operationId: verifyEmail
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: { type: string, maxLength: 100 }
+      responses:
+        "204": { description: Email confirmed }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "429": { description: Too many attempts }
+  /v1/me/verify-email:
+    post:
+      summary: Email a new confirmation link (at most 3 per hour)
+      operationId: resendVerification
+      tags: [me]
+      security: [{ session: [] }]
+      responses:
+        "202": { description: Link sent }
+        "409": { $ref: "#/components/responses/Problem" }
+  /v1/me:
+    get:
+      operationId: getMe
+      tags: [me]
+      security: [{ session: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/Me" }
+        "401": { $ref: "#/components/responses/Problem" }
+    put:
+      operationId: updateMe
+      tags: [me]
+      security: [{ session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                display_name: { type: string, maxLength: 120 }
+                locale: { $ref: "#/components/schemas/Locale" }
+      responses:
+        "200": { $ref: "#/components/responses/Me" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /v1/me/password:
+    put:
+      summary: Set or change the password
+      operationId: changePassword
+      tags: [me]
+      security: [{ session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [new_password]
+              properties:
+                current_password: { type: string, description: Required when the account already has a password }
+                new_password: { type: string }
+      responses:
+        "204": { description: Saved }
+        "422": { $ref: "#/components/responses/Problem" }
+  /v1/me/customer:
+    put:
+      summary: Save the billing profile
+      operationId: saveCustomer
+      tags: [me]
+      security: [{ session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CustomerInput" }
+      responses:
+        "200":
+          description: Saved profile
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Customer" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /v1/me/addresses:
+    post:
+      operationId: addAddress
+      tags: [me]
+      security: [{ session: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AddressInput" }
+      responses:
+        "201":
+          description: Created address
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Address" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /v1/me/addresses/{id}:
+    parameters: [{ $ref: "#/components/parameters/ID" }]
+    put:
+      operationId: updateAddress
+      tags: [me]
+      security: [{ session: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AddressInput" }
+      responses:
+        "200":
+          description: Updated address
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Address" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: removeAddress
+      tags: [me]
+      security: [{ session: [] }]
+      responses:
+        "204": { description: Removed }
+        "404": { $ref: "#/components/responses/Problem" }
+  /v1/me/addresses/{id}/default:
+    parameters: [{ $ref: "#/components/parameters/ID" }]
+    post:
+      operationId: setDefaultAddress
+      tags: [me]
+      security: [{ session: [] }]
+      responses:
+        "204": { description: Default set }
+        "404": { $ref: "#/components/responses/Problem" }
+
+  # --- Admin: customers ---------------------------------------------------------
+  /v1/admin/customers:
+    get:
+      operationId: adminListCustomers
+      tags: [admin-customers]
+      security: [{ admin: [] }, { session: [] }]
+      parameters:
+        - { name: q, in: query, description: "Email, name, document number or business name", schema: { type: string } }
+        - { $ref: "#/components/parameters/Page" }
+        - { name: page_size, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+      responses:
+        "200":
+          description: Accounts with their billing profile
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total, page, page_size]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [account, customer, created_at]
+                      properties:
+                        account: { $ref: "#/components/schemas/Account" }
+                        customer:
+                          oneOf: [{ $ref: "#/components/schemas/Customer" }, { type: "null" }]
+                        created_at: { type: string, format: date-time }
+                  total: { type: integer }
+                  page: { type: integer }
+                  page_size: { type: integer }
+  /v1/admin/customers/{id}/price-list:
+    parameters: [{ $ref: "#/components/parameters/ID" }]
+    put:
+      summary: Assign the price list a customer buys from (empty = public)
+      operationId: adminAssignPriceList
+      tags: [admin-customers]
+      security: [{ admin: [] }, { session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string }
+      responses:
+        "204": { description: Assigned }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /v1/admin/customers/{id}/role:
+    parameters: [{ $ref: "#/components/parameters/ID" }]
+    put:
+      operationId: adminSetRole
+      tags: [admin-customers]
+      security: [{ admin: [] }, { session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role]
+              properties:
+                role: { $ref: "#/components/schemas/Role" }
+      responses:
+        "204": { description: Saved }
+        "409": { $ref: "#/components/responses/Problem" }
+
+  # --- Inventory -----------------------------------------------------------------
+  /v1/inventory/availability:
+    get:
+      summary: Sellable units per variant
+      operationId: getAvailability
+      tags: [inventory]
+      parameters:
+        - { name: variant_id, in: query, schema: { type: array, items: { type: string, format: uuid } }, style: form, explode: true }
+      responses:
+        "200":
+          description: Availability in request order
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required: [variant_id, available]
+                  properties:
+                    variant_id: { type: string, format: uuid }
+                    available: { type: integer }
+  /v1/admin/inventory:
+    get:
+      operationId: adminListStock
+      tags: [admin-inventory]
+      security: [{ admin: [] }, { session: [] }]
+      parameters:
+        - { name: variant_id, in: query, schema: { type: array, items: { type: string, format: uuid } }, style: form, explode: true }
+      responses:
+        "200":
+          description: Stock per variant
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/StockItem" } }
+  /v1/admin/inventory/{variant}/adjust:
+    parameters:
+      - { name: variant, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      summary: Change on-hand stock (purchase, count correction, return)
+      operationId: adminAdjustStock
+      tags: [admin-inventory]
+      security: [{ admin: [] }, { session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [delta, reason]
+              properties:
+                delta: { type: integer, description: Units to add (positive) or remove (negative) }
+                reason: { type: string, enum: [purchase, adjustment, return] }
+                note: { type: string, maxLength: 200 }
+      responses:
+        "200":
+          description: Stock after the change
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StockItem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /v1/admin/inventory/{variant}/reorder-point:
+    parameters:
+      - { name: variant, in: path, required: true, schema: { type: string, format: uuid } }
+    put:
+      operationId: adminSetReorderPoint
+      tags: [admin-inventory]
+      security: [{ admin: [] }, { session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [value]
+              properties:
+                value: { type: integer, minimum: 0 }
+      responses:
+        "200":
+          description: Stock after the change
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StockItem" }
+  /v1/admin/inventory/{variant}/movements:
+    parameters:
+      - { name: variant, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      operationId: adminStockMovements
+      tags: [admin-inventory]
+      security: [{ admin: [] }, { session: [] }]
+      responses:
+        "200":
+          description: Last 50 movements, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required: [delta, reason, reference, created_at]
+                  properties:
+                    delta: { type: integer }
+                    reason: { type: string }
+                    reference: { type: string }
+                    created_at: { type: string, format: date-time }
+
+  # --- Cart & checkout -------------------------------------------------------------
+  /v1/cart:
+    get:
+      summary: The caller's cart (account cart, or anonymous cart by X-Cart-Key)
+      operationId: getCart
+      tags: [cart]
+      security: [{}, { session: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/CartKey" }
+        - { name: currency, in: query, schema: { $ref: "#/components/schemas/Currency" } }
+        - { $ref: "#/components/parameters/Locale" }
+      responses:
+        "200": { $ref: "#/components/responses/Cart" }
+  /v1/cart/items:
+    post:
+      summary: Add units of a variant; returns the cart (with its key for anonymous visitors)
+      operationId: addCartItem
+      tags: [cart]
+      security: [{}, { session: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/CartKey" }
+        - { name: currency, in: query, schema: { $ref: "#/components/schemas/Currency" } }
+        - { $ref: "#/components/parameters/Locale" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [variant_id, qty]
+              properties:
+                variant_id: { type: string, format: uuid }
+                qty: { type: integer, minimum: 1, maximum: 9999 }
+      responses:
+        "200": { $ref: "#/components/responses/Cart" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /v1/cart/items/{variant}:
+    parameters:
+      - { name: variant, in: path, required: true, schema: { type: string, format: uuid } }
+      - { $ref: "#/components/parameters/CartKey" }
+      - { name: currency, in: query, schema: { $ref: "#/components/schemas/Currency" } }
+      - { $ref: "#/components/parameters/Locale" }
+    put:
+      summary: Set a line's quantity (0 removes it)
+      operationId: setCartItem
+      tags: [cart]
+      security: [{}, { session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [qty]
+              properties:
+                qty: { type: integer, minimum: 0, maximum: 9999 }
+      responses:
+        "200": { $ref: "#/components/responses/Cart" }
+        "422": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: removeCartItem
+      tags: [cart]
+      security: [{}, { session: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/Cart" }
+  /v1/cart/merge:
+    post:
+      summary: Move an anonymous cart into the signed-in account's cart
+      operationId: mergeCart
+      tags: [cart]
+      security: [{ session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [key]
+              properties:
+                key: { type: string }
+      responses:
+        "200": { $ref: "#/components/responses/Cart" }
+  /v1/checkout/quote:
+    post:
+      summary: Price the cart with delivery and IGV
+      operationId: quoteCheckout
+      tags: [orders]
+      security: [{ session: [] }]
+      requestBody: { $ref: "#/components/requestBodies/CheckoutInput" }
+      responses:
+        "200":
+          description: Quote
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [cart, shipping, shipping_amount, tax, total, billing, igv_percent]
+                properties:
+                  cart: { $ref: "#/components/schemas/Cart" }
+                  shipping: { $ref: "#/components/schemas/OrderShipping" }
+                  shipping_amount: { $ref: "#/components/schemas/Decimal" }
+                  tax: { $ref: "#/components/schemas/Decimal" }
+                  total: { $ref: "#/components/schemas/Decimal" }
+                  billing:
+                    oneOf: [{ $ref: "#/components/schemas/OrderBilling" }, { type: "null" }]
+                  igv_percent: { type: integer }
+        "422": { $ref: "#/components/responses/Problem" }
+  /v1/orders:
+    get:
+      operationId: myOrders
+      tags: [orders]
+      security: [{ session: [] }]
+      parameters: [{ $ref: "#/components/parameters/Page" }]
+      responses:
+        "200":
+          description: The caller's orders, newest first
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OrderPage" }
+    post:
+      summary: Place an order from the cart (freezes prices, reserves stock)
+      description: Send an `Idempotency-Key` header; retries with the same key return the same order.
+      operationId: placeOrder
+      tags: [orders]
+      security: [{ session: [] }]
+      parameters:
+        - { name: Idempotency-Key, in: header, schema: { type: string, maxLength: 128 } }
+      requestBody: { $ref: "#/components/requestBodies/CheckoutInput" }
+      responses:
+        "201": { $ref: "#/components/responses/Order" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /v1/orders/{number}:
+    parameters:
+      - { name: number, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: myOrder
+      tags: [orders]
+      security: [{ session: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/Order" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /v1/orders/{number}/pay:
+    parameters:
+      - { name: number, in: path, required: true, schema: { type: string } }
+    post:
+      summary: Pay with a Culqi Checkout token (card tkn_… or Yape ype_…)
+      operationId: payOrder
+      tags: [orders]
+      security: [{ session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: { type: string }
+      responses:
+        "200": { $ref: "#/components/responses/Order" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+  /v1/orders/{number}/cancel:
+    parameters:
+      - { name: number, in: path, required: true, schema: { type: string } }
+    post:
+      summary: Cancel an unpaid order (releases stock)
+      operationId: cancelOrder
+      tags: [orders]
+      security: [{ session: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/Order" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /v1/payments/config:
+    get:
+      summary: Payment settings for the checkout page
+      operationId: paymentsConfig
+      tags: [orders]
+      responses:
+        "200":
+          description: Gateway in use, Culqi public key, bank transfer details
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [gateway, culqi_public_key, bank_details, yape_max_pen]
+                properties:
+                  gateway: { type: string, enum: [culqi, fake] }
+                  culqi_public_key: { type: string }
+                  bank_details: { type: string }
+                  yape_max_pen: { $ref: "#/components/schemas/Decimal" }
+  /v1/webhooks/culqi/{secret}:
+    parameters:
+      - { name: secret, in: path, required: true, schema: { type: string } }
+    post:
+      summary: Culqi events (configure in CulqiPanel → Eventos → Webhooks)
+      description: |
+        Culqi does not sign webhooks: the URL carries a secret and every charge
+        is re-read from Culqi's API before an order changes. Duplicates are harmless.
+      operationId: culqiWebhook
+      tags: [orders]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200": { description: Processed or ignored }
+        "404": { description: Wrong secret }
+        "500": { description: Temporary failure; Culqi retries }
+
+  # --- Admin: orders ---------------------------------------------------------------
+  /v1/admin/orders:
+    get:
+      operationId: adminListOrders
+      tags: [admin-orders]
+      security: [{ admin: [] }, { session: [] }]
+      parameters:
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/OrderStatus" } }
+        - { name: q, in: query, description: "Number, email, RUC/DNI or business name", schema: { type: string } }
+        - { $ref: "#/components/parameters/Page" }
+      responses:
+        "200":
+          description: Orders, newest first
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OrderPage" }
+  /v1/admin/orders/{id}:
+    parameters: [{ $ref: "#/components/parameters/ID" }]
+    get:
+      operationId: adminGetOrder
+      tags: [admin-orders]
+      security: [{ admin: [] }, { session: [] }]
+      responses:
+        "200":
+          description: Order with payments and status history
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [order, payments, history]
+                properties:
+                  order: { $ref: "#/components/schemas/Order" }
+                  payments: { type: array, items: { $ref: "#/components/schemas/Payment" } }
+                  history:
+                    type: array
+                    items:
+                      type: object
+                      required: [from, to, actor, note, at]
+                      properties:
+                        from: { type: string }
+                        to: { type: string }
+                        actor: { type: string }
+                        note: { type: string }
+                        at: { type: string, format: date-time }
+        "404": { $ref: "#/components/responses/Problem" }
+  /v1/admin/orders/{id}/confirm-transfer:
+    parameters: [{ $ref: "#/components/parameters/ID" }]
+    post:
+      operationId: adminConfirmTransfer
+      tags: [admin-orders]
+      security: [{ admin: [] }, { session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reference]
+              properties:
+                reference: { type: string, maxLength: 60, description: Bank operation number }
+      responses:
+        "200": { $ref: "#/components/responses/Order" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /v1/admin/orders/{id}/prepare:
+    parameters: [{ $ref: "#/components/parameters/ID" }]
+    post:
+      operationId: adminPrepareOrder
+      tags: [admin-orders]
+      security: [{ admin: [] }, { session: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/Order" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /v1/admin/orders/{id}/ship:
+    parameters: [{ $ref: "#/components/parameters/ID" }]
+    post:
+      operationId: adminShipOrder
+      tags: [admin-orders]
+      security: [{ admin: [] }, { session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                carrier: { type: string, maxLength: 60 }
+                tracking: { type: string, maxLength: 80 }
+      responses:
+        "200": { $ref: "#/components/responses/Order" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /v1/admin/orders/{id}/deliver:
+    parameters: [{ $ref: "#/components/parameters/ID" }]
+    post:
+      operationId: adminDeliverOrder
+      tags: [admin-orders]
+      security: [{ admin: [] }, { session: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/Order" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /v1/admin/orders/{id}/refund:
+    parameters: [{ $ref: "#/components/parameters/ID" }]
+    post:
+      summary: Cancel a paid, unshipped order and return the money
+      description: |
+        Culqi payments are refunded through Culqi. Bank transfers are returned by hand;
+        send the operation number of the return transfer as reference. Stock goes back
+        on hand and OrderRefunded triggers the credit note and the customer email.
+      operationId: adminRefundOrder
+      tags: [admin-orders]
+      security: [{ admin: [] }, { session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string, maxLength: 200 }
+                reference: { type: string, maxLength: 60, description: Bank operation number (transfers only) }
+      responses:
+        "200": { $ref: "#/components/responses/Order" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /v1/orders/{number}/invoices:
+    parameters: [{ name: number, in: path, required: true, schema: { type: string } }]
+    get:
+      summary: Accepted electronic documents (factura, boleta, credit note) of one of my orders
+      operationId: myOrderInvoices
+      tags: [invoicing]
+      security: [{ session: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/InvoiceList" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /v1/admin/orders/{id}/invoices:
+    parameters: [{ $ref: "#/components/parameters/ID" }]
+    get:
+      operationId: adminOrderInvoices
+      tags: [invoicing]
+      security: [{ admin: [] }, { session: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/InvoiceList" }
+  /v1/admin/invoices:
+    get:
+      operationId: adminListInvoices
+      tags: [invoicing]
+      security: [{ admin: [] }, { session: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Page" }
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/InvoiceStatus" } }
+      responses:
+        "200":
+          description: Documents, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total, page, page_size]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/Invoice" } }
+                  total: { type: integer }
+                  page: { type: integer }
+                  page_size: { type: integer }
+  /v1/admin/invoices/{id}/retry:
+    parameters: [{ $ref: "#/components/parameters/ID" }]
+    post:
+      summary: Send a rejected document to the OSE again (same series and number)
+      operationId: adminRetryInvoice
+      tags: [invoicing]
+      security: [{ admin: [] }, { session: [] }]
+      responses:
+        "200":
+          description: The document after the attempt
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Invoice" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /v1/admin/orders/{id}/cancel:
+    parameters: [{ $ref: "#/components/parameters/ID" }]
+    post:
+      operationId: adminCancelOrder
+      tags: [admin-orders]
+      security: [{ admin: [] }, { session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string, maxLength: 200 }
+      responses:
+        "200": { $ref: "#/components/responses/Order" }
+        "409": { $ref: "#/components/responses/Problem" }
+
+components:
+  securitySchemes:
+    admin: { type: http, scheme: bearer, description: "ADMIN_TOKEN, for automation" }
+    session:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: "Session <token>"
+
+  parameters:
+    CartKey:
+      name: X-Cart-Key
+      in: header
+      description: Anonymous cart key (ignored for signed-in callers)
+      schema: { type: string }
+    Locale:
+      name: locale
+      in: query
+      description: Language of the response; unknown values fall back to es.
+      schema: { $ref: "#/components/schemas/Locale" }
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, default: 1 }
+    ID:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+  requestBodies:
+    CheckoutInput:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              currency: { $ref: "#/components/schemas/Currency" }
+              address_id: { type: [string, "null"], format: uuid }
+              pickup: { type: boolean, description: Collect at Duradent's store }
+              payment_method: { type: string, enum: [culqi, bank_transfer] }
+              notes: { type: string, maxLength: 500 }
+    AddressInput:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [recipient, line1, district, province, department]
+            properties:
+              label: { type: string, maxLength: 60 }
+              recipient: { type: string, maxLength: 120 }
+              line1: { type: string, maxLength: 200 }
+              reference: { type: string, maxLength: 200 }
+              district: { type: string, maxLength: 80 }
+              province: { type: string, maxLength: 80 }
+              department: { type: string, pattern: "^[0-9]{2}$", description: INEI department code (15 = Lima) }
+              ubigeo: { type: string, pattern: "^([0-9]{6})?$" }
+              phone: { type: string }
+    ProductInput:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [slug, texts]
+            properties:
+              slug: { type: string, pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$" }
+              brand: { type: string, maxLength: 80 }
+              category_id: { type: [string, "null"], format: uuid }
+              texts: { $ref: "#/components/schemas/Texts" }
+    VariantInput:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [sku]
+            properties:
+              sku: { type: string }
+              barcode: { type: string }
+              weight_g: { type: integer, minimum: 0, maximum: 100000 }
+              options: { $ref: "#/components/schemas/VariantOptions" }
+    CategoryInput:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [slug, texts]
+            properties:
+              slug: { type: string }
+              parent_id: { type: [string, "null"], format: uuid }
+              sort_order: { type: integer }
+              texts: { $ref: "#/components/schemas/Texts" }
+    PriceListInput:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [code, name]
+            properties:
+              code: { type: string, pattern: "^[a-z0-9][a-z0-9_-]{0,31}$" }
+              name: { type: string, maxLength: 80 }
+              is_default: { type: boolean }
+
+  responses:
+    InvoiceList:
+      description: Electronic documents of an order
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [items]
+            properties:
+              items: { type: array, items: { $ref: "#/components/schemas/Invoice" } }
+    Cart:
+      description: The cart
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Cart" }
+    Order:
+      description: The order
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Order" }
+    Session:
+      description: Signed in
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [token, expires_at, account]
+            properties:
+              token: { type: string }
+              expires_at: { type: string, format: date-time }
+              account: { $ref: "#/components/schemas/Account" }
+              return_to: { type: string }
+    Me:
+      description: The signed-in account with its billing profile and addresses
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [account, customer, addresses]
+            properties:
+              account: { $ref: "#/components/schemas/Account" }
+              customer:
+                oneOf: [{ $ref: "#/components/schemas/Customer" }, { type: "null" }]
+              addresses: { type: array, items: { $ref: "#/components/schemas/Address" } }
+    Problem:
+      description: Error
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    AdminProduct:
+      description: The product after the change
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/AdminProduct" }
+    AdminCategory:
+      description: Category
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/AdminCategory" }
+    AdminAttribute:
+      description: Attribute
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/AdminAttribute" }
+    PriceList:
+      description: Price list
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/PriceList" }
+
+  schemas:
+    Liveness:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, const: ok }
+    Readiness:
+      type: object
+      required: [status, checks]
+      properties:
+        status: { type: string, examples: [OK, Service Unavailable] }
+        checks:
+          type: object
+          additionalProperties: { type: string, enum: [up, down] }
+    Problem:
+      description: Error body for every 4xx/5xx (RFC 9457).
+      type: object
+      required: [type, title, status]
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        code: { type: string, description: Stable machine code, e.g. catalog.sku_taken }
+        field: { type: string, description: Offending input field }
+
+    Locale: { type: string, enum: [es, en, pt-br] }
+    Provider: { type: string, enum: [google, microsoft, dev] }
+    StockItem:
+      type: object
+      required: [variant_id, on_hand, reserved, available, reorder_point, low]
+      properties:
+        variant_id: { type: string, format: uuid }
+        on_hand: { type: integer }
+        reserved: { type: integer }
+        available: { type: integer }
+        reorder_point: { type: integer }
+        low: { type: boolean }
+    CartLine:
+      type: object
+      required: [variant_id, sku, product_name, product_slug, options, image_url, qty, unit_price, line_total, available, problem]
+      properties:
+        variant_id: { type: string, format: uuid }
+        sku: { type: string }
+        product_name: { type: string }
+        product_slug: { type: string }
+        options: { type: string }
+        image_url: { type: string }
+        qty: { type: integer }
+        unit_price: { oneOf: [{ $ref: "#/components/schemas/Decimal" }, { type: "null" }] }
+        line_total: { oneOf: [{ $ref: "#/components/schemas/Decimal" }, { type: "null" }] }
+        available: { type: integer }
+        problem: { type: string, enum: ["", unavailable, not_priced, insufficient_stock] }
+    Cart:
+      type: object
+      required: [currency, lines, subtotal, item_count, weight_g, ready]
+      properties:
+        key: { type: string, description: Anonymous carts only; keep it in a cookie }
+        currency: { $ref: "#/components/schemas/Currency" }
+        lines: { type: array, items: { $ref: "#/components/schemas/CartLine" } }
+        subtotal: { $ref: "#/components/schemas/Decimal" }
+        item_count: { type: integer }
+        weight_g: { type: integer }
+        ready: { type: boolean, description: Every line can be bought }
+    OrderStatus: { type: string, enum: [pending_payment, paid, preparing, shipped, delivered, cancelled] }
+    InvoiceStatus: { type: string, enum: [pending, accepted, rejected] }
+    Invoice:
+      type: object
+      description: SUNAT electronic document issued through the OSE (Nubefact).
+      required: [id, order_id, order_number, type, name, series, number, currency, total, status, sunat_description, pdf_url, xml_url, cdr_url, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        order_id: { type: string, format: uuid }
+        order_number: { type: string }
+        type: { type: string, enum: [factura, boleta, nota_credito] }
+        name: { type: string, examples: ["Factura F001-123"] }
+        series: { type: string, examples: [F001] }
+        number: { type: integer }
+        currency: { $ref: "#/components/schemas/Currency" }
+        total: { $ref: "#/components/schemas/Decimal" }
+        status: { $ref: "#/components/schemas/InvoiceStatus" }
+        sunat_description: { type: string }
+        pdf_url: { type: string }
+        xml_url: { type: string }
+        cdr_url: { type: string }
+        last_error: { type: string, description: Admin only }
+        attempts: { type: integer, description: Admin only }
+        created_at: { type: string, format: date-time }
+    OrderBilling:
+      type: object
+      required: [customer_type, document_type, document_number, business_name, invoice_type]
+      properties:
+        customer_type: { type: string }
+        document_type: { type: string }
+        document_number: { type: string }
+        business_name: { type: string }
+        invoice_type: { type: string, enum: ["01", "03"] }
+    OrderShipping:
+      type: object
+      required: [pickup, zone]
+      properties:
+        pickup: { type: boolean }
+        zone: { type: string, enum: [lima, provincias, pickup, ""] }
+        recipient: { type: string }
+        line1: { type: string }
+        reference: { type: string }
+        district: { type: string }
+        province: { type: string }
+        department: { type: string }
+        phone: { type: string }
+    Order:
+      type: object
+      required: [id, number, status, payment_method, currency, email, lines, subtotal, shipping_amount, tax, total, billing, shipping, notes,
+        payment_deadline, payment_in_progress, carrier, tracking, cancel_reason, created_at, paid_at, shipped_at, delivered_at, cancelled_at,
+        refunded_at, refund_ref]
+      properties:
+        id: { type: string, format: uuid }
+        number: { type: string, examples: [DD-000123] }
+        status: { $ref: "#/components/schemas/OrderStatus" }
+        payment_method: { type: string, enum: [culqi, bank_transfer] }
+        currency: { $ref: "#/components/schemas/Currency" }
+        email: { type: string }
+        lines:
+          type: array
+          items:
+            type: object
+            required: [variant_id, sku, name, options, unit_price, qty, line_total]
+            properties:
+              variant_id: { type: string, format: uuid }
+              sku: { type: string }
+              name: { type: string }
+              options: { type: string }
+              unit_price: { $ref: "#/components/schemas/Decimal" }
+              qty: { type: integer }
+              line_total: { $ref: "#/components/schemas/Decimal" }
+        subtotal: { $ref: "#/components/schemas/Decimal" }
+        shipping_amount: { $ref: "#/components/schemas/Decimal" }
+        tax: { $ref: "#/components/schemas/Decimal" }
+        total: { $ref: "#/components/schemas/Decimal" }
+        billing: { $ref: "#/components/schemas/OrderBilling" }
+        shipping: { $ref: "#/components/schemas/OrderShipping" }
+        notes: { type: string }
+        payment_deadline: { type: string, format: date-time }
+        payment_in_progress: { type: boolean }
+        carrier: { type: string }
+        tracking: { type: string }
+        cancel_reason: { type: string }
+        created_at: { type: string, format: date-time }
+        paid_at: { type: [string, "null"], format: date-time }
+        shipped_at: { type: [string, "null"], format: date-time }
+        delivered_at: { type: [string, "null"], format: date-time }
+        cancelled_at: { type: [string, "null"], format: date-time }
+        refunded_at: { type: [string, "null"], format: date-time }
+        refund_ref: { type: string, description: Culqi refund id or bank operation number }
+    OrderPage:
+      type: object
+      required: [items, total, page, page_size]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Order" } }
+        total: { type: integer }
+        page: { type: integer }
+        page_size: { type: integer }
+    Payment:
+      type: object
+      required: [id, method, status, amount, currency, provider_ref, source_type, failure_code, failure_message, reference, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        method: { type: string, enum: [culqi, bank_transfer] }
+        status: { type: string, enum: [confirmed, failed, refunded] }
+        amount: { $ref: "#/components/schemas/Decimal" }
+        currency: { $ref: "#/components/schemas/Currency" }
+        provider_ref: { type: string }
+        source_type: { type: string }
+        failure_code: { type: string }
+        failure_message: { type: string }
+        reference: { type: string }
+        created_at: { type: string, format: date-time }
+    Role: { type: string, enum: [customer, admin] }
+    Account:
+      type: object
+      required: [id, email, email_verified, display_name, locale, role, has_password]
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string }
+        email_verified: { type: boolean }
+        display_name: { type: string }
+        locale: { $ref: "#/components/schemas/Locale" }
+        role: { $ref: "#/components/schemas/Role" }
+        has_password: { type: boolean }
+    CustomerInput:
+      type: object
+      required: [type, document_type, document_number]
+      properties:
+        type: { type: string, enum: [persona, empresa] }
+        document_type: { type: string, enum: [DNI, RUC, CE] }
+        document_number: { type: string }
+        business_name: { type: string, description: Razón social; required for empresa }
+        cop_number: { type: string, description: Colegio Odontológico del Perú registration }
+        phone: { type: string }
+    Customer:
+      allOf:
+        - { $ref: "#/components/schemas/CustomerInput" }
+        - type: object
+          required: [business_name, cop_number, phone, invoice_type, price_list_code]
+          properties:
+            invoice_type: { type: string, enum: ["01", "03"], description: "01 factura (RUC), 03 boleta" }
+            price_list_code: { type: string, description: Empty means the public list }
+    Address:
+      type: object
+      required: [id, label, recipient, line1, reference, district, province, department, ubigeo, phone, is_default]
+      properties:
+        id: { type: string, format: uuid }
+        label: { type: string }
+        recipient: { type: string }
+        line1: { type: string }
+        reference: { type: string }
+        district: { type: string }
+        province: { type: string }
+        department: { type: string }
+        ubigeo: { type: string }
+        phone: { type: string }
+        is_default: { type: boolean }
+    Currency: { type: string, enum: [PEN, USD] }
+    Decimal: { type: string, pattern: "^-?\\d+\\.\\d{2}$", examples: ["85.00"] }
+    LocalizedString:
+      type: object
+      description: Text per locale; es is required where the text is.
+      propertyNames: { $ref: "#/components/schemas/Locale" }
+      additionalProperties: { type: string }
+    Text:
+      type: object
+      required: [name, description]
+      properties:
+        name: { type: string }
+        description: { type: string }
+    Texts:
+      type: object
+      propertyNames: { $ref: "#/components/schemas/Locale" }
+      additionalProperties: { $ref: "#/components/schemas/Text" }
+    VariantOptions:
+      type: object
+      description: Attribute code → value code, e.g. {"slot":"022"}
+      additionalProperties: { type: string }
+    ProductStatus: { type: string, enum: [draft, active, archived] }
+
+    Category:
+      type: object
+      required: [id, slug, parent_id, name, description, sort_order]
+      properties:
+        id: { type: string, format: uuid }
+        slug: { type: string }
+        parent_id: { type: [string, "null"], format: uuid }
+        name: { type: string }
+        description: { type: string }
+        sort_order: { type: integer }
+    Image:
+      type: object
+      required: [id, url, alt]
+      properties:
+        id: { type: string, format: uuid }
+        url: { type: string }
+        alt: { type: string }
+    ProductSummary:
+      type: object
+      required: [id, slug, brand, name, category_id, image, default_variant_id, variant_count]
+      properties:
+        id: { type: string, format: uuid }
+        slug: { type: string }
+        brand: { type: string }
+        name: { type: string }
+        category_id: { type: [string, "null"], format: uuid }
+        image:
+          oneOf: [{ $ref: "#/components/schemas/Image" }, { type: "null" }]
+        default_variant_id: { type: [string, "null"], format: uuid }
+        variant_count: { type: integer }
+    ProductPage:
+      type: object
+      required: [items, total, page, page_size]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/ProductSummary" } }
+        total: { type: integer }
+        page: { type: integer }
+        page_size: { type: integer }
+    Option:
+      type: object
+      required: [code, name, values]
+      properties:
+        code: { type: string }
+        name: { type: string }
+        values:
+          type: array
+          items:
+            type: object
+            required: [code, label]
+            properties:
+              code: { type: string }
+              label: { type: string }
+    Variant:
+      type: object
+      required: [id, sku, weight_g, is_default, options]
+      properties:
+        id: { type: string, format: uuid }
+        sku: { type: string }
+        weight_g: { type: integer }
+        is_default: { type: boolean }
+        options: { $ref: "#/components/schemas/VariantOptions" }
+    ProductDetail:
+      type: object
+      required: [id, slug, brand, name, description, category, images, options, variants]
+      properties:
+        id: { type: string, format: uuid }
+        slug: { type: string }
+        brand: { type: string }
+        name: { type: string }
+        description: { type: string }
+        category:
+          oneOf:
+            - type: object
+              required: [id, slug, name]
+              properties:
+                id: { type: string, format: uuid }
+                slug: { type: string }
+                name: { type: string }
+            - type: "null"
+        images: { type: array, items: { $ref: "#/components/schemas/Image" } }
+        options:
+          description: Only the attributes and values used by this product's variants.
+          type: array
+          items: { $ref: "#/components/schemas/Option" }
+        variants: { type: array, items: { $ref: "#/components/schemas/Variant" } }
+    Quotes:
+      type: object
+      required: [currency, qty, items]
+      properties:
+        currency: { $ref: "#/components/schemas/Currency" }
+        qty: { type: integer }
+        items:
+          type: array
+          items:
+            type: object
+            required: [variant_id, unit_price, tiers]
+            properties:
+              variant_id: { type: string, format: uuid }
+              unit_price: { $ref: "#/components/schemas/Decimal" }
+              tiers:
+                type: array
+                items:
+                  type: object
+                  required: [min_qty, unit_price]
+                  properties:
+                    min_qty: { type: integer }
+                    unit_price: { $ref: "#/components/schemas/Decimal" }
+
+    AdminVariant:
+      type: object
+      required: [id, sku, barcode, weight_g, is_default, archived, options]
+      properties:
+        id: { type: string, format: uuid }
+        sku: { type: string }
+        barcode: { type: string }
+        weight_g: { type: integer }
+        is_default: { type: boolean }
+        archived: { type: boolean }
+        options: { $ref: "#/components/schemas/VariantOptions" }
+    AdminImage:
+      type: object
+      required: [id, key, url, alt]
+      properties:
+        id: { type: string, format: uuid }
+        key: { type: string }
+        url: { type: string }
+        alt: { $ref: "#/components/schemas/LocalizedString" }
+    AdminProduct:
+      type: object
+      required: [id, slug, brand, status, category_id, texts, variants, images, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        slug: { type: string }
+        brand: { type: string }
+        status: { $ref: "#/components/schemas/ProductStatus" }
+        category_id: { type: [string, "null"], format: uuid }
+        texts: { $ref: "#/components/schemas/Texts" }
+        variants: { type: array, items: { $ref: "#/components/schemas/AdminVariant" } }
+        images: { type: array, items: { $ref: "#/components/schemas/AdminImage" } }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    AdminProductPage:
+      type: object
+      required: [items, total, page, page_size]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [id, slug, name, brand, status, variant_count, updated_at]
+            properties:
+              id: { type: string, format: uuid }
+              slug: { type: string }
+              name: { type: string }
+              brand: { type: string }
+              status: { $ref: "#/components/schemas/ProductStatus" }
+              variant_count: { type: integer }
+              updated_at: { type: string, format: date-time }
+        total: { type: integer }
+        page: { type: integer }
+        page_size: { type: integer }
+    AdminCategory:
+      type: object
+      required: [id, slug, parent_id, sort_order, texts]
+      properties:
+        id: { type: string, format: uuid }
+        slug: { type: string }
+        parent_id: { type: [string, "null"], format: uuid }
+        sort_order: { type: integer }
+        texts: { $ref: "#/components/schemas/Texts" }
+    AdminAttribute:
+      type: object
+      required: [code, names, sort_order, values]
+      properties:
+        code: { type: string }
+        names: { $ref: "#/components/schemas/LocalizedString" }
+        sort_order: { type: integer }
+        values:
+          type: array
+          items:
+            type: object
+            required: [code, labels]
+            properties:
+              code: { type: string }
+              labels: { $ref: "#/components/schemas/LocalizedString" }
+    ImageUpload:
+      type: object
+      required: [key, upload_url, method, headers]
+      properties:
+        key: { type: string }
+        upload_url: { type: string }
+        method: { type: string, const: PUT }
+        headers: { type: object, additionalProperties: { type: string } }
+    PriceList:
+      type: object
+      required: [id, code, name, is_default]
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string }
+        name: { type: string }
+        is_default: { type: boolean }
+    Price:
+      type: object
+      required: [currency, min_qty, unit_price]
+      properties:
+        currency: { $ref: "#/components/schemas/Currency" }
+        min_qty: { type: integer, minimum: 1 }
+        unit_price: { $ref: "#/components/schemas/Decimal" }
+    VariantPrices:
+      type: object
+      required: [variant_id, prices]
+      properties:
+        variant_id: { type: string, format: uuid }
+        prices: { type: array, items: { $ref: "#/components/schemas/Price" } }

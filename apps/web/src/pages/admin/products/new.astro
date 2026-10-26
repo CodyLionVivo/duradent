@@ -1,0 +1,62 @@
+---
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+import TextsFields from '../../../components/admin/TextsFields.astro';
+import CategorySelect from '../../../components/admin/CategorySelect.astro';
+import { unwrap, type Schemas } from '../../../lib/api/client';
+import { errorMessage, str, textsFromForm, type Texts } from '../../../lib/admin';
+import { useTranslations } from '../../../i18n';
+
+const adminApi = Astro.locals.api;
+
+const t = useTranslations('es');
+let error = '';
+let values = { slug: '', brand: '', category_id: '' as string, texts: {} as Texts };
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  values = { slug: str(form, 'slug'), brand: str(form, 'brand'), category_id: str(form, 'category_id'), texts: textsFromForm(form) };
+  try {
+    const created = unwrap(
+      await adminApi.POST('/v1/admin/catalog/products', {
+        body: { slug: values.slug, brand: values.brand, category_id: values.category_id || null, texts: values.texts },
+      }),
+    );
+    return Astro.redirect(`/admin/products/${created.id}?notice=created`, 303);
+  } catch (err) {
+    error = errorMessage(err);
+    Astro.response.status = 422;
+  }
+}
+
+let categories: Schemas['AdminCategory'][] = [];
+try {
+  categories = unwrap(await adminApi.GET('/v1/admin/catalog/categories'));
+} catch (err) {
+  error ||= errorMessage(err);
+}
+---
+
+<AdminLayout title={t('admin.products.new')} error={error}>
+  <form method="post" class="card space-y-6 p-6">
+    <div class="grid gap-4 md:grid-cols-3">
+      <div>
+        <label for="slug" class="label">{t('admin.common.slug')} <span class="text-red-700">*</span></label>
+        <input id="slug" name="slug" value={values.slug} required pattern="[a-z0-9]+(-[a-z0-9]+)*" class="input font-mono" aria-describedby="slug-hint" />
+        <p id="slug-hint" class="mt-1 text-xs text-muted">{t('admin.common.slugHint')}</p>
+      </div>
+      <div>
+        <label for="brand" class="label">{t('admin.products.brand')}</label>
+        <input id="brand" name="brand" value={values.brand} maxlength={80} class="input" />
+      </div>
+      <div>
+        <label for="category_id" class="label">{t('admin.products.category')}</label>
+        <CategorySelect id="category_id" name="category_id" categories={categories} selected={values.category_id} emptyLabel={t('admin.common.none')} />
+      </div>
+    </div>
+    <TextsFields texts={values.texts} />
+    <div class="flex gap-3">
+      <button class="btn-primary">{t('admin.common.create')}</button>
+      <a href="/admin/products" class="btn-secondary">{t('admin.common.cancel')}</a>
+    </div>
+  </form>
+</AdminLayout>

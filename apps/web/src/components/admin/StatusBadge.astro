@@ -1,0 +1,19 @@
+---
+import { useTranslations } from '../../i18n';
+
+interface Props {
+  status: 'draft' | 'active' | 'archived';
+}
+
+const { status } = Astro.props;
+const t = useTranslations('es');
+const styles = {
+  draft: 'bg-amber-50 text-amber-800 ring-amber-200',
+  active: 'bg-emerald-50 text-emerald-800 ring-emerald-200',
+  archived: 'bg-slate-100 text-slate-700 ring-slate-200',
+};
+---
+
+<span class:list={['inline-flex rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset', styles[status]]}>
+  {t(`admin.status.${status}`)}
+</span>

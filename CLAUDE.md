@@ -1,0 +1,250 @@
+# Duradent — tienda B2B de ortodoncia
+
+Monorepo de la tienda online de Duradent SAC (Perú). Clientes: odontólogos y clínicas.
+Plan completo y modelo de datos: ver `docs/plan.md`.
+
+@AGENTS.md
+
+## Estructura
+
+```
+apps/web/          Astro 7 SSR (adapter node standalone): tienda + /admin
+services/api/      Go: un binario `duradent` con modos api | worker | outbox-relay | migrate | seed
+                   (internal/wiring arma la app; internal/apitest la prueba end-to-end)
+infra/local/       Init de LocalStack (SNS, SQS+DLQ, S3) para docker compose
+infra/terraform/   AWS (Fase 6)
+Taskfile.yml       Todos los comandos
+```
+
+## Comandos
+
+Requisitos: Go 1.27, Node 24, Docker Desktop, `task` y `golangci-lint`
+(`go install github.com/go-task/task/v3/cmd/task@latest`,
+`go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest`).
+
+| Qué | Comando |
+|---|---|
+| Levantar todo | `task up` (o `docker compose up -d --build`) |
+| Estado / logs | `task ps`, `task logs -- api` |
+| Parar / borrar datos | `task down`, `task reset` |
+| Lint completo | `task lint` |
+| Tests completos (necesita Docker) | `task test` |
+| Tests unitarios rápidos | `task api:test:unit` |
+| Un test Go | `cd services/api && go test ./internal/platform/mysql -run TestMigrate` |
+| Migrar BD local | `task migrate` |
+| Cargar catálogo demo | `task seed` (20 productos, 53 variantes, 3 listas; se salta si ya hay datos) |
+| Recargar demo desde cero | `task reset && task up` |
+| Tests web (Vitest) | `task web:test` |
+| Regenerar tipos TS del API | `task web:gen-api` (después de editar `services/api/openapi.yaml`) |
+
+URLs locales: web http://localhost:4321 · API http://localhost:8080 (`/healthz`, `/readyz`, `/metrics`) ·
+Mailpit http://localhost:8025 · LocalStack http://localhost:4566 · MySQL `localhost:3307` (duradent/duradent; cambia con `MYSQL_HOST_PORT`).
+
+El servidor de desarrollo de Astro fuera de Docker: `astro dev --background` (ver AGENTS.md).
+
+**Tienda**: `/{es|en|pt-br}`, `/…/catalog`, `/…/catalog/{categoría}`, `/…/product/{slug}`,
+`/…/cart`, `/…/checkout`, `/…/orders`, `/…/account` (login, registro, perfil). `/` redirige según
+`Accept-Language`.
+
+**Pagos en local**: sin `CULQI_SECRET_KEY` el API usa una pasarela simulada y la página del pedido
+muestra botones "Pago aprobado / Tarjeta rechazada / Yape". Con llaves sandbox de Culqi
+(`CULQI_PUBLIC_KEY=pk_test_…`, `CULQI_SECRET_KEY=sk_test_…` antes de `task up`) se abre el Culqi
+Checkout real. Webhook a configurar en CulqiPanel → Eventos → Webhooks:
+`https://<api>/v1/webhooks/culqi/<CULQI_WEBHOOK_SECRET>` (evento de cargos).
+
+**Admin**: http://localhost:4321/admin → pide iniciar sesión. En local usa el **acceso de desarrollo**
+de la página de login con `admin@duradent.local` (está en `ADMIN_EMAILS` del compose). Para scripts,
+las rutas `/v1/admin/*` del API también aceptan `Authorization: Bearer local-dev-admin-token`.
+
+**Google / Microsoft en local**: exporta `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` (o los de
+Microsoft) antes de `task up`; redirect URI a registrar: `http://localhost:4321/auth/<google|microsoft>/callback`.
+
+## Arquitectura del backend (hexagonal)
+
+Cada bounded context vive en `services/api/internal/<context>/` con cuatro capas:
+
+- `domain/` — entidades, value objects, eventos, errores. **Solo stdlib** (y `internal/kernel`).
+- `application/` — casos de uso. Usa `domain` y `ports`. Nunca `adapters` ni `internal/platform`.
+- `ports/` — interfaces (repositorios, gateways, publicadores). Usa `domain`.
+- `adapters/` — implementaciones: `mysql/`, `http/`, `culqi/`, `nubefact/`, `ses/`, `sqs/`…
+
+Ningún contexto importa `domain`, `application` o `adapters` de otro: se comunican por **eventos**
+o a través de los `ports` del otro. `internal/platform/` es infraestructura compartida
+(config, logging, httpserver, mysql, outbox). `internal/kernel/` es para tipos de dominio
+compartidos sin infraestructura: `id` (UUIDv7), `money` (céntimos `int64`, nunca float),
+`locale` (es, en, pt-br) y `apperr` (errores tipados Invalid/NotFound/Conflict con código estable).
+
+Estas reglas las verifica `internal/archtest` en cada `go test`. Si falla, corrige la dependencia;
+no relajes la regla sin registrar la decisión abajo.
+
+Contextos implementados: **catalog** (productos, variantes, categorías, atributos, imágenes en S3),
+**pricing** (listas de precios con tramos por volumen), **identity** (cuentas, OIDC Google/Microsoft,
+contraseña Argon2id, sesiones, perfil de facturación RUC/DNI/CE, direcciones, roles), **inventory**
+(stock, reservas por pedido, movimientos), **shipping** (zonas Lima/Provincias/Recojo y tarifas por
+peso), **orders** (carrito, pedidos, pagos Culqi y transferencia, reembolsos),
+**notifications** (correos transaccionales es/en/pt-br por SMTP/Mailpit o SES, `email_log`) e
+**invoicing** (facturas, boletas y notas de crédito SUNAT vía Nubefact, series correlativas).
+
+**Composición**: `internal/wiring` construye todos los contextos y monta las rutas; lo usan
+`cmd/duradent` y `internal/apitest`, así los tests ejercitan exactamente el mismo cableado. Los
+*bridges* de `wiring/bridges.go` y `wiring/event_bridges.go` implementan los ports de `orders`,
+`notifications`, `invoicing` e `identity` sobre los servicios de los otros contextos: es el único lugar
+donde los contextos se tocan.
+
+**Eventos**: `outbox-relay` publica las filas del outbox en SNS (`platform/outbox.Relay`, lotes de 50
+con `FOR UPDATE SKIP LOCKED`, backoff exponencial hasta 10 min por fila fallida). El `worker` consume
+una cola SQS por contexto (`platform/messaging.Consumer`: long polling, idempotencia por
+`processed_messages`, error → reintento y DLQ tras 5 recepciones). Cada contexto declara los tipos que
+consume (`notifications/application.Events`, `invoicing/application.Events`), que deben coincidir con las
+filter policies de `infra/local/localstack/init-aws.sh` (y de Terraform). El worker además corre cada
+minuto la expiración de pedidos impagos y el reintento de comprobantes pendientes.
+
+**Ver correos y eventos en local**: Mailpit http://localhost:8025 recibe todos los correos. Comprobantes
+simulados salvo que exportes `NUBEFACT_URL`/`NUBEFACT_TOKEN` (cuenta demo de Nubefact). Clientes con
+"rechazo" en la razón social simulan un rechazo del OSE. Colas:
+`docker compose exec localstack awslocal sqs get-queue-attributes --queue-url http://localhost:4566/000000000000/duradent-notifications-dlq --attribute-names ApproximateNumberOfMessages`.
+
+**Unidad de trabajo**: `platform/mysql.UnitOfWork.InTx` deja la transacción en el `context`; los
+repositorios usan `mysql.Conn(ctx, db)`, así un pedido, su reserva de stock y su evento en el outbox
+se confirman juntos sin que un contexto conozca al otro. Eventos: `platform/outbox.Writer.Record`.
+
+**Autenticación**: `internal/platform/auth` resuelve `Authorization: Session <token>` en cada request y
+deja un `auth.Principal` (cuenta, rol, lista de precios) en el contexto. `auth.RequireUser` y
+`auth.RequireAdmin(ADMIN_TOKEN)` protegen rutas. Los contextos leen el principal del contexto, nunca
+importan identity. La web guarda el token en la cookie httpOnly `dd_session` y lo reenvía desde
+`Astro.locals.api` (cliente por request creado en `middleware.ts`), junto con la IP del cliente.
+
+`internal/apitest` prueba la API completa por HTTP contra MySQL real (S3, Culqi, correo y Nubefact
+simulados); `drain` hace de relay + worker para probar los consumidores. `platform/messaging` tiene un
+test con LocalStack real (outbox → SNS con filtro → SQS → consumidor, reintento y duplicados).
+
+## Convenciones
+
+- **Go**: `log/slog` JSON con `request_id`; errores con `%w`; `context.Context` como primer
+  argumento; sin ORM (SQL explícito en adapters). Formato con `task api:fmt`.
+- **Tests**: unitarios en `domain`/`application` con fakes de los ports. Integración en adapters
+  con `internal/platform/mysqltest.Start(t)` (testcontainers, MySQL 8.4). `go test -short`
+  salta los de integración.
+- **SQL**: migraciones en `services/api/migrations/NNNN_nombre.{up,down}.sql`, embebidas en el
+  binario. IDs `BINARY(16)` UUIDv7, fechas `DATETIME(6)` UTC, dinero `DECIMAL(12,2)` + `currency CHAR(3)`.
+- **API**: el contrato es `services/api/openapi.yaml`. Errores en formato RFC 9457 (`Problem`)
+  con `code` estable (`catalog.sku_taken`). Dinero en JSON como string decimal (`"85.00"`).
+  CI falla si `apps/web/src/lib/api/schema.d.ts` no está regenerado.
+- **Errores de dominio**: devuelve `apperr.Invalid/NotFound/Conflict(code, field, msg)`; el HTTP los
+  mapea a 422/404/409. Al añadir un código nuevo, tradúcelo: errores que ve el cliente en
+  `messages/{es,en,pt-br}.json` → `codes.<contexto>.<código>`; errores del panel en `es.json` →
+  `admin.errors`. La web nunca muestra el mensaje en inglés del API.
+- **Web**: textos siempre en `src/i18n/messages/{es,en,pt-br}.json`, nunca en el markup. `es` es la
+  referencia; un test falla si en/pt-br no traducen todas las claves de la tienda (el admin
+  solo existe en español). Islas (Preact) solo donde haya interacción; reciben los textos ya
+  traducidos por props. Las páginas llaman al API solo desde el servidor (`src/lib/api/client.ts`);
+  el navegador nunca ve el token de admin. Variables del servidor vía `astro:env/server`.
+- **Formularios del admin**: HTML normal con Post/Redirect/Get (`intent` para varias acciones en una
+  página); funcionan sin JS. Astro rechaza POST de formularios de otro origen (checkOrigin).
+- **Accesibilidad**: contraste AA en los tokens de `global.css`, foco visible, `label` en cada
+  campo, `aria-live` en resultados y precios, `fieldset/legend` por idioma.
+- **Config**: solo variables de entorno (`internal/platform/config`). En AWS los secretos llegan
+  desde Secrets Manager al entorno de la tarea ECS. Nunca credenciales en el repo.
+- **Commits**: una fase o un cambio coherente por commit; ramas `fase-N-…`.
+
+## Decisiones de arquitectura (ADR)
+
+1. **Pagos con Culqi, no Stripe.** Stripe no acepta comercios constituidos en Perú. Culqi cubre
+   tarjetas y Yape en PEN/USD. El puerto `PaymentGateway` permite añadir Stripe si existe una
+   entidad extranjera. Además, transferencia bancaria con confirmación manual en el admin.
+2. **B2B con listas de precios por cliente.** Se pide RUC/COP en la cuenta, no bloquea la compra.
+   Factura (01) con RUC, boleta (03) sin él.
+3. **Monolito modular.** Un binario y una imagen; ECS ejecuta `api`, `worker` y `outbox-relay`
+   como servicios separados. Partir en microservicios solo si un contexto necesita escalar o
+   desplegarse aparte.
+4. **SNS + SQS como bus, no NATS.** Equipo de 1-2 personas: servicio gestionado, DLQ nativa,
+   IAM, sin clúster que operar. Un topic `duradent-domain-events`, una cola + DLQ por contexto
+   consumidor (`maxReceiveCount=5`). Local: LocalStack.
+5. **Transactional outbox en MySQL.** El cambio de estado y el evento se escriben en la misma
+   transacción (`outbox`); `outbox-relay` los publica. Consumidores idempotentes vía
+   `processed_messages (consumer, message_id)`.
+6. **SES para correo transaccional.** WorkMail es hosting de buzones (IMAP/calendario), no un
+   servicio de envío programático; queda para `ventas@`, `soporte@`. Local: Mailpit.
+7. **SUNAT vía OSE/PSE (Nubefact)**, no integración directa con SUNAT.
+8. **Brasil y LATAM: solo idioma** en la primera versión. Envíos solo a Perú por zonas.
+9. **Taskfile en lugar de Makefile**: el equipo desarrolla en Windows.
+10. **`openapi-typescript` por `npx` con versión fija**: declara peer TypeScript 5 y la web usa 6;
+    es solo una herramienta de generación, no una dependencia del bundle.
+11. **Variantes archivadas, nunca borradas**: precios, stock y pedidos las referencian.
+12. **Las listas de precios de cliente son confidenciales**: `/v1/pricing/quotes` solo usa la lista
+    predeterminada; desde la fase 3 la lista sale de la sesión, nunca de un parámetro.
+13. **Precios sin IGV**: se muestran y guardan sin IGV; el pedido (fase 4) suma el 18 %.
+    (Supuesto razonable para B2B en Perú; confirmar con Duradent.)
+14. **Imágenes directas a S3** con URL prefirmada (PUT); el API nunca recibe los bytes.
+15. **i18n manual** (`/[locale]/…` + middleware) en lugar del routing i18n de Astro, para que
+    `/admin` y `/api` queden fuera del prefijo de idioma.
+16. **Admin por rol de sesión** (fase 3). `ADMIN_TOKEN` queda solo para automatización.
+17. **Sesiones opacas en MySQL**, no JWT: se pueden revocar (logout, recuperación de cuenta) y solo se
+    guarda su SHA-256. 30 días.
+18. **Admins por `ADMIN_EMAILS` con correo verificado**: un registro con contraseña (correo sin
+    verificar) nunca da admin. Si alguien verifica un correo por Google/Microsoft y ya existía una
+    cuenta sin verificar con ese correo, se le quita la contraseña y se cierran sus sesiones
+    (evita que quien registró el correo ajeno conserve acceso).
+19. **Microsoft**: su `email` no viene verificado salvo cuentas personales (tenant de consumidores) o
+    el claim opcional `xms_edov`; el resto se trata como no verificado.
+20. **`DEV_LOGIN` solo con `APP_ENV=local`** (la config falla si se activa en otro entorno).
+21. **Rate limiting en memoria** por IP (20/min en endpoints de login) y por correo (5/min en login).
+    Con N tareas el límite efectivo es N veces mayor; aceptable a esta escala.
+22. **La redirect URI de OIDC sale de `WEB_BASE_URL`**, nunca del request; el `state` es de un solo uso
+    (fila borrada en la misma transacción) y además va atado al navegador con la cookie `dd_oauth_state`.
+23. **Pagos dentro del contexto `orders`**: el ciclo de vida del pago está atado al pedido; Culqi queda
+    detrás del port `PaymentGateway` (adaptadores `culqi` y `fakegateway`).
+24. **Cobro en tres pasos**: transacción corta que marca el cargo "en vuelo" (`charging_until`, 90 s),
+    llamada a Culqi fuera de transacción, y transacción que confirma o registra el rechazo. Si la
+    respuesta de Culqi se pierde, el pedido queda en "verificando" y el webhook lo concilia; el
+    cliente no puede cobrar dos veces mientras tanto.
+25. **Webhook de Culqi sin firma**: Culqi no firma sus webhooks. La URL lleva un secreto y el API
+    vuelve a leer el cargo en Culqi (`GET /v2/charges/{id}`) antes de cambiar nada. Un cargo
+    confirmado se registra una sola vez (`payments.confirmed_ref` único), así las repeticiones no dañan.
+26. **3-D Secure**: un cargo que Culqi devuelve con `action_code: REVIEW` se trata como no pagado
+    (`3ds_required`). Integrar Culqi 3DS queda pendiente si los rechazos lo justifican.
+27. **Stock reservado al crear el pedido** (misma transacción) y vendido al pagar. Pedidos sin pagar
+    se cancelan solos: 2 h con Culqi, 48 h con transferencia (job del `worker` cada minuto). Las filas
+    de stock se bloquean en orden de `variant_id` para evitar deadlocks.
+28. **IGV 18 % sobre productos + envío**, redondeo al céntimo hacia arriba en la mitad. Los precios se
+    guardan y muestran sin IGV.
+29. **Idempotency-Key en `POST /v1/orders`**: la web genera una por carga del checkout; reintentos o
+    doble clic devuelven el mismo pedido.
+30. **Pedidos pagados se cancelan con reembolso** (admin, `POST /v1/admin/orders/{id}/refund`): pagados o
+    en preparación, nunca enviados. Culqi: `POST /v2/refunds` fuera de la transacción (un segundo intento
+    lo rechaza Culqi). Transferencia: devolución manual y el admin anota el n.º de operación. El stock
+    vuelve al inventario (reservas `returned`, movimiento `return`) y `OrderRefunded` dispara la nota de
+    crédito y el correo. Un pago que llegó tras la expiración del pedido también se puede reembolsar.
+31. **Yape**: solo PEN y hasta S/ 2 000 por pago (límite de Culqi); se valida antes de cobrar.
+32. **Solo consumen eventos `notifications` e `invoicing`**. Inventario y pagos se coordinan de forma
+    síncrona dentro de la transacción del pedido (ports); las colas `orders`, `inventory` y `payments`
+    del plan no se crean hasta que un consumidor las necesite.
+33. **Entrega al menos una vez**: el relay puede publicar dos veces (si muere entre publicar y marcar) y
+    el consumidor registra el mensaje después de su efecto. Por eso cada efecto externo es idempotente
+    por su cuenta: `email_log` único por (evento, tipo, destinatario) y comprobantes únicos por
+    (pedido, tipo).
+34. **Comprobantes: número antes de llamar al OSE.** La serie se incrementa en la misma transacción que
+    crea la fila `pending`; un reintento envía el mismo número. Si Nubefact responde "ya existe"
+    (código 23) se consulta con `consultar_comprobante`. Errores de datos → `rejected` + alerta a
+    `OPS_EMAILS` + botón "Reintentar" en el admin; errores de red → reintento (SQS y job cada minuto,
+    máx. 10 intentos).
+35. **Factura si el cliente pidió factura con RUC; si no, boleta.** Series por defecto F001/B001 y notas
+    de crédito FC01/BC01 (`INVOICE_SERIES_*`). El IGV se calcula por línea y la diferencia de redondeo
+    va a la línea mayor, así las líneas suman exactamente el IGV cobrado. El envío va como línea de
+    servicio (`ZZ`). Pedidos en USD usan `USD_EXCHANGE_RATE` (la SUNAT pide el tipo de cambio SBS del
+    día: operaciones debe actualizarlo; automatizarlo queda pendiente).
+36. **El enlace de verificación de correo no viaja por el bus**: identity lo envía en el momento a través
+    del mailer de notifications (bridge). Token aleatorio de 32 bytes, solo se guarda su SHA-256, vale
+    24 h, un uso, máx. 3 envíos por hora. La página `/…/account/verify` confirma con POST (los escáneres
+    de enlaces del correo no lo consumen). Verificar un correo listado en `ADMIN_EMAILS` da admin.
+37. **`CustomerRegistered` en la misma transacción que la cuenta** (`Accounts.Create` se une a la unidad
+    de trabajo).
+
+## Estado por fases
+
+- [x] Fase 1 — monorepo, Compose, CI
+- [x] Fase 2 — catálogo, pricing, frontend i18n, admin de catálogo
+- [x] Fase 3 — identidad (Google, Microsoft, email)
+- [x] Fase 4 — carrito, envíos, pedidos, pagos Culqi + transferencia
+- [x] Fase 5 — outbox relay, worker, emails, facturación SUNAT, reembolsos, verificación de correo
+- [ ] Fase 6 — Terraform, ALB, ECS, despliegue

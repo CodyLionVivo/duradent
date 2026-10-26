@@ -1,0 +1,40 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: standard # errcheck, govet, ineffassign, staticcheck, unused
+  enable:
+    - bodyclose
+    - errorlint
+    - gocritic
+    - gosec
+    - noctx
+    - sqlclosecheck
+    - rowserrcheck
+    - unconvert
+    - usestdlibvars
+  settings:
+    gosec:
+      excludes:
+        - G104 # covered by errcheck
+        # Dynamic SQL in adapters only concatenates "?, ?" placeholder lists
+        # (mysql.Placeholders) and constant table names; values are always bound.
+        - G201
+        - G202
+  exclusions:
+    presets:
+      - std-error-handling
+    rules:
+      - path: _test\.go
+        linters: [gosec, noctx]
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/CodyLionVivo/duradent

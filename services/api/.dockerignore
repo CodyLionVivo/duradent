@@ -1,0 +1,4 @@
+tmp
+*.test
+coverage.out
+.env

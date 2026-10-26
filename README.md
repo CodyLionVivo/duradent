@@ -1,46 +1,17 @@
-# Astro Starter Kit: Basics
+# Duradent — tienda online
 
-```sh
-npm create astro@latest -- --template basics
+Tienda B2B de productos de ortodoncia de Duradent SAC (Perú).
+
+- `apps/web` — Astro 7 SSR (tienda y panel admin), i18n es / en / pt-BR
+- `services/api` — backend Go, arquitectura hexagonal, eventos con outbox + SNS/SQS
+- `infra/` — LocalStack para desarrollo y Terraform para AWS
+
+## Empezar
+
+```bash
+docker compose up -d --build
 ```
 
-> 🧑‍🚀 **Seasoned astronaut?** Delete this file. Have fun!
+Web en http://localhost:4321, API en http://localhost:8080/healthz, correos en http://localhost:8025.
 
-## 🚀 Project Structure
-
-Inside of your Astro project, you'll see the following folders and files:
-
-```text
-/
-├── public/
-│   └── favicon.svg
-├── src
-│   ├── assets
-│   │   └── astro.svg
-│   ├── components
-│   │   └── Welcome.astro
-│   ├── layouts
-│   │   └── Layout.astro
-│   └── pages
-│       └── index.astro
-└── package.json
-```
-
-To learn more about the folder structure of an Astro project, refer to [our guide on project structure](https://docs.astro.build/en/basics/project-structure/).
-
-## 🧞 Commands
-
-All commands are run from the root of the project, from a terminal:
-
-| Command                   | Action                                           |
-| :------------------------ | :----------------------------------------------- |
-| `npm install`             | Installs dependencies                            |
-| `npm run dev`             | Starts local dev server at `localhost:4321`      |
-| `npm run build`           | Build your production site to `./dist/`          |
-| `npm run preview`         | Preview your build locally, before deploying     |
-| `npm run astro ...`       | Run CLI commands like `astro add`, `astro check` |
-| `npm run astro -- --help` | Get help using the Astro CLI                     |
-
-## 👀 Want to learn more?
-
-Feel free to check [our documentation](https://docs.astro.build) or jump into our [Discord server](https://astro.build/chat).
+Comandos, convenciones y decisiones de arquitectura: [CLAUDE.md](CLAUDE.md). Plan del proyecto: [docs/plan.md](docs/plan.md).

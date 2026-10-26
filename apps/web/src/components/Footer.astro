@@ -1,0 +1,45 @@
+---
+import Logo from './Logo.astro';
+import { localePath, useTranslations } from '../i18n';
+import { getCategories, topLevel, type Category } from '../lib/catalog';
+
+const { locale } = Astro.locals;
+const t = useTranslations(locale);
+const year = new Date().getFullYear();
+
+let categories: Category[] = [];
+try {
+  categories = topLevel(await getCategories(Astro.locals.api, locale)).slice(0, 5);
+} catch {
+  // Footer renders without category links if the API is down.
+}
+---
+
+<footer class="mt-20 border-t border-line bg-surface">
+  <div class="container-page grid gap-10 py-12 sm:grid-cols-2 lg:grid-cols-4">
+    <div class="lg:col-span-2">
+      <Logo />
+      <p class="mt-3 max-w-sm text-sm text-muted">{t('footer.tagline')}</p>
+    </div>
+    <div>
+      <h2 class="text-sm font-semibold text-ink">{t('footer.shop')}</h2>
+      <ul class="mt-3 space-y-2 text-sm text-muted" role="list">
+        <li><a class="hover:text-brand-700" href={localePath(locale, '/catalog')}>{t('nav.catalog')}</a></li>
+        {categories.map((c) => (
+          <li><a class="hover:text-brand-700" href={localePath(locale, `/catalog/${c.slug}`)}>{c.name}</a></li>
+        ))}
+      </ul>
+    </div>
+    <div>
+      <h2 class="text-sm font-semibold text-ink">{t('footer.help')}</h2>
+      <ul class="mt-3 space-y-2 text-sm text-muted" role="list">
+        <li>{t('footer.shipping')}</li>
+        <li>{t('footer.invoicing')}</li>
+        <li>{t('footer.contact')}</li>
+      </ul>
+    </div>
+  </div>
+  <div class="border-t border-line">
+    <p class="container-page py-5 text-xs text-muted">© {year} {t('footer.company')}. {t('footer.rights')}</p>
+  </div>
+</footer>

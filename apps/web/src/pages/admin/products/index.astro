@@ -1,0 +1,85 @@
+---
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+import StatusBadge from '../../../components/admin/StatusBadge.astro';
+import Pagination from '../../../components/Pagination.astro';
+import { unwrap } from '../../../lib/api/client';
+import { errorMessage } from '../../../lib/admin';
+import { formatDate, useTranslations } from '../../../i18n';
+
+const adminApi = Astro.locals.api;
+
+const t = useTranslations('es');
+const PAGE_SIZE = 50;
+const q = Astro.url.searchParams.get('q') ?? '';
+const statusParam = Astro.url.searchParams.get('status') ?? '';
+const status = (['draft', 'active', 'archived'] as const).find((s) => s === statusParam);
+const page = Math.max(1, Number.parseInt(Astro.url.searchParams.get('page') ?? '1', 10) || 1);
+
+let error = '';
+let data = { items: [] as Array<{ id: string; slug: string; name: string; brand: string; status: 'draft' | 'active' | 'archived'; variant_count: number; updated_at: string }>, total: 0 };
+try {
+  data = unwrap(await adminApi.GET('/v1/admin/catalog/products', { params: { query: { q: q || undefined, status, page, page_size: PAGE_SIZE } } }));
+} catch (err) {
+  error = errorMessage(err);
+}
+const filters = [
+  { value: '', label: t('admin.status.all') },
+  { value: 'active', label: t('admin.status.active') },
+  { value: 'draft', label: t('admin.status.draft') },
+  { value: 'archived', label: t('admin.status.archived') },
+];
+---
+
+<AdminLayout title={t('admin.products.title')} error={error}>
+  <div class="flex flex-wrap items-end justify-between gap-4">
+    <form method="get" class="flex flex-wrap items-end gap-2">
+      <div>
+        <label for="q" class="label">{t('admin.common.search')}</label>
+        <input id="q" name="q" type="search" value={q} class="input w-64" />
+      </div>
+      <div>
+        <label for="status" class="label">{t('admin.products.status')}</label>
+        <select id="status" name="status" class="input">
+          {filters.map((f) => <option value={f.value} selected={f.value === statusParam}>{f.label}</option>)}
+        </select>
+      </div>
+      <button class="btn-secondary">{t('admin.common.search')}</button>
+    </form>
+    <a href="/admin/products/new" class="btn-primary">+ {t('admin.products.new')}</a>
+  </div>
+
+  <p class="mt-4 text-sm text-muted">{t('admin.products.count', { count: data.total })}</p>
+
+  {data.items.length === 0 ? (
+    <p class="card mt-4 p-8 text-center text-muted">{t('admin.products.empty')}</p>
+  ) : (
+    <div class="card mt-4 overflow-x-auto">
+      <table class="w-full min-w-[40rem] text-sm">
+        <thead class="bg-surface text-left text-xs uppercase tracking-wide text-muted">
+          <tr>
+            <th scope="col" class="px-4 py-3 font-semibold">{t('admin.common.name')}</th>
+            <th scope="col" class="px-4 py-3 font-semibold">{t('admin.products.brand')}</th>
+            <th scope="col" class="px-4 py-3 font-semibold">{t('admin.products.status')}</th>
+            <th scope="col" class="px-4 py-3 text-right font-semibold">{t('admin.products.variants')}</th>
+            <th scope="col" class="px-4 py-3 font-semibold">{t('admin.common.updated')}</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-line">
+          {data.items.map((p) => (
+            <tr class="hover:bg-surface/60">
+              <td class="px-4 py-3">
+                <a href={`/admin/products/${p.id}`} class="font-medium text-brand-800 hover:underline">{p.name}</a>
+                <p class="font-mono text-xs text-muted">{p.slug}</p>
+              </td>
+              <td class="px-4 py-3 text-muted">{p.brand}</td>
+              <td class="px-4 py-3"><StatusBadge status={p.status} /></td>
+              <td class="px-4 py-3 text-right tabular-nums">{p.variant_count}</td>
+              <td class="px-4 py-3 text-muted">{formatDate(p.updated_at, 'es')}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )}
+  <Pagination page={page} pageSize={PAGE_SIZE} total={data.total} />
+</AdminLayout>

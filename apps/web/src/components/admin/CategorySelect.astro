@@ -1,0 +1,33 @@
+---
+// <select> of categories, indented by depth.
+import type { Schemas } from '../../lib/api/client';
+
+type AdminCategory = Schemas['AdminCategory'];
+
+interface Props {
+  id: string;
+  name: string;
+  categories: AdminCategory[];
+  selected?: string | null;
+  emptyLabel: string;
+  /** Category to leave out (and its subtree), e.g. when choosing a parent. */
+  exclude?: string;
+}
+
+const { id, name, categories, selected, emptyLabel, exclude } = Astro.props;
+
+function flatten(parent: string | null, depth: number): { c: AdminCategory; depth: number }[] {
+  return categories
+    .filter((c) => c.parent_id === parent && c.id !== exclude)
+    .sort((a, b) => a.sort_order - b.sort_order)
+    .flatMap((c) => [{ c, depth }, ...flatten(c.id, depth + 1)]);
+}
+const options = flatten(null, 0);
+---
+
+<select id={id} name={name} class="input">
+  <option value="">{emptyLabel}</option>
+  {options.map(({ c, depth }) => (
+    <option value={c.id} selected={c.id === selected}>{'  '.repeat(depth)}{depth > 0 ? '└ ' : ''}{c.texts.es?.name ?? c.slug}</option>
+  ))}
+</select>

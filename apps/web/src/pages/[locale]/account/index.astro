@@ -1,0 +1,285 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import { LOCALES, LOCALE_NAMES, isLocale, localePath, useTranslations } from '../../../i18n';
+import { ApiError, unwrap, type Schemas } from '../../../lib/api/client';
+import { DEPARTMENTS, apiErrorText, departmentName } from '../../../lib/account';
+
+if (!isLocale(Astro.params.locale)) return new Response(null, { status: 404 });
+
+const { locale, api, user } = Astro.locals;
+const t = useTranslations(locale);
+const here = localePath(locale, '/account');
+if (!user) return Astro.redirect(`${localePath(locale, '/account/login')}?next=${encodeURIComponent(here)}`, 302);
+
+type Section = 'profile' | 'billing' | 'addresses' | 'password' | 'verify';
+let error: { section: Section; text: string } | null = null;
+let formValues: Record<string, string> = {};
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const v = (k: string) => String(form.get(k) ?? '').trim();
+  formValues = Object.fromEntries([...form.entries()].map(([k, val]) => [k, String(val)]));
+  const intent = v('intent');
+  const section: Section =
+    intent === 'customer' ? 'billing' : intent === 'password' ? 'password' : intent === 'profile' ? 'profile'
+      : intent === 'resend_verification' ? 'verify' : 'addresses';
+  try {
+    switch (intent) {
+      case 'profile':
+        unwrap(await api.PUT('/v1/me', { body: { display_name: v('display_name'), locale: v('locale') as 'es' } }));
+        break;
+      case 'customer':
+        unwrap(await api.PUT('/v1/me/customer', {
+          body: {
+            type: v('type') as 'persona', document_type: v('document_type') as 'DNI', document_number: v('document_number'),
+            business_name: v('business_name'), cop_number: v('cop_number'), phone: v('phone'),
+          },
+        }));
+        break;
+      case 'password':
+        unwrap(await api.PUT('/v1/me/password', { body: { current_password: v('current_password'), new_password: v('new_password') } }));
+        break;
+      case 'add_address':
+        unwrap(await api.POST('/v1/me/addresses', {
+          body: {
+            label: v('label'), recipient: v('recipient'), line1: v('line1'), reference: v('reference'),
+            district: v('district'), province: v('province'), department: v('department'), phone: v('phone'),
+          },
+        }));
+        break;
+      case 'resend_verification':
+        unwrap(await api.POST('/v1/me/verify-email'));
+        break;
+      case 'remove_address':
+        unwrap(await api.DELETE('/v1/me/addresses/{id}', { params: { path: { id: v('address_id') } } }));
+        break;
+      case 'default_address':
+        unwrap(await api.POST('/v1/me/addresses/{id}/default', { params: { path: { id: v('address_id') } } }));
+        break;
+    }
+    return Astro.redirect(`${here}?saved=${section}#${section}`, 303);
+  } catch (err) {
+    error = { section, text: apiErrorText(t, err) };
+    Astro.response.status = err instanceof ApiError ? err.status : 500;
+  }
+}
+
+let me: { account: Schemas['Account']; customer?: Schemas['Customer'] | null; addresses: Schemas['Address'][] } | null = null;
+try {
+  me = unwrap(await api.GET('/v1/me'));
+} catch {
+  // Rendered below as a generic error.
+}
+const saved = Astro.url.searchParams.get('saved');
+const c = me?.customer;
+const val = (k: string, fallback = '') => formValues[k] ?? fallback;
+const notice = (s: Section) =>
+  error?.section === s
+    ? { kind: 'error', text: error.text }
+    : saved === s
+      ? { kind: 'ok', text: t('account.profile.saved') }
+      : null;
+---
+
+<Layout title={t('account.title')}>
+  <div class="container-page py-10">
+    <div class="flex flex-wrap items-end justify-between gap-4">
+      <div>
+        <p class="text-sm text-muted">{t('account.title')}</p>
+        <h1 class="text-3xl font-bold tracking-tight">{t('account.profile.greeting', { name: user.display_name })}</h1>
+      </div>
+      <div class="flex gap-2">
+        <a href={localePath(locale, '/orders')} class="btn-secondary">{t('orders.title')}</a>
+        <form method="post" action={localePath(locale, '/account/logout')}>
+          <button class="btn-secondary">{t('account.signOut')}</button>
+        </form>
+      </div>
+    </div>
+
+    {me && !me.account.email_verified && (
+      <div id="verify" class="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <p>{saved === 'verify' ? t('account.verify.resent') : t('account.verify.pending', { email: me.account.email })}</p>
+        {error?.section === 'verify' && <p role="alert" class="w-full text-red-800">{error.text}</p>}
+        <form method="post"><input type="hidden" name="intent" value="resend_verification" /><button class="btn-secondary">{t('account.verify.resend')}</button></form>
+      </div>
+    )}
+    {c?.price_list_code && (
+      <p class="mt-4 rounded-lg border border-brand-200 bg-brand-50 px-4 py-3 text-sm text-brand-900">{t('account.profile.clinicPrices', { list: c.price_list_code })}</p>
+    )}
+    {!me && <p role="alert" class="mt-6 text-red-700">{t('account.errors.generic')}</p>}
+
+    {me && (
+      <div class="mt-8 grid gap-6 lg:grid-cols-2">
+        <section id="profile" class="card p-6" aria-labelledby="profile-title">
+          <h2 id="profile-title" class="text-lg font-semibold">{t('account.profile.details')}</h2>
+          {notice('profile') && <p role={notice('profile')!.kind === 'error' ? 'alert' : 'status'} class:list={['mt-3 text-sm', notice('profile')!.kind === 'error' ? 'text-red-700' : 'text-brand-800']}>{notice('profile')!.text}</p>}
+          <form method="post" class="mt-4 space-y-4">
+            <input type="hidden" name="intent" value="profile" />
+            <div>
+              <label class="label" for="display_name">{t('account.profile.displayName')}</label>
+              <input id="display_name" name="display_name" value={val('display_name', me.account.display_name)} maxlength={120} class="input" autocomplete="name" />
+            </div>
+            <div>
+              <p class="label">{t('account.profile.email')}</p>
+              <p class="text-sm text-ink">{me.account.email}</p>
+              {!me.account.email_verified && <p class="mt-1 text-xs text-muted">{t('account.profile.unverified')}</p>}
+            </div>
+            <div>
+              <label class="label" for="locale">{t('account.profile.language')}</label>
+              <select id="locale" name="locale" class="input">
+                {LOCALES.map((l) => <option value={l} selected={l === me!.account.locale}>{LOCALE_NAMES[l]}</option>)}
+              </select>
+            </div>
+            <button class="btn-primary">{t('account.profile.save')}</button>
+          </form>
+        </section>
+
+        <section id="billing" class="card p-6" aria-labelledby="billing-title">
+          <h2 id="billing-title" class="text-lg font-semibold">{t('account.billing.title')}</h2>
+          <p class="mt-1 text-sm text-muted">{t('account.billing.hint')}</p>
+          {!c && <p class="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">{t('account.billing.missing')}</p>}
+          {notice('billing') && <p role={notice('billing')!.kind === 'error' ? 'alert' : 'status'} class:list={['mt-3 text-sm', notice('billing')!.kind === 'error' ? 'text-red-700' : 'text-brand-800']}>{notice('billing')!.text}</p>}
+          <form method="post" class="mt-4 grid gap-4 sm:grid-cols-2">
+            <input type="hidden" name="intent" value="customer" />
+            <fieldset class="sm:col-span-2">
+              <legend class="label">{t('account.billing.type')}</legend>
+              <div class="flex flex-wrap gap-4 text-sm">
+                {(['persona', 'empresa'] as const).map((type) => (
+                  <label class="flex items-center gap-2">
+                    <input type="radio" name="type" value={type} required checked={val('type', c?.type ?? 'persona') === type} class="accent-brand-700" />
+                    {t(`account.billing.${type}`)}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+            <div>
+              <label class="label" for="document_type">{t('account.billing.documentType')}</label>
+              <select id="document_type" name="document_type" class="input">
+                {(['RUC', 'DNI', 'CE'] as const).map((d) => (
+                  <option value={d} selected={val('document_type', c?.document_type ?? 'RUC') === d}>{t(`account.billing.${d.toLowerCase() as 'ruc' | 'dni' | 'ce'}`)}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label class="label" for="document_number">{t('account.billing.documentNumber')}</label>
+              <input id="document_number" name="document_number" required inputmode="numeric" maxlength={12} value={val('document_number', c?.document_number)} class="input" />
+            </div>
+            <div class="sm:col-span-2">
+              <label class="label" for="business_name">{t('account.billing.businessName')}</label>
+              <input id="business_name" name="business_name" maxlength={200} value={val('business_name', c?.business_name)} class="input" autocomplete="organization" />
+            </div>
+            <div>
+              <label class="label" for="cop_number">{t('account.billing.cop')}</label>
+              <input id="cop_number" name="cop_number" inputmode="numeric" maxlength={6} value={val('cop_number', c?.cop_number)} class="input" aria-describedby="cop-hint" />
+              <p id="cop-hint" class="mt-1 text-xs text-muted">{t('account.billing.copHint')}</p>
+            </div>
+            <div>
+              <label class="label" for="phone">{t('account.billing.phone')}</label>
+              <input id="phone" name="phone" type="tel" maxlength={20} value={val('phone', c?.phone)} class="input" autocomplete="tel" />
+            </div>
+            {c && <p class="text-sm text-brand-800 sm:col-span-2">{c.invoice_type === '01' ? t('account.billing.invoiceFactura') : t('account.billing.invoiceBoleta')}</p>}
+            <button class="btn-primary sm:col-span-2 sm:justify-self-start">{t('account.billing.save')}</button>
+          </form>
+        </section>
+
+        <section id="addresses" class="card p-6 lg:col-span-2" aria-labelledby="addresses-title">
+          <h2 id="addresses-title" class="text-lg font-semibold">{t('account.addresses.title')}</h2>
+          {notice('addresses') && <p role={notice('addresses')!.kind === 'error' ? 'alert' : 'status'} class:list={['mt-3 text-sm', notice('addresses')!.kind === 'error' ? 'text-red-700' : 'text-brand-800']}>{notice('addresses')!.text}</p>}
+          {me.addresses.length === 0 ? (
+            <p class="mt-3 text-sm text-muted">{t('account.addresses.empty')}</p>
+          ) : (
+            <ul class="mt-4 grid gap-4 md:grid-cols-2" role="list">
+              {me.addresses.map((a) => (
+                <li class:list={['rounded-lg border p-4 text-sm', a.is_default ? 'border-brand-500 bg-brand-50/50' : 'border-line']}>
+                  <p class="font-semibold">{a.label || a.recipient}{a.is_default && <span class="ml-2 rounded bg-brand-700 px-1.5 py-0.5 text-xs font-medium text-white">{t('account.addresses.default')}</span>}</p>
+                  <address class="mt-1 not-italic text-muted">
+                    {a.recipient}<br />{a.line1}{a.reference && <><br />{a.reference}</>}<br />
+                    {a.district}, {a.province}, {departmentName(a.department)}{a.phone && <><br />{a.phone}</>}
+                  </address>
+                  <div class="mt-3 flex gap-4">
+                    {!a.is_default && (
+                      <form method="post">
+                        <input type="hidden" name="intent" value="default_address" />
+                        <input type="hidden" name="address_id" value={a.id} />
+                        <button class="text-brand-700 hover:underline">{t('account.addresses.makeDefault')}</button>
+                      </form>
+                    )}
+                    <form method="post">
+                      <input type="hidden" name="intent" value="remove_address" />
+                      <input type="hidden" name="address_id" value={a.id} />
+                      <button class="text-red-700 hover:underline">{t('account.addresses.remove')}</button>
+                    </form>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+          <details class="mt-6 rounded-lg border border-dashed border-line p-4" open={me.addresses.length === 0 || error?.section === 'addresses'}>
+            <summary class="cursor-pointer text-sm font-semibold text-brand-700">+ {t('account.addresses.add')}</summary>
+            <form method="post" class="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <input type="hidden" name="intent" value="add_address" />
+              <div>
+                <label class="label" for="a-label">{t('account.addresses.label')} <span class="font-normal text-muted">({t('account.addresses.optional')})</span></label>
+                <input id="a-label" name="label" maxlength={60} placeholder={t('account.addresses.labelHint')} value={val('label')} class="input" />
+              </div>
+              <div>
+                <label class="label" for="a-recipient">{t('account.addresses.recipient')}</label>
+                <input id="a-recipient" name="recipient" required maxlength={120} value={val('recipient', me.account.display_name)} class="input" autocomplete="name" />
+              </div>
+              <div>
+                <label class="label" for="a-phone">{t('account.addresses.phone')} <span class="font-normal text-muted">({t('account.addresses.optional')})</span></label>
+                <input id="a-phone" name="phone" type="tel" maxlength={20} value={val('phone')} class="input" autocomplete="tel" />
+              </div>
+              <div class="sm:col-span-2">
+                <label class="label" for="a-line1">{t('account.addresses.line1')}</label>
+                <input id="a-line1" name="line1" required maxlength={200} value={val('line1')} class="input" autocomplete="address-line1" />
+              </div>
+              <div>
+                <label class="label" for="a-reference">{t('account.addresses.reference')} <span class="font-normal text-muted">({t('account.addresses.optional')})</span></label>
+                <input id="a-reference" name="reference" maxlength={200} value={val('reference')} class="input" />
+              </div>
+              <div>
+                <label class="label" for="a-department">{t('account.addresses.department')}</label>
+                <select id="a-department" name="department" required class="input">
+                  <option value="">{t('account.addresses.chooseDepartment')}</option>
+                  {DEPARTMENTS.map(([code, name]) => <option value={code} selected={val('department') === code}>{name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label class="label" for="a-province">{t('account.addresses.province')}</label>
+                <input id="a-province" name="province" required maxlength={80} value={val('province')} class="input" />
+              </div>
+              <div>
+                <label class="label" for="a-district">{t('account.addresses.district')}</label>
+                <input id="a-district" name="district" required maxlength={80} value={val('district')} class="input" />
+              </div>
+              <button class="btn-primary sm:col-span-2 lg:col-span-3 sm:justify-self-start">{t('account.addresses.add')}</button>
+            </form>
+          </details>
+        </section>
+
+        <section id="password" class="card p-6" aria-labelledby="password-title">
+          <h2 id="password-title" class="text-lg font-semibold">{me.account.has_password ? t('account.password.title') : t('account.password.setTitle')}</h2>
+          {!me.account.has_password && <p class="mt-1 text-sm text-muted">{t('account.password.setHint')}</p>}
+          {notice('password') && <p role={notice('password')!.kind === 'error' ? 'alert' : 'status'} class:list={['mt-3 text-sm', notice('password')!.kind === 'error' ? 'text-red-700' : 'text-brand-800']}>{notice('password')!.text}</p>}
+          <form method="post" class="mt-4 space-y-4">
+            <input type="hidden" name="intent" value="password" />
+            <input type="hidden" name="username" value={me.account.email} autocomplete="username" />
+            {me.account.has_password && (
+              <div>
+                <label class="label" for="current_password">{t('account.password.current')}</label>
+                <input id="current_password" name="current_password" type="password" required autocomplete="current-password" class="input" />
+              </div>
+            )}
+            <div>
+              <label class="label" for="new_password">{t('account.password.new')}</label>
+              <input id="new_password" name="new_password" type="password" required minlength={10} maxlength={128} autocomplete="new-password" class="input" aria-describedby="np-hint" />
+              <p id="np-hint" class="mt-1 text-xs text-muted">{t('account.register.passwordHint')}</p>
+            </div>
+            <button class="btn-primary">{t('account.password.save')}</button>
+          </form>
+        </section>
+      </div>
+    )}
+  </div>
+</Layout>

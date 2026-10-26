@@ -1,0 +1,20 @@
+---
+import { useTranslations } from '../i18n';
+
+interface Props {
+  status: 'pending_payment' | 'paid' | 'preparing' | 'shipped' | 'delivered' | 'cancelled';
+}
+
+const { status } = Astro.props;
+const t = useTranslations(Astro.locals.locale);
+const styles: Record<Props['status'], string> = {
+  pending_payment: 'bg-amber-50 text-amber-800 ring-amber-200',
+  paid: 'bg-emerald-50 text-emerald-800 ring-emerald-200',
+  preparing: 'bg-sky-50 text-sky-800 ring-sky-200',
+  shipped: 'bg-indigo-50 text-indigo-800 ring-indigo-200',
+  delivered: 'bg-brand-50 text-brand-800 ring-brand-200',
+  cancelled: 'bg-slate-100 text-slate-700 ring-slate-200',
+};
+---
+
+<span class:list={['inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset', styles[status]]}>{t(`status.${status}`)}</span>

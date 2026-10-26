@@ -1,0 +1,143 @@
+# Local development stack. `docker compose up` brings up everything; the API
+# and web reload on file changes. See CLAUDE.md for the task shortcuts.
+name: duradent
+
+x-api-env: &api-env
+  APP_ENV: local
+  LOG_LEVEL: debug
+  MYSQL_DSN: duradent:duradent@tcp(mysql:3306)/duradent?parseTime=true&multiStatements=true
+  AWS_REGION: us-east-1
+  AWS_ACCESS_KEY_ID: test
+  AWS_SECRET_ACCESS_KEY: test
+  AWS_ENDPOINT_URL: http://localstack:4566
+  SNS_TOPIC_ARN: arn:aws:sns:us-east-1:000000000000:duradent-domain-events
+  SQS_NOTIFICATIONS_URL: http://localstack:4566/000000000000/duradent-notifications
+  SQS_INVOICING_URL: http://localstack:4566/000000000000/duradent-invoicing
+  S3_MEDIA_BUCKET: duradent-media-local
+  # Browsers reach LocalStack on localhost, the API on the compose network.
+  S3_PRESIGN_ENDPOINT: http://localhost:4566
+  MEDIA_BASE_URL: http://localhost:4566/duradent-media-local
+  # Emails land in Mailpit (http://localhost:8025). SUNAT documents are
+  # simulated unless NUBEFACT_URL and NUBEFACT_TOKEN (demo account) are set.
+  SMTP_ADDR: mailpit:1025
+  MAIL_FROM: Duradent <no-reply@duradent.local>
+  NUBEFACT_URL: ${NUBEFACT_URL:-}
+  NUBEFACT_TOKEN: ${NUBEFACT_TOKEN:-}
+  # Automation token for admin routes (scripts, curl). People use sessions.
+  ADMIN_TOKEN: local-dev-admin-token
+  # Identity (phase 3). Dev login lets you sign in locally without Google
+  # credentials; admin@duradent.local becomes admin on first sign-in.
+  WEB_BASE_URL: http://localhost:4321
+  DEV_LOGIN: "true"
+  ADMIN_EMAILS: admin@duradent.local
+  # The web BFF forwards the browser's IP in X-Forwarded-For.
+  TRUST_PROXY_HEADERS: "true"
+  # Fill these to try real sign-in locally (redirect URI: http://localhost:4321/auth/<provider>/callback)
+  GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+  GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+  MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID:-}
+  MICROSOFT_CLIENT_SECRET: ${MICROSOFT_CLIENT_SECRET:-}
+  # Payments (phase 4). Without CULQI_SECRET_KEY payments are simulated.
+  # With sandbox keys: CULQI_PUBLIC_KEY=pk_test_… CULQI_SECRET_KEY=sk_test_…
+  CULQI_PUBLIC_KEY: ${CULQI_PUBLIC_KEY:-}
+  CULQI_SECRET_KEY: ${CULQI_SECRET_KEY:-}
+  CULQI_WEBHOOK_SECRET: ${CULQI_WEBHOOK_SECRET:-local-webhook-secret-change-me}
+  BANK_DETAILS: |-
+    Banco de Crédito del Perú (BCP) · Duradent SAC · RUC 20000000000
+    Cuenta corriente soles: 000-0000000-0-00 · CCI: 002-000-000000000000-00
+    (datos de ejemplo para desarrollo)
+
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: duradent
+      MYSQL_USER: duradent
+      MYSQL_PASSWORD: duradent
+      MYSQL_ROOT_PASSWORD: root
+    ports: ["${MYSQL_HOST_PORT:-3307}:3306"] # 3306 is often taken by a local MySQL
+    volumes: [mysql-data:/var/lib/mysql]
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uduradent", "-pduradent"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  localstack:
+    image: localstack/localstack:4.9
+    environment:
+      SERVICES: sns,sqs,s3
+      AWS_DEFAULT_REGION: us-east-1
+    ports: ["4566:4566"]
+    volumes:
+      - ./infra/local/localstack/init-aws.sh:/etc/localstack/init/ready.d/init-aws.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /tmp/duradent-ready"] # written last by init-aws.sh
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  mailpit:
+    image: axllent/mailpit:v1.27
+    # Only the web UI is published. SMTP (1025) stays on the compose network:
+    # Windows reserves 1025 for Hyper-V and the API reaches it as mailpit:1025.
+    ports: ["8025:8025"]
+
+  migrate:
+    build: { context: ./services/api, target: runtime }
+    command: ["migrate"]
+    environment: *api-env
+    depends_on:
+      mysql: { condition: service_healthy }
+    restart: "no"
+
+  # Loads the demo catalog once; does nothing if data already exists.
+  seed:
+    build: { context: ./services/api, target: runtime }
+    command: ["seed"]
+    environment: *api-env
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    restart: "no"
+
+  api:
+    build: { context: ./services/api, target: dev }
+    environment: *api-env
+    ports: ["8080:8080"]
+    volumes:
+      - ./services/api:/src
+      - go-mod:/go/pkg/mod
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      localstack: { condition: service_healthy }
+
+  worker:
+    build: { context: ./services/api, target: runtime }
+    command: ["worker"]
+    environment: *api-env
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      localstack: { condition: service_healthy }
+
+  outbox-relay:
+    build: { context: ./services/api, target: runtime }
+    command: ["outbox-relay"]
+    environment: *api-env
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      localstack: { condition: service_healthy }
+
+  web:
+    build: { context: ./apps/web, target: dev }
+    environment:
+      API_URL: http://api:8080
+      VITE_POLLING: "true"
+    ports: ["4321:4321"]
+    volumes:
+      - ./apps/web:/app
+      - /app/node_modules
+    depends_on: [api]
+
+volumes:
+  mysql-data:
+  go-mod:

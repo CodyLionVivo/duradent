@@ -1,0 +1,46 @@
+---
+// Name/description inputs for every locale. Spanish is required; the other
+// languages fall back to Spanish in the store when left empty. Each language
+// is its own fieldset so screen readers announce which "Nombre" is which.
+import { LOCALES, useTranslations, type Locale } from '../../i18n';
+import type { Texts } from '../../lib/admin';
+
+interface Props {
+  texts?: Texts;
+  /** Show description textareas (products, categories). */
+  withDescription?: boolean;
+  idPrefix?: string;
+}
+
+const { texts = {}, withDescription = true, idPrefix = 'f' } = Astro.props;
+const t = useTranslations('es');
+const languageName: Record<Locale, string> = {
+  es: t('admin.common.spanish'),
+  en: t('admin.common.english'),
+  'pt-br': t('admin.common.portuguese'),
+};
+---
+
+<fieldset class="space-y-4">
+  <legend class="text-sm font-semibold text-ink">{t('admin.common.translations')}</legend>
+  <p class="text-xs text-muted">{t('admin.common.translationsHint')}</p>
+  <div class="grid gap-4 lg:grid-cols-3">
+    {LOCALES.map((l) => (
+      <fieldset class="space-y-3 rounded-lg border border-line bg-surface/60 p-4" lang={l}>
+        <legend class="px-1 text-xs font-semibold uppercase tracking-wide text-muted" lang="es">{languageName[l]}</legend>
+        <div>
+          <label class="label" for={`${idPrefix}-name-${l}`}>
+            {t('admin.common.name')} {l === 'es' ? <span class="text-red-700" aria-hidden="true">*</span> : <span class="font-normal text-muted">({t('admin.common.optional')})</span>}
+          </label>
+          <input id={`${idPrefix}-name-${l}`} name={`name_${l}`} value={texts[l]?.name ?? ''} required={l === 'es'} maxlength={200} class="input" />
+        </div>
+        {withDescription && (
+          <div>
+            <label class="label" for={`${idPrefix}-desc-${l}`}>{t('admin.common.description')}</label>
+            <textarea id={`${idPrefix}-desc-${l}`} name={`description_${l}`} rows={4} maxlength={5000} class="input">{texts[l]?.description ?? ''}</textarea>
+          </div>
+        )}
+      </fieldset>
+    ))}
+  </div>
+</fieldset>

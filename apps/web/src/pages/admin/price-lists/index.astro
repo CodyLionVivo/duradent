@@ -1,0 +1,79 @@
+---
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+import { unwrap, type Schemas } from '../../../lib/api/client';
+import { errorMessage, savedRedirect, str } from '../../../lib/admin';
+import { useTranslations } from '../../../i18n';
+
+const adminApi = Astro.locals.api;
+
+const t = useTranslations('es');
+let error = '';
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const id = str(form, 'id');
+  const body = { code: str(form, 'code'), name: str(form, 'name'), is_default: form.get('is_default') === 'on' };
+  try {
+    if (id) unwrap(await adminApi.PUT('/v1/admin/pricing/price-lists/{id}', { params: { path: { id } }, body }));
+    else unwrap(await adminApi.POST('/v1/admin/pricing/price-lists', { body }));
+    return Astro.redirect(savedRedirect(new URL('/admin/price-lists', Astro.url)), 303);
+  } catch (err) {
+    error = errorMessage(err);
+    Astro.response.status = 422;
+  }
+}
+
+let lists: Schemas['PriceList'][] = [];
+try {
+  lists = unwrap(await adminApi.GET('/v1/admin/pricing/price-lists'));
+} catch (err) {
+  error ||= errorMessage(err);
+}
+---
+
+<AdminLayout title={t('admin.pricing.title')} error={error}>
+  <p class="text-sm text-muted">{t('admin.pricing.hint')}</p>
+
+  <ul class="mt-6 space-y-3" role="list">
+    {lists.map((l) => (
+      <li class="card p-4">
+        <form method="post" class="flex flex-wrap items-end gap-3">
+          <input type="hidden" name="id" value={l.id} />
+          <div>
+            <label class="label text-xs" for={`code-${l.id}`}>{t('admin.common.code')}</label>
+            <input id={`code-${l.id}`} name="code" value={l.code} required class="input w-40 font-mono" />
+          </div>
+          <div class="min-w-48 flex-1">
+            <label class="label text-xs" for={`name-${l.id}`}>{t('admin.common.name')}</label>
+            <input id={`name-${l.id}`} name="name" value={l.name} required class="input" />
+          </div>
+          <label class="flex items-center gap-2 pb-2 text-sm">
+            <input type="checkbox" name="is_default" checked={l.is_default} disabled={l.is_default} class="h-4 w-4 accent-brand-700" />
+            {t('admin.pricing.default')}
+            {l.is_default && <input type="hidden" name="is_default" value="on" />}
+          </label>
+          <button class="btn-secondary">{t('admin.common.save')}</button>
+          <a href={`/admin/price-lists/${l.id}`} class="btn-primary">{t('admin.pricing.editPrices')}</a>
+        </form>
+      </li>
+    ))}
+  </ul>
+
+  <section class="card mt-8 p-6" aria-labelledby="new-list">
+    <h2 id="new-list" class="text-lg font-semibold">{t('admin.pricing.new')}</h2>
+    <form method="post" class="mt-4 flex flex-wrap items-end gap-3">
+      <div>
+        <label class="label" for="new-code">{t('admin.common.code')}</label>
+        <input id="new-code" name="code" required pattern="[a-z0-9][a-z0-9_\-]{0,31}" class="input w-40 font-mono" />
+      </div>
+      <div class="min-w-48 flex-1">
+        <label class="label" for="new-name">{t('admin.common.name')}</label>
+        <input id="new-name" name="name" required maxlength={80} class="input" />
+      </div>
+      <label class="flex items-center gap-2 pb-2 text-sm">
+        <input type="checkbox" name="is_default" class="h-4 w-4 accent-brand-700" /> {t('admin.pricing.makeDefault')}
+      </label>
+      <button class="btn-primary">{t('admin.common.create')}</button>
+    </form>
+  </section>
+</AdminLayout>

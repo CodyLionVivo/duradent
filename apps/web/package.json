@@ -1,0 +1,33 @@
+{
+  "name": "@duradent/web",
+  "type": "module",
+  "version": "0.0.1",
+  "engines": {
+    "node": ">=22.23.4"
+  },
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "astro": "astro",
+    "check": "astro check",
+    "start": "node ./dist/server/entry.mjs",
+    "gen:api": "npx -y openapi-typescript@7.13.0 ../../services/api/openapi.yaml -o src/lib/api/schema.d.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@astrojs/node": "^11.1.9",
+    "@astrojs/preact": "^6.1.1",
+    "@tailwindcss/vite": "^4.3.3",
+    "astro": "^7.4.2",
+    "openapi-fetch": "^0.17.0",
+    "preact": "^11.0.2",
+    "tailwindcss": "^4.3.3"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.12",
+    "@types/node": "^24.19.2",
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.5"
+  }
+}

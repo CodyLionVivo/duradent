@@ -1,0 +1,6 @@
+---
+// Entry point: send visitors to their language (Accept-Language), defaulting to Spanish.
+import { localePath, negotiateLocale } from '../i18n';
+
+return Astro.redirect(localePath(negotiateLocale(Astro.request.headers.get('accept-language'))), 302);
+---

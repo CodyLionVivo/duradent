@@ -1,0 +1,11 @@
+---
+import Layout from '../layouts/Layout.astro';
+import ErrorState from '../components/ErrorState.astro';
+import { useTranslations } from '../i18n';
+
+const t = useTranslations(Astro.locals.locale);
+---
+
+<Layout title={t('errors.notFoundTitle')}>
+  <ErrorState kind="notFound" />
+</Layout>

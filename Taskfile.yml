@@ -1,0 +1,112 @@
+# Task runner (https://taskfile.dev). Same commands on Windows, Linux and CI.
+#   go install github.com/go-task/task/v3/cmd/task@latest
+version: "3"
+
+vars:
+  API_DIR: services/api
+  WEB_DIR: apps/web
+
+tasks:
+  default:
+    cmds: [task --list]
+    silent: true
+
+  # --- Local stack -----------------------------------------------------------
+  up:
+    desc: Build and start the full local stack (MySQL, LocalStack, Mailpit, API, web)
+    cmds: [docker compose up -d --build]
+
+  down:
+    desc: Stop the local stack (keeps data volumes)
+    cmds: [docker compose down]
+
+  reset:
+    desc: Stop the stack and delete its volumes (wipes the local database)
+    cmds: [docker compose down -v]
+
+  logs:
+    desc: "Follow logs, e.g. task logs -- api"
+    cmds: ["docker compose logs -f {{.CLI_ARGS}}"]
+
+  ps:
+    desc: Show stack status
+    cmds: [docker compose ps]
+
+  # --- Aggregates ------------------------------------------------------------
+  lint:
+    desc: Lint API and web
+    deps: [api:lint, web:check]
+
+  test:
+    desc: All tests, including MySQL integration tests (needs Docker)
+    deps: [api:test, web:check, web:test]
+
+  build:
+    desc: Build API binary and web bundle
+    deps: [api:build, web:build]
+
+  # --- API (Go) --------------------------------------------------------------
+  api:lint:
+    desc: golangci-lint on the API
+    dir: "{{.API_DIR}}"
+    cmds: [golangci-lint run ./...]
+
+  api:fmt:
+    desc: Format Go code
+    dir: "{{.API_DIR}}"
+    cmds: [golangci-lint fmt ./...]
+
+  api:test:
+    desc: Unit + integration tests (testcontainers starts MySQL)
+    dir: "{{.API_DIR}}"
+    vars:
+      # -race needs cgo (a C compiler), which Windows dev machines usually lack. CI always runs it.
+      RACE: '{{if ne OS "windows"}}-race{{end}}'
+    cmds: ["go test {{.RACE}} -count=1 ./..."]
+
+  api:test:unit:
+    desc: Unit tests only (skips anything that needs Docker)
+    dir: "{{.API_DIR}}"
+    cmds: [go test -short -count=1 ./...]
+
+  api:build:
+    desc: Build the duradent binary
+    dir: "{{.API_DIR}}"
+    cmds: ["go build -o bin/duradent{{exeExt}} ./cmd/duradent"]
+
+  migrate:
+    desc: Apply migrations to the local MySQL from docker compose
+    cmds: [docker compose run --rm migrate]
+
+  seed:
+    desc: Load the demo catalog (skipped if price lists already exist; use `task reset` first to reload)
+    cmds: [docker compose run --rm seed]
+
+  # --- Web (Astro) -----------------------------------------------------------
+  web:install:
+    dir: "{{.WEB_DIR}}"
+    cmds: [npm ci]
+
+  web:dev:
+    desc: Astro dev server on the host (outside Docker)
+    dir: "{{.WEB_DIR}}"
+    cmds: [npm run dev]
+
+  web:check:
+    desc: astro check (types + diagnostics)
+    dir: "{{.WEB_DIR}}"
+    cmds: [npm run check]
+
+  web:test:
+    desc: Web unit tests (Vitest)
+    dir: "{{.WEB_DIR}}"
+    cmds: [npm test]
+
+  web:build:
+    dir: "{{.WEB_DIR}}"
+    cmds: [npm run build]
+
+  web:gen-api:
+    desc: Regenerate TS types from services/api/openapi.yaml
+    dir: "{{.WEB_DIR}}"
+    cmds: [npm run gen:api]

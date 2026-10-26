@@ -1,0 +1,99 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import TextsFields from '../../components/admin/TextsFields.astro';
+import CategorySelect from '../../components/admin/CategorySelect.astro';
+import { unwrap, type Schemas } from '../../lib/api/client';
+import { errorMessage, int, savedRedirect, str, textsFromForm } from '../../lib/admin';
+import { useTranslations } from '../../i18n';
+
+const adminApi = Astro.locals.api;
+
+type AdminCategory = Schemas['AdminCategory'];
+const t = useTranslations('es');
+let error = '';
+const editing = Astro.url.searchParams.get('edit');
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const body = {
+    slug: str(form, 'slug'),
+    parent_id: str(form, 'parent_id') || null,
+    sort_order: int(form, 'sort_order'),
+    texts: textsFromForm(form),
+  };
+  const id = str(form, 'id');
+  try {
+    if (id) unwrap(await adminApi.PUT('/v1/admin/catalog/categories/{id}', { params: { path: { id } }, body }));
+    else unwrap(await adminApi.POST('/v1/admin/catalog/categories', { body }));
+    return Astro.redirect(savedRedirect(new URL('/admin/categories', Astro.url)), 303);
+  } catch (err) {
+    error = errorMessage(err);
+    Astro.response.status = 422;
+  }
+}
+
+let categories: AdminCategory[] = [];
+try {
+  categories = unwrap(await adminApi.GET('/v1/admin/catalog/categories'));
+} catch (err) {
+  error ||= errorMessage(err);
+}
+
+function tree(parent: string | null, depth: number): { c: AdminCategory; depth: number }[] {
+  return categories
+    .filter((c) => c.parent_id === parent)
+    .sort((a, b) => a.sort_order - b.sort_order)
+    .flatMap((c) => [{ c, depth }, ...tree(c.id, depth + 1)]);
+}
+const rows = tree(null, 0);
+const current = categories.find((c) => c.id === editing);
+---
+
+<AdminLayout title={t('admin.categories.title')} error={error}>
+  <div class="grid gap-8 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
+    <section aria-labelledby="list-title">
+      <h2 id="list-title" class="sr-only">{t('admin.categories.title')}</h2>
+      {rows.length === 0 ? (
+        <p class="card p-6 text-muted">{t('admin.categories.empty')}</p>
+      ) : (
+        <ul class="card divide-y divide-line" role="list">
+          {rows.map(({ c, depth }) => (
+            <li class:list={['flex items-center justify-between gap-3 px-4 py-3', c.id === editing && 'bg-brand-50']}>
+              <div style={`padding-left:${depth * 1.25}rem`}>
+                <p class="font-medium">{depth > 0 && <span aria-hidden="true" class="text-muted">└ </span>}{c.texts.es?.name}</p>
+                <p class="font-mono text-xs text-muted">{c.slug} · {t('admin.common.sortOrder')} {c.sort_order}</p>
+              </div>
+              <a href={`?edit=${c.id}`} class="text-sm text-brand-700 hover:underline">{t('admin.common.edit')}</a>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+
+    <section class="card p-6" aria-labelledby="form-title">
+      <h2 id="form-title" class="text-lg font-semibold">{current ? `${t('admin.common.edit')}: ${current.texts.es?.name}` : t('admin.categories.new')}</h2>
+      <form method="post" class="mt-4 space-y-5">
+        {current && <input type="hidden" name="id" value={current.id} />}
+        <div class="grid gap-4 md:grid-cols-3">
+          <div>
+            <label for="slug" class="label">{t('admin.common.slug')}</label>
+            <input id="slug" name="slug" value={current?.slug ?? ''} required pattern="[a-z0-9]+(-[a-z0-9]+)*" class="input font-mono" />
+          </div>
+          <div>
+            <label for="parent_id" class="label">{t('admin.categories.parent')}</label>
+            <CategorySelect id="parent_id" name="parent_id" categories={categories} selected={current?.parent_id} emptyLabel={t('admin.categories.topLevel')} exclude={current?.id} />
+          </div>
+          <div>
+            <label for="sort_order" class="label">{t('admin.common.sortOrder')}</label>
+            <input id="sort_order" name="sort_order" type="number" value={current?.sort_order ?? 0} class="input" />
+          </div>
+        </div>
+        <TextsFields texts={current?.texts} />
+        <div class="flex gap-3">
+          <button class="btn-primary">{current ? t('admin.common.save') : t('admin.common.create')}</button>
+          {current && <a href="/admin/categories" class="btn-secondary">{t('admin.common.cancel')}</a>}
+        </div>
+      </form>
+    </section>
+  </div>
+</AdminLayout>

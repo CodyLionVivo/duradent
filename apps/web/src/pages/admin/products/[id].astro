@@ -1,0 +1,279 @@
+---
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+import TextsFields from '../../../components/admin/TextsFields.astro';
+import CategorySelect from '../../../components/admin/CategorySelect.astro';
+import StatusBadge from '../../../components/admin/StatusBadge.astro';
+import ImageUploader from '../../../components/islands/ImageUploader';
+import { ApiError, unwrap, type Schemas } from '../../../lib/api/client';
+import { errorMessage, int, savedRedirect, str, textsFromForm } from '../../../lib/admin';
+import { useTranslations } from '../../../i18n';
+
+const adminApi = Astro.locals.api;
+
+type AdminProduct = Schemas['AdminProduct'];
+const t = useTranslations('es');
+const id = Astro.params.id ?? '';
+let error = '';
+
+function optionsFromForm(form: FormData, attrs: Schemas['AdminAttribute'][]): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const a of attrs) {
+    const v = str(form, `opt_${a.code}`);
+    if (v) out[a.code] = v;
+  }
+  return out;
+}
+
+let attributes: Schemas['AdminAttribute'][] = [];
+let categories: Schemas['AdminCategory'][] = [];
+try {
+  [attributes, categories] = await Promise.all([
+    adminApi.GET('/v1/admin/catalog/attributes').then(unwrap),
+    adminApi.GET('/v1/admin/catalog/categories').then(unwrap),
+  ]);
+} catch (err) {
+  error = errorMessage(err);
+}
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const intent = str(form, 'intent');
+  const path = { id };
+  const variant = str(form, 'variant_id');
+  try {
+    switch (intent) {
+      case 'details':
+        unwrap(await adminApi.PUT('/v1/admin/catalog/products/{id}', {
+          params: { path },
+          body: { slug: str(form, 'slug'), brand: str(form, 'brand'), category_id: str(form, 'category_id') || null, texts: textsFromForm(form) },
+        }));
+        break;
+      case 'status': {
+        const status = str(form, 'status') as AdminProduct['status'];
+        unwrap(await adminApi.POST('/v1/admin/catalog/products/{id}/status', { params: { path }, body: { status } }));
+        break;
+      }
+      case 'add_variant':
+        unwrap(await adminApi.POST('/v1/admin/catalog/products/{id}/variants', {
+          params: { path },
+          body: { sku: str(form, 'sku'), barcode: str(form, 'barcode'), weight_g: int(form, 'weight_g'), options: optionsFromForm(form, attributes) },
+        }));
+        break;
+      case 'update_variant':
+        unwrap(await adminApi.PUT('/v1/admin/catalog/products/{id}/variants/{variant}', {
+          params: { path: { id, variant } },
+          body: { sku: str(form, 'sku'), barcode: str(form, 'barcode'), weight_g: int(form, 'weight_g'), options: optionsFromForm(form, attributes) },
+        }));
+        break;
+      case 'remove_variant':
+        unwrap(await adminApi.DELETE('/v1/admin/catalog/products/{id}/variants/{variant}', { params: { path: { id, variant } } }));
+        break;
+      case 'default_variant':
+        unwrap(await adminApi.POST('/v1/admin/catalog/products/{id}/variants/{variant}/default', { params: { path: { id, variant } } }));
+        break;
+      case 'remove_image':
+        unwrap(await adminApi.DELETE('/v1/admin/catalog/products/{id}/images/{image}', { params: { path: { id, image: str(form, 'image_id') } } }));
+        break;
+      default:
+        throw new Error(`unknown action ${intent}`);
+    }
+    return Astro.redirect(savedRedirect(new URL(Astro.url.pathname, Astro.url)), 303);
+  } catch (err) {
+    error = errorMessage(err);
+    Astro.response.status = 422;
+  }
+}
+
+let product: AdminProduct | null = null;
+try {
+  product = unwrap(await adminApi.GET('/v1/admin/catalog/products/{id}', { params: { path: { id } } }));
+} catch (err) {
+  if (err instanceof ApiError && err.status === 404) return new Response(null, { status: 404 });
+  error ||= errorMessage(err);
+}
+
+const active = product?.variants.filter((v) => !v.archived) ?? [];
+const archived = product?.variants.filter((v) => v.archived) ?? [];
+const valueLabel = (code: string, value: string) =>
+  attributes.find((a) => a.code === code)?.values.find((v) => v.code === value)?.labels.es ?? value;
+const name = product?.texts.es?.name ?? '';
+---
+
+<AdminLayout title={name || t('admin.products.title')} error={error}>
+  {product && (
+    <div class="space-y-8">
+      <div class="flex flex-wrap items-center gap-3">
+        <a href="/admin/products" class="text-sm text-muted hover:text-ink">← {t('admin.common.back')}</a>
+        <StatusBadge status={product.status} />
+        {product.status === 'active' && (
+          <a href={`/es/product/${product.slug}`} class="text-sm text-brand-700 hover:underline" target="_blank" rel="noopener">{t('admin.nav.viewStore')} ↗</a>
+        )}
+        <form method="post" class="ml-auto flex gap-2">
+          <input type="hidden" name="intent" value="status" />
+          {product.status !== 'active' && <button name="status" value="active" class="btn-primary">{t('admin.status.publish')}</button>}
+          {product.status === 'active' && <button name="status" value="draft" class="btn-secondary">{t('admin.status.unpublish')}</button>}
+          {product.status !== 'archived' && <button name="status" value="archived" class="btn-danger">{t('admin.common.archive')}</button>}
+        </form>
+      </div>
+
+      <section class="card p-6" aria-labelledby="details-title">
+        <h2 id="details-title" class="text-lg font-semibold">{t('admin.products.details')}</h2>
+        <form method="post" class="mt-4 space-y-6">
+          <input type="hidden" name="intent" value="details" />
+          <div class="grid gap-4 md:grid-cols-3">
+            <div>
+              <label for="slug" class="label">{t('admin.common.slug')}</label>
+              <input id="slug" name="slug" value={product.slug} required pattern="[a-z0-9]+(-[a-z0-9]+)*" class="input font-mono" />
+            </div>
+            <div>
+              <label for="brand" class="label">{t('admin.products.brand')}</label>
+              <input id="brand" name="brand" value={product.brand} maxlength={80} class="input" />
+            </div>
+            <div>
+              <label for="category_id" class="label">{t('admin.products.category')}</label>
+              <CategorySelect id="category_id" name="category_id" categories={categories} selected={product.category_id} emptyLabel={t('admin.common.none')} />
+            </div>
+          </div>
+          <TextsFields texts={product.texts} />
+          <button class="btn-primary">{t('admin.common.save')}</button>
+        </form>
+      </section>
+
+      <section class="card p-6" aria-labelledby="variants-title">
+        <h2 id="variants-title" class="text-lg font-semibold">{t('admin.variants.title')}</h2>
+        <p class="mt-1 text-sm text-muted">{t('admin.variants.hint')}</p>
+
+        {active.length === 0 ? (
+          <p class="mt-4 text-sm text-muted">{t('admin.variants.empty')}</p>
+        ) : (
+          <ul class="mt-4 divide-y divide-line rounded-lg border border-line" role="list">
+            {active.map((v) => (
+              <li class="p-4">
+                <form method="post" class="flex flex-wrap items-end gap-3 [&>div]:w-36">
+                  <input type="hidden" name="intent" value="update_variant" />
+                  <input type="hidden" name="variant_id" value={v.id} />
+                  <div>
+                    <label class="label text-xs" for={`sku-${v.id}`}>{t('admin.variants.sku')}</label>
+                    <input id={`sku-${v.id}`} name="sku" value={v.sku} required class="input font-mono" />
+                  </div>
+                  <div>
+                    <label class="label text-xs" for={`bc-${v.id}`}>{t('admin.variants.barcode')}</label>
+                    <input id={`bc-${v.id}`} name="barcode" value={v.barcode} class="input" />
+                  </div>
+                  <div>
+                    <label class="label text-xs" for={`w-${v.id}`}>{t('admin.variants.weight')}</label>
+                    <input id={`w-${v.id}`} name="weight_g" type="number" min="0" max="100000" value={v.weight_g} class="input" />
+                  </div>
+                  {attributes.map((a) => (
+                    <div>
+                      <label class="label text-xs" for={`opt-${a.code}-${v.id}`}>{a.names.es}</label>
+                      <select id={`opt-${a.code}-${v.id}`} name={`opt_${a.code}`} class="input">
+                        <option value="">{t('admin.variants.noOption')}</option>
+                        {a.values.map((val) => <option value={val.code} selected={v.options[a.code] === val.code}>{val.labels.es}</option>)}
+                      </select>
+                    </div>
+                  ))}
+                  <button class="btn-secondary">{t('admin.common.save')}</button>
+                </form>
+                <div class="mt-2 flex flex-wrap items-center gap-3 text-xs">
+                  {v.is_default ? (
+                    <span class="rounded bg-brand-50 px-2 py-0.5 font-semibold text-brand-700">{t('admin.variants.default')}</span>
+                  ) : (
+                    <form method="post">
+                      <input type="hidden" name="intent" value="default_variant" />
+                      <input type="hidden" name="variant_id" value={v.id} />
+                      <button class="text-brand-700 hover:underline">{t('admin.variants.makeDefault')}</button>
+                    </form>
+                  )}
+                  <form method="post" data-confirm={t('admin.variants.archiveConfirm')}>
+                    <input type="hidden" name="intent" value="remove_variant" />
+                    <input type="hidden" name="variant_id" value={v.id} />
+                    <button class="text-red-700 hover:underline">{t('admin.common.archive')}</button>
+                  </form>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <details class="mt-6 rounded-lg border border-dashed border-line p-4" open={active.length === 0}>
+          <summary class="cursor-pointer text-sm font-semibold text-brand-700">+ {t('admin.variants.add')}</summary>
+          <form method="post" class="mt-4 flex flex-wrap items-end gap-3 [&>div]:w-40">
+            <input type="hidden" name="intent" value="add_variant" />
+            <div>
+              <label class="label" for="new-sku">{t('admin.variants.sku')} <span class="text-red-700">*</span></label>
+              <input id="new-sku" name="sku" required class="input font-mono" />
+            </div>
+            <div>
+              <label class="label" for="new-barcode">{t('admin.variants.barcode')}</label>
+              <input id="new-barcode" name="barcode" class="input" />
+            </div>
+            <div>
+              <label class="label" for="new-weight">{t('admin.variants.weight')}</label>
+              <input id="new-weight" name="weight_g" type="number" min="0" max="100000" value="0" class="input" />
+            </div>
+            {attributes.map((a) => (
+              <div>
+                <label class="label" for={`new-opt-${a.code}`}>{a.names.es}</label>
+                <select id={`new-opt-${a.code}`} name={`opt_${a.code}`} class="input">
+                  <option value="">{t('admin.variants.noOption')}</option>
+                  {a.values.map((val) => <option value={val.code}>{val.labels.es}</option>)}
+                </select>
+              </div>
+            ))}
+            <button class="btn-primary">{t('admin.variants.add')}</button>
+          </form>
+        </details>
+
+        {archived.length > 0 && (
+          <details class="mt-4 text-sm">
+            <summary class="cursor-pointer text-muted">{t('admin.variants.archived')} ({archived.length})</summary>
+            <ul class="mt-2 space-y-1 text-muted" role="list">
+              {archived.map((v) => (
+                <li class="font-mono text-xs">{v.sku} · {Object.entries(v.options).map(([k, val]) => valueLabel(k, val)).join(' / ')}</li>
+              ))}
+            </ul>
+          </details>
+        )}
+      </section>
+
+      <section class="card p-6" aria-labelledby="images-title">
+        <h2 id="images-title" class="text-lg font-semibold">{t('admin.images.title')}</h2>
+        {product.images.length === 0 ? (
+          <p class="mt-2 text-sm text-muted">{t('admin.images.empty')}</p>
+        ) : (
+          <ul class="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-6" role="list">
+            {product.images.map((img, i) => (
+              <li class="rounded-lg border border-line p-2">
+                <img src={img.url} alt={img.alt.es ?? name} class="aspect-square w-full rounded bg-surface object-contain" loading="lazy" />
+                <form method="post" class="mt-2 flex items-center justify-between text-xs" data-confirm={t('admin.common.confirmDelete')}>
+                  <span class="text-muted">#{i + 1}</span>
+                  <input type="hidden" name="intent" value="remove_image" />
+                  <input type="hidden" name="image_id" value={img.id} />
+                  <button class="text-red-700 hover:underline">{t('admin.common.delete')}</button>
+                </form>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div class="mt-4">
+          <ImageUploader
+            client:visible
+            productId={product.id}
+            productName={name}
+            labels={{ upload: t('admin.images.upload'), uploading: t('admin.images.uploading'), failed: t('admin.images.failed'), hint: t('admin.images.hint') }}
+          />
+        </div>
+      </section>
+    </div>
+  )}
+</AdminLayout>
+
+<script>
+  // Ask before destructive actions; forms work without JS (no confirmation then).
+  document.querySelectorAll<HTMLFormElement>('form[data-confirm]').forEach((form) => {
+    form.addEventListener('submit', (e) => {
+      if (!confirm(form.dataset.confirm ?? '')) e.preventDefault();
+    });
+  });
+</script>

@@ -1,0 +1,186 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { formatMoney, isLocale, localePath, useTranslations } from '../../i18n';
+import { ApiError, unwrap, type Schemas } from '../../lib/api/client';
+import { apiErrorText, departmentName } from '../../lib/account';
+
+if (!isLocale(Astro.params.locale)) return new Response(null, { status: 404 });
+
+const { locale, currency, api, user } = Astro.locals;
+const t = useTranslations(locale);
+const here = localePath(locale, '/checkout');
+if (!user) return Astro.redirect(`${localePath(locale, '/account/login')}?next=${encodeURIComponent(here)}`, 302);
+
+let me: { customer?: Schemas['Customer'] | null; addresses: Schemas['Address'][] } | null = null;
+try {
+  me = unwrap(await api.GET('/v1/me'));
+} catch {
+  // handled below
+}
+const addresses = me?.addresses ?? [];
+
+// Delivery choice comes from the query (GET form) or the posted form.
+let form: FormData | null = null;
+if (Astro.request.method === 'POST') form = await Astro.request.formData();
+const pick = (k: string) => String(form?.get(k) ?? Astro.url.searchParams.get(k) ?? '');
+const defaultAddress = addresses.find((a) => a.is_default)?.id ?? addresses[0]?.id ?? '';
+const deliveryChoice = pick('delivery') || (defaultAddress ? `address:${defaultAddress}` : 'pickup');
+const pickup = deliveryChoice === 'pickup';
+const addressId = deliveryChoice.startsWith('address:') ? deliveryChoice.slice(8) : null;
+const method = pick('payment_method') || 'culqi';
+const notes = pick('notes');
+
+let error = '';
+if (form) {
+  try {
+    const order = unwrap(
+      await api.POST('/v1/orders', {
+        params: { header: { 'Idempotency-Key': String(form.get('idempotency_key') ?? '') } },
+        body: { currency, pickup, address_id: addressId, payment_method: method as 'culqi', notes },
+      }),
+    );
+    return Astro.redirect(localePath(locale, `/orders/${order.number}`), 303);
+  } catch (err) {
+    error = apiErrorText(t, err);
+    Astro.response.status = err instanceof ApiError ? err.status : 500;
+  }
+}
+
+type Quote = {
+  cart: Schemas['Cart'];
+  shipping: Schemas['OrderShipping'];
+  shipping_amount: string;
+  tax: string;
+  total: string;
+  igv_percent: number;
+  billing?: Schemas['OrderBilling'] | null;
+};
+let quote: Quote | null = null;
+try {
+  quote = unwrap(await api.POST('/v1/checkout/quote', { body: { currency, pickup, address_id: addressId } }));
+} catch (err) {
+  error ||= apiErrorText(t, err);
+}
+if (quote && quote.cart.lines.length === 0) return Astro.redirect(localePath(locale, '/cart'), 302);
+
+const billing = me?.customer;
+const idempotencyKey = crypto.randomUUID();
+const canPlace = !!quote && quote.cart.ready && !!billing;
+const zoneKey = `checkout.zone_${quote?.shipping.zone || 'pickup'}` as 'checkout.zone_lima';
+---
+
+<Layout title={t('checkout.title')}>
+  <div class="container-page py-10">
+    <h1 class="text-3xl font-bold tracking-tight">{t('checkout.title')}</h1>
+    {error && <p role="alert" class="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</p>}
+
+    <form method="post" id="checkout" class="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1fr)_24rem]">
+      <input type="hidden" name="idempotency_key" value={idempotencyKey} />
+      <div class="space-y-6">
+        <section class="card p-6" aria-labelledby="billing-title">
+          <div class="flex items-baseline justify-between gap-3">
+            <h2 id="billing-title" class="text-lg font-semibold">{t('checkout.billing')}</h2>
+            <a href={`${localePath(locale, '/account')}#billing`} class="text-sm text-brand-700 hover:underline">{t('checkout.editBilling')}</a>
+          </div>
+          {billing ? (
+            <p class="mt-2 text-sm">
+              {billing.business_name || user.display_name} · {billing.document_type} {billing.document_number}<br />
+              <span class="text-muted">{billing.invoice_type === '01' ? t('orders.invoice01') : t('orders.invoice03')}</span>
+            </p>
+          ) : (
+            <div class="mt-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
+              {t('checkout.billingMissing')} <a class="font-semibold underline" href={`${localePath(locale, '/account')}#billing`}>{t('checkout.completeBilling')}</a>
+            </div>
+          )}
+        </section>
+
+        <fieldset class="card p-6">
+          <legend class="float-left mb-3 w-full text-lg font-semibold">{t('checkout.delivery')}</legend>
+          <div class="clear-both space-y-3">
+            {addresses.map((a) => (
+              <label class="flex cursor-pointer gap-3 rounded-lg border border-line p-3 has-[:checked]:border-brand-500 has-[:checked]:bg-brand-50/50">
+                <input type="radio" name="delivery" value={`address:${a.id}`} checked={addressId === a.id} class="mt-1 accent-brand-700" data-requote />
+                <span class="text-sm">
+                  <span class="font-semibold">{a.label || a.recipient}</span><br />
+                  {a.line1}, {a.district}, {a.province}, {departmentName(a.department)}
+                </span>
+              </label>
+            ))}
+            <label class="flex cursor-pointer gap-3 rounded-lg border border-line p-3 has-[:checked]:border-brand-500 has-[:checked]:bg-brand-50/50">
+              <input type="radio" name="delivery" value="pickup" checked={pickup} class="mt-1 accent-brand-700" data-requote />
+              <span class="text-sm"><span class="font-semibold">{t('checkout.pickup')}</span><br /><span class="text-muted">{t('checkout.pickupHint')}</span></span>
+            </label>
+            {addresses.length === 0 && <p class="text-sm text-muted">{t('checkout.noAddress')}</p>}
+            <a href={`${localePath(locale, '/account')}#addresses`} class="inline-block text-sm text-brand-700 hover:underline">+ {t('checkout.addAddress')}</a>
+          </div>
+        </fieldset>
+
+        <fieldset class="card p-6">
+          <legend class="float-left mb-3 w-full text-lg font-semibold">{t('checkout.payment')}</legend>
+          <div class="clear-both space-y-3">
+            {(['culqi', 'bank_transfer'] as const).map((m) => (
+              <label class="flex cursor-pointer gap-3 rounded-lg border border-line p-3 has-[:checked]:border-brand-500 has-[:checked]:bg-brand-50/50">
+                <input type="radio" name="payment_method" value={m} checked={method === m} class="mt-1 accent-brand-700" />
+                <span class="text-sm">
+                  <span class="font-semibold">{m === 'culqi' ? t('checkout.payCulqi') : t('checkout.payTransfer')}</span><br />
+                  <span class="text-muted">{m === 'culqi' ? t('checkout.payCulqiHint') : t('checkout.payTransferHint')}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+
+        <section class="card p-6">
+          <label for="notes" class="label">{t('checkout.notes')}</label>
+          <textarea id="notes" name="notes" rows="3" maxlength="500" class="input" aria-describedby="notes-hint">{notes}</textarea>
+          <p id="notes-hint" class="mt-1 text-xs text-muted">{t('checkout.notesHint')}</p>
+        </section>
+      </div>
+
+      <aside class="card h-fit p-6 lg:sticky lg:top-28" aria-labelledby="summary-title">
+        <h2 id="summary-title" class="text-lg font-semibold">{t('checkout.summary')}</h2>
+        {quote && (
+          <>
+            <ul class="mt-4 space-y-2 text-sm" role="list">
+              {quote.cart.lines.map((l) => (
+                <li class="flex justify-between gap-3">
+                  <span class="min-w-0"><span class="font-medium">{l.qty} × {l.product_name}</span>{l.options && <span class="block text-xs text-muted">{l.options}</span>}</span>
+                  <span class="shrink-0">{l.line_total ? formatMoney(l.line_total, currency, locale) : '—'}</span>
+                </li>
+              ))}
+            </ul>
+            <dl class="mt-4 space-y-2 border-t border-line pt-4 text-sm" aria-live="polite">
+              <div class="flex justify-between"><dt>{t('orders.subtotal')}</dt><dd>{formatMoney(quote.cart.subtotal, currency, locale)}</dd></div>
+              <div class="flex justify-between">
+                <dt>{t('checkout.shipping')} <span class="text-xs text-muted">({t(zoneKey)})</span></dt>
+                <dd>{Number(quote.shipping_amount) === 0 ? t('checkout.free') : formatMoney(quote.shipping_amount, currency, locale)}</dd>
+              </div>
+              <div class="flex justify-between"><dt>{t('checkout.tax', { percent: quote.igv_percent })}</dt><dd>{formatMoney(quote.tax, currency, locale)}</dd></div>
+              <div class="flex justify-between border-t border-line pt-2 text-base font-bold"><dt>{t('checkout.total')}</dt><dd>{formatMoney(quote.total, currency, locale)}</dd></div>
+            </dl>
+            {!quote.cart.ready && <p class="mt-3 text-sm text-red-700">{t('cart.fixProblems')} <a class="underline" href={localePath(locale, '/cart')}>{t('cart.title')}</a></p>}
+          </>
+        )}
+        <noscript>
+          <button type="submit" formmethod="get" formaction={here} class="btn-secondary mt-4 w-full">{t('checkout.refresh')}</button>
+        </noscript>
+        <button type="submit" class="btn-primary mt-6 w-full py-3" disabled={!canPlace}>{t('checkout.place')}</button>
+        <p class="mt-2 text-xs text-muted">{t('checkout.terms')}</p>
+      </aside>
+    </form>
+  </div>
+</Layout>
+
+<script>
+  // Changing the delivery option re-prices the order (shipping + IGV).
+  // Without JavaScript the "Update total" button does the same.
+  document.querySelectorAll<HTMLInputElement>('[data-requote]').forEach((input) => {
+    input.addEventListener('change', () => {
+      const url = new URL(location.href);
+      url.searchParams.set('delivery', input.value);
+      const method = document.querySelector<HTMLInputElement>('input[name="payment_method"]:checked');
+      if (method) url.searchParams.set('payment_method', method.value);
+      location.assign(url);
+    });
+  });
+</script>
