@@ -1,0 +1,20 @@
+---
+// Wordmark with a stylised bracket on a tooth outline. Decorative SVG; the
+// accessible name comes from the surrounding link.
+interface Props {
+  class?: string;
+}
+const { class: className = '' } = Astro.props;
+---
+
+<span class:list={['inline-flex items-center gap-2', className]}>
+  <svg aria-hidden="true" viewBox="0 0 32 32" class="h-8 w-8 shrink-0">
+    <rect width="32" height="32" rx="9" class="fill-brand-700"></rect>
+    <path
+      d="M10.5 8.5c2-1.2 3.6-.6 5.5.4 1.9-1 3.5-1.6 5.5-.4 2.4 1.5 2.3 5 1.4 8.1-.8 2.9-1.4 7-3 7-1.4 0-1.6-3.6-3.9-3.6s-2.5 3.6-3.9 3.6c-1.6 0-2.2-4.1-3-7-.9-3.1-1-6.6 1.4-8.1Z"
+      class="fill-white"></path>
+    <rect x="13" y="12" width="6" height="4" rx="1" class="fill-brand-500"></rect>
+    <path d="M8.5 14h15" class="stroke-brand-700" stroke-width="1.4" stroke-linecap="round"></path>
+  </svg>
+  <span class="text-lg font-bold tracking-tight text-ink">Duradent</span>
+</span>

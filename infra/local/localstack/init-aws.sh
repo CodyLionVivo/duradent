@@ -21,6 +21,16 @@ for consumer in orders inventory payments invoicing notifications; do
     --attributes RawMessageDelivery=true >/dev/null
 done
 
-awslocal s3 mb s3://duradent-media-local >/dev/null || true
+BUCKET=duradent-media-local
+awslocal s3 mb "s3://${BUCKET}" >/dev/null || true
+# The admin panel uploads images straight from the browser (presigned PUT).
+awslocal s3api put-bucket-cors --bucket "$BUCKET" --cors-configuration '{
+  "CORSRules": [{"AllowedOrigins": ["http://localhost:4321"], "AllowedMethods": ["PUT", "GET"],
+                 "AllowedHeaders": ["*"], "MaxAgeSeconds": 3000}]}'
+# Product images are public (in AWS they are served through CloudFront instead).
+awslocal s3api put-bucket-policy --bucket "$BUCKET" --policy "{
+  \"Version\": \"2012-10-17\",
+  \"Statement\": [{\"Effect\": \"Allow\", \"Principal\": \"*\", \"Action\": \"s3:GetObject\",
+                   \"Resource\": \"arn:aws:s3:::${BUCKET}/*\"}]}"
 
 echo "duradent: localstack resources ready in ${REGION}"

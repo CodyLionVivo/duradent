@@ -17,6 +17,19 @@ type Config struct {
 	MySQLDSN        string
 	LogLevel        string
 	ShutdownTimeout time.Duration
+
+	// AdminToken guards /v1/admin until identity (phase 3) adds sessions and
+	// roles. Empty disables admin routes.
+	AdminToken string
+
+	AWSRegion string
+	// Media bucket for product images and the public URL prefix they are
+	// served from (CloudFront in AWS, LocalStack path-style locally).
+	MediaBucket  string
+	MediaBaseURL string
+	// S3PresignEndpoint is the S3 endpoint browsers can reach; set only when
+	// it differs from the one the API uses (LocalStack inside Docker).
+	S3PresignEndpoint string
 }
 
 // Load reads configuration from the environment, applying defaults suitable
@@ -27,10 +40,15 @@ func Load() (Config, error) {
 
 func load(getenv func(string) string) (Config, error) {
 	cfg := Config{
-		Env:      valueOr(getenv("APP_ENV"), "local"),
-		HTTPAddr: valueOr(getenv("HTTP_ADDR"), ":8080"),
-		MySQLDSN: getenv("MYSQL_DSN"),
-		LogLevel: valueOr(getenv("LOG_LEVEL"), "info"),
+		Env:               valueOr(getenv("APP_ENV"), "local"),
+		HTTPAddr:          valueOr(getenv("HTTP_ADDR"), ":8080"),
+		MySQLDSN:          getenv("MYSQL_DSN"),
+		LogLevel:          valueOr(getenv("LOG_LEVEL"), "info"),
+		AdminToken:        getenv("ADMIN_TOKEN"),
+		AWSRegion:         valueOr(getenv("AWS_REGION"), "us-east-1"),
+		MediaBucket:       getenv("S3_MEDIA_BUCKET"),
+		MediaBaseURL:      getenv("MEDIA_BASE_URL"),
+		S3PresignEndpoint: getenv("S3_PRESIGN_ENDPOINT"),
 	}
 
 	timeout, err := durationOr(getenv("SHUTDOWN_TIMEOUT"), 15*time.Second)
@@ -39,11 +57,30 @@ func load(getenv func(string) string) (Config, error) {
 	}
 	cfg.ShutdownTimeout = timeout
 
-	if cfg.MySQLDSN == "" {
-		if cfg.Env != "local" {
-			return Config{}, errors.New("MYSQL_DSN is required")
+	if cfg.Env == "local" {
+		if cfg.MySQLDSN == "" {
+			cfg.MySQLDSN = "duradent:duradent@tcp(localhost:3307)/duradent?parseTime=true&multiStatements=true"
 		}
-		cfg.MySQLDSN = "duradent:duradent@tcp(localhost:3306)/duradent?parseTime=true&multiStatements=true"
+		if cfg.MediaBucket == "" {
+			cfg.MediaBucket = "duradent-media-local"
+		}
+		if cfg.MediaBaseURL == "" {
+			cfg.MediaBaseURL = "http://localhost:4566/" + cfg.MediaBucket
+		}
+		return cfg, nil
+	}
+
+	var missing []string
+	for name, v := range map[string]string{"MYSQL_DSN": cfg.MySQLDSN, "S3_MEDIA_BUCKET": cfg.MediaBucket, "MEDIA_BASE_URL": cfg.MediaBaseURL} {
+		if v == "" {
+			missing = append(missing, name)
+		}
+	}
+	if len(missing) > 0 {
+		return Config{}, fmt.Errorf("required outside local: %v", missing)
+	}
+	if cfg.AdminToken != "" && len(cfg.AdminToken) < 32 {
+		return Config{}, errors.New("ADMIN_TOKEN must be at least 32 characters")
 	}
 	return cfg, nil
 }

@@ -295,3 +295,21 @@ Cada fase termina con: compila, `golangci-lint` + `astro check` limpios, tests v
 - Cuentas que Duradent debe abrir: Culqi (sandbox hoy, producción al lanzar), Nubefact, AWS, Google Cloud (OAuth client), Entra ID (app registration).
 - Series de facturación (F001/B001) y si usan tienda física que ya emite comprobantes.
 - Si DIGEMID exige alguna advertencia o restricción de venta para algún producto del catálogo.
+
+---
+
+## Cambios durante la implementación
+
+- **Fase 1**: subcomandos con `switch` en `main.go` en lugar de cobra (no hacía falta la dependencia).
+  MySQL local en el puerto **3307** (el 3306 suele estar ocupado). Taskfile en lugar de Makefile.
+- **Fase 2**:
+  - Rutas de la tienda en inglés neutro: `/{locale}/catalog`, `/{locale}/catalog/{categoría}`,
+    `/{locale}/product/{slug}` (el plan decía `catalogo/producto`).
+  - Variantes archivadas en vez de borradas (`variants.archived_at`).
+  - Precios: `prices` con PK `(price_list_id, variant_id, currency, min_qty)`; sin FK a `variants`
+    para no acoplar contextos.
+  - Atributos guardan nombres/etiquetas como JSON por idioma (`attributes.names`, `attribute_values.labels`).
+  - Precios mostrados **sin IGV** (pendiente de confirmar con Duradent).
+  - El endpoint público de precios solo expone la lista predeterminada; las listas de cliente
+    llegan por sesión en la fase 3.
+  - Admin protegido con token temporal hasta la fase 3.

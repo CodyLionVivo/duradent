@@ -1,0 +1,109 @@
+---
+// Product grid shared by /[locale]/catalog and /[locale]/catalog/[category].
+import Layout from '../layouts/Layout.astro';
+import ProductCard from './ProductCard.astro';
+import Pagination from './Pagination.astro';
+import ErrorState from './ErrorState.astro';
+import { localePath, useTranslations } from '../i18n';
+import { ApiError } from '../lib/api/client';
+import { browseProducts, childrenOf, getCategories, getQuotes, type Category, type Quote } from '../lib/catalog';
+
+interface Props {
+  categorySlug?: string;
+}
+
+const PAGE_SIZE = 24;
+const { categorySlug } = Astro.props;
+const { locale, currency } = Astro.locals;
+const t = useTranslations(locale);
+
+const q = (Astro.url.searchParams.get('q') ?? '').trim().slice(0, 100);
+const page = Math.max(1, Number.parseInt(Astro.url.searchParams.get('page') ?? '1', 10) || 1);
+
+let state: 'ok' | 'notFound' | 'unavailable' = 'ok';
+let categories: Category[] = [];
+let result = { items: [] as Awaited<ReturnType<typeof browseProducts>>['items'], total: 0 };
+let quotes = new Map<string, Quote>();
+try {
+  categories = await getCategories(locale);
+  if (categorySlug && !categories.some((c) => c.slug === categorySlug)) {
+    state = 'notFound';
+  } else {
+    result = await browseProducts({ locale, category: categorySlug, q, page, pageSize: PAGE_SIZE });
+    quotes = await getQuotes(result.items.map((p) => p.default_variant_id ?? ''), currency);
+  }
+} catch (err) {
+  state = err instanceof ApiError && err.status === 404 ? 'notFound' : 'unavailable';
+}
+if (state !== 'ok') Astro.response.status = state === 'notFound' ? 404 : 503;
+
+const category = categories.find((c) => c.slug === categorySlug);
+const parent = category?.parent_id ? categories.find((c) => c.id === category.parent_id) : undefined;
+const subcategories = category ? childrenOf(categories, category.id) : [];
+const heading = q ? t('catalog.searchResults', { query: q }) : (category?.name ?? t('catalog.allProducts'));
+const countLabel = result.total === 1 ? t('catalog.resultCountOne') : t('catalog.resultCount', { count: result.total });
+---
+
+<Layout title={category?.name ?? t('catalog.title')} description={category?.description || undefined}>
+  {state !== 'ok' ? (
+    <ErrorState kind={state} />
+  ) : (
+    <div class="container-page py-10">
+      <nav aria-label={t('product.breadcrumb')} class="text-sm text-muted">
+        <ol class="flex flex-wrap items-center gap-1.5" role="list">
+          <li><a class="hover:text-brand-700" href={localePath(locale)}>{t('nav.home')}</a></li>
+          <li aria-hidden="true">/</li>
+          <li>
+            {category ? <a class="hover:text-brand-700" href={localePath(locale, '/catalog')}>{t('nav.catalog')}</a> : <span aria-current="page">{t('nav.catalog')}</span>}
+          </li>
+          {parent && (
+            <>
+              <li aria-hidden="true">/</li>
+              <li><a class="hover:text-brand-700" href={localePath(locale, `/catalog/${parent.slug}`)}>{parent.name}</a></li>
+            </>
+          )}
+          {category && (
+            <>
+              <li aria-hidden="true">/</li>
+              <li aria-current="page" class="text-ink">{category.name}</li>
+            </>
+          )}
+        </ol>
+      </nav>
+
+      <div class="mt-4 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 class="text-3xl font-bold tracking-tight">{heading}</h1>
+          {category?.description && !q && <p class="mt-2 max-w-2xl text-muted">{category.description}</p>}
+        </div>
+        <p class="text-sm text-muted" aria-live="polite">{countLabel}</p>
+      </div>
+
+      {subcategories.length > 0 && (
+        <ul class="mt-6 flex flex-wrap gap-2" role="list">
+          {subcategories.map((c) => (
+            <li>
+              <a href={localePath(locale, `/catalog/${c.slug}`)} class="inline-block rounded-full border border-line px-4 py-1.5 text-sm hover:border-brand-500 hover:text-brand-700">{c.name}</a>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {result.items.length === 0 ? (
+        <div class="card mt-10 p-10 text-center">
+          <p class="font-semibold">{t('catalog.empty')}</p>
+          <p class="mt-1 text-sm text-muted">{t('catalog.emptyHint')}</p>
+          <a href={localePath(locale, '/catalog')} class="btn-secondary mt-6">{t('catalog.clearSearch')}</a>
+        </div>
+      ) : (
+        <ul class="mt-8 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4" role="list">
+          {result.items.map((p, i) => (
+            <li><ProductCard product={p} quote={quotes.get(p.default_variant_id ?? '')} eager={i < 4} /></li>
+          ))}
+        </ul>
+      )}
+
+      <Pagination page={page} pageSize={PAGE_SIZE} total={result.total} />
+    </div>
+  )}
+</Layout>

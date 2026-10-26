@@ -1,0 +1,98 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import { adminApi, unwrap, type Schemas } from '../../lib/api/client';
+import { errorMessage, int, localizedFromForm, savedRedirect, str } from '../../lib/admin';
+import { LOCALES, useTranslations } from '../../i18n';
+
+const t = useTranslations('es');
+let error = '';
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  try {
+    if (str(form, 'intent') === 'add_value') {
+      unwrap(await adminApi.POST('/v1/admin/catalog/attributes/{code}/values', {
+        params: { path: { code: str(form, 'attribute') } },
+        body: { code: str(form, 'code'), labels: localizedFromForm(form, 'label') },
+      }));
+    } else {
+      unwrap(await adminApi.POST('/v1/admin/catalog/attributes', {
+        body: { code: str(form, 'code'), names: localizedFromForm(form, 'name'), sort_order: int(form, 'sort_order') },
+      }));
+    }
+    return Astro.redirect(savedRedirect(new URL('/admin/attributes', Astro.url)), 303);
+  } catch (err) {
+    error = errorMessage(err);
+    Astro.response.status = 422;
+  }
+}
+
+let attributes: Schemas['AdminAttribute'][] = [];
+try {
+  attributes = unwrap(await adminApi.GET('/v1/admin/catalog/attributes'));
+} catch (err) {
+  error ||= errorMessage(err);
+}
+const langLabel = { es: 'ES', en: 'EN', 'pt-br': 'PT' } as const;
+---
+
+<AdminLayout title={t('admin.attributes.title')} error={error}>
+  <p class="text-sm text-muted">{t('admin.attributes.hint')}</p>
+
+  <div class="mt-6 grid gap-4 lg:grid-cols-2">
+    {attributes.length === 0 && <p class="card p-6 text-muted">{t('admin.attributes.empty')}</p>}
+    {attributes.map((a) => (
+      <section class="card p-5" aria-labelledby={`attr-${a.code}`}>
+        <div class="flex items-baseline justify-between gap-2">
+          <h2 id={`attr-${a.code}`} class="font-semibold">{a.names.es}</h2>
+          <code class="text-xs text-muted">{a.code}</code>
+        </div>
+        <ul class="mt-3 flex flex-wrap gap-2" role="list" aria-label={t('admin.attributes.values')}>
+          {a.values.map((v) => (
+            <li class="rounded-full border border-line px-3 py-1 text-sm" title={v.code}>{v.labels.es}</li>
+          ))}
+        </ul>
+        <details class="mt-4">
+          <summary class="cursor-pointer text-sm font-semibold text-brand-700">+ {t('admin.attributes.addValue')}</summary>
+          <form method="post" class="mt-3 grid gap-3 sm:grid-cols-4">
+            <input type="hidden" name="intent" value="add_value" />
+            <input type="hidden" name="attribute" value={a.code} />
+            <div>
+              <label class="label text-xs" for={`code-${a.code}`}>{t('admin.common.code')}</label>
+              <input id={`code-${a.code}`} name="code" required pattern="[a-z0-9][a-z0-9_]{0,31}" class="input font-mono" />
+            </div>
+            {LOCALES.map((l) => (
+              <div>
+                <label class="label text-xs" for={`label-${a.code}-${l}`}>{t('admin.attributes.label')} {langLabel[l]}</label>
+                <input id={`label-${a.code}-${l}`} name={`label_${l}`} required={l === 'es'} class="input" />
+              </div>
+            ))}
+            <button class="btn-secondary sm:col-span-4 sm:justify-self-start">{t('admin.attributes.addValue')}</button>
+          </form>
+        </details>
+      </section>
+    ))}
+  </div>
+
+  <section class="card mt-8 p-6" aria-labelledby="new-attr">
+    <h2 id="new-attr" class="text-lg font-semibold">{t('admin.attributes.new')}</h2>
+    <form method="post" class="mt-4 grid gap-3 sm:grid-cols-5">
+      <input type="hidden" name="intent" value="create" />
+      <div>
+        <label class="label" for="new-code">{t('admin.common.code')}</label>
+        <input id="new-code" name="code" required pattern="[a-z0-9][a-z0-9_]{0,31}" class="input font-mono" />
+      </div>
+      {LOCALES.map((l) => (
+        <div>
+          <label class="label" for={`new-name-${l}`}>{t('admin.common.name')} {langLabel[l]}</label>
+          <input id={`new-name-${l}`} name={`name_${l}`} required={l === 'es'} class="input" />
+        </div>
+      ))}
+      <div>
+        <label class="label" for="new-sort">{t('admin.common.sortOrder')}</label>
+        <input id="new-sort" name="sort_order" type="number" value={attributes.length} class="input" />
+      </div>
+      <button class="btn-primary sm:col-span-5 sm:justify-self-start">{t('admin.common.create')}</button>
+    </form>
+  </section>
+</AdminLayout>

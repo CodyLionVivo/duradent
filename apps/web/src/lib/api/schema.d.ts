@@ -44,6 +44,404 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/catalog/categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Category tree (flat list with parent ids) */
+        get: operations["listCategories"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/catalog/attributes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Attributes variants are described by */
+        get: operations["listAttributes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/catalog/products": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Browse active products */
+        get: operations["browseProducts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/catalog/products/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Active product with its variants */
+        get: operations["getProduct"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/pricing/quotes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Prices of variants from the public list
+         * @description Variants without a price are omitted ("price on request"). Customer
+         *     price lists are confidential and never selectable by parameter; from
+         *     phase 3 the list comes from the signed-in customer's session.
+         */
+        get: operations["getQuotes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/catalog/products": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["adminListProducts"];
+        put?: never;
+        post: operations["adminCreateProduct"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/catalog/products/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get: operations["adminGetProduct"];
+        put: operations["adminUpdateProduct"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/catalog/products/{id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Publish, unpublish or archive */
+        post: operations["adminChangeProductStatus"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/catalog/products/{id}/variants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["adminAddVariant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/catalog/products/{id}/variants/{variant}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                variant: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["adminUpdateVariant"];
+        post?: never;
+        /** Archive a variant (it is kept for prices, stock and orders) */
+        delete: operations["adminRemoveVariant"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/catalog/products/{id}/variants/{variant}/default": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                variant: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["adminSetDefaultVariant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/catalog/products/{id}/images/uploads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Get a presigned URL to upload an image directly to S3 */
+        post: operations["adminRequestImageUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/catalog/products/{id}/images": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["adminAttachImage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/catalog/products/{id}/images/{image}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                image: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["adminRemoveImage"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/catalog/categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["adminListCategories"];
+        put?: never;
+        post: operations["adminCreateCategory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/catalog/categories/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["adminUpdateCategory"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/catalog/attributes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["adminListAttributes"];
+        put?: never;
+        post: operations["adminCreateAttribute"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/catalog/attributes/{code}/values": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["adminAddAttributeValue"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/pricing/price-lists": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["adminListPriceLists"];
+        put?: never;
+        post: operations["adminCreatePriceList"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/pricing/price-lists/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["adminUpdatePriceList"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/pricing/price-lists/{id}/prices": {
+        parameters: {
+            query?: {
+                variant_id?: string[];
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get: operations["adminListPrices"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/pricing/price-lists/{id}/variants/{variant}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                variant: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** Replace every tier of a variant in a list (empty removes it) */
+        put: operations["adminSetVariantPrices"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -64,17 +462,310 @@ export interface components {
         };
         /** @description Error body for every 4xx/5xx (RFC 9457). */
         Problem: {
-            /** Format: uri */
             type: string;
             title: string;
             status: number;
             detail?: string;
-            instance?: string;
+            /** @description Stable machine code */
+            code?: string;
+            /** @description Offending input field */
+            field?: string;
+        };
+        /** @enum {string} */
+        Locale: "es" | "en" | "pt-br";
+        /** @enum {string} */
+        Currency: "PEN" | "USD";
+        /** @example 85.00 */
+        Decimal: string;
+        /** @description Text per locale; es is required where the text is. */
+        LocalizedString: {
+            [key: string]: string;
+        };
+        Text: {
+            name: string;
+            description: string;
+        };
+        Texts: {
+            [key: string]: components["schemas"]["Text"];
+        };
+        /** @description Attribute code → value code, e.g. {"slot":"022"} */
+        VariantOptions: {
+            [key: string]: string;
+        };
+        /** @enum {string} */
+        ProductStatus: "draft" | "active" | "archived";
+        Category: {
+            /** Format: uuid */
+            id: string;
+            slug: string;
+            /** Format: uuid */
+            parent_id: string | null;
+            name: string;
+            description: string;
+            sort_order: number;
+        };
+        Image: {
+            /** Format: uuid */
+            id: string;
+            url: string;
+            alt: string;
+        };
+        ProductSummary: {
+            /** Format: uuid */
+            id: string;
+            slug: string;
+            brand: string;
+            name: string;
+            /** Format: uuid */
+            category_id: string | null;
+            image: components["schemas"]["Image"] | null;
+            /** Format: uuid */
+            default_variant_id: string | null;
+            variant_count: number;
+        };
+        ProductPage: {
+            items: components["schemas"]["ProductSummary"][];
+            total: number;
+            page: number;
+            page_size: number;
+        };
+        Option: {
+            code: string;
+            name: string;
+            values: {
+                code: string;
+                label: string;
+            }[];
+        };
+        Variant: {
+            /** Format: uuid */
+            id: string;
+            sku: string;
+            weight_g: number;
+            is_default: boolean;
+            options: components["schemas"]["VariantOptions"];
+        };
+        ProductDetail: {
+            /** Format: uuid */
+            id: string;
+            slug: string;
+            brand: string;
+            name: string;
+            description: string;
+            category: {
+                /** Format: uuid */
+                id: string;
+                slug: string;
+                name: string;
+            } | null;
+            images: components["schemas"]["Image"][];
+            /** @description Only the attributes and values used by this product's variants. */
+            options: components["schemas"]["Option"][];
+            variants: components["schemas"]["Variant"][];
+        };
+        Quotes: {
+            currency: components["schemas"]["Currency"];
+            qty: number;
+            items: {
+                /** Format: uuid */
+                variant_id: string;
+                unit_price: components["schemas"]["Decimal"];
+                tiers: {
+                    min_qty: number;
+                    unit_price: components["schemas"]["Decimal"];
+                }[];
+            }[];
+        };
+        AdminVariant: {
+            /** Format: uuid */
+            id: string;
+            sku: string;
+            barcode: string;
+            weight_g: number;
+            is_default: boolean;
+            archived: boolean;
+            options: components["schemas"]["VariantOptions"];
+        };
+        AdminImage: {
+            /** Format: uuid */
+            id: string;
+            key: string;
+            url: string;
+            alt: components["schemas"]["LocalizedString"];
+        };
+        AdminProduct: {
+            /** Format: uuid */
+            id: string;
+            slug: string;
+            brand: string;
+            status: components["schemas"]["ProductStatus"];
+            /** Format: uuid */
+            category_id: string | null;
+            texts: components["schemas"]["Texts"];
+            variants: components["schemas"]["AdminVariant"][];
+            images: components["schemas"]["AdminImage"][];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        AdminProductPage: {
+            items: {
+                /** Format: uuid */
+                id: string;
+                slug: string;
+                name: string;
+                brand: string;
+                status: components["schemas"]["ProductStatus"];
+                variant_count: number;
+                /** Format: date-time */
+                updated_at: string;
+            }[];
+            total: number;
+            page: number;
+            page_size: number;
+        };
+        AdminCategory: {
+            /** Format: uuid */
+            id: string;
+            slug: string;
+            /** Format: uuid */
+            parent_id: string | null;
+            sort_order: number;
+            texts: components["schemas"]["Texts"];
+        };
+        AdminAttribute: {
+            code: string;
+            names: components["schemas"]["LocalizedString"];
+            sort_order: number;
+            values: {
+                code: string;
+                labels: components["schemas"]["LocalizedString"];
+            }[];
+        };
+        ImageUpload: {
+            key: string;
+            upload_url: string;
+            /** @constant */
+            method: "PUT";
+            headers: {
+                [key: string]: string;
+            };
+        };
+        PriceList: {
+            /** Format: uuid */
+            id: string;
+            code: string;
+            name: string;
+            is_default: boolean;
+        };
+        Price: {
+            currency: components["schemas"]["Currency"];
+            min_qty: number;
+            unit_price: components["schemas"]["Decimal"];
+        };
+        VariantPrices: {
+            /** Format: uuid */
+            variant_id: string;
+            prices: components["schemas"]["Price"][];
         };
     };
-    responses: never;
-    parameters: never;
-    requestBodies: never;
+    responses: {
+        /** @description Error */
+        Problem: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description The product after the change */
+        AdminProduct: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["AdminProduct"];
+            };
+        };
+        /** @description Category */
+        AdminCategory: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["AdminCategory"];
+            };
+        };
+        /** @description Attribute */
+        AdminAttribute: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["AdminAttribute"];
+            };
+        };
+        /** @description Price list */
+        PriceList: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["PriceList"];
+            };
+        };
+    };
+    parameters: {
+        /** @description Language of the response; unknown values fall back to es. */
+        Locale: components["schemas"]["Locale"];
+        Page: number;
+        ID: string;
+    };
+    requestBodies: {
+        ProductInput: {
+            content: {
+                "application/json": {
+                    slug: string;
+                    brand?: string;
+                    /** Format: uuid */
+                    category_id?: string | null;
+                    texts: components["schemas"]["Texts"];
+                };
+            };
+        };
+        VariantInput: {
+            content: {
+                "application/json": {
+                    sku: string;
+                    barcode?: string;
+                    weight_g?: number;
+                    options?: components["schemas"]["VariantOptions"];
+                };
+            };
+        };
+        CategoryInput: {
+            content: {
+                "application/json": {
+                    slug: string;
+                    /** Format: uuid */
+                    parent_id?: string | null;
+                    sort_order?: number;
+                    texts: components["schemas"]["Texts"];
+                };
+            };
+        };
+        PriceListInput: {
+            content: {
+                "application/json": {
+                    code: string;
+                    name: string;
+                    is_default?: boolean;
+                };
+            };
+        };
+    };
     headers: never;
     pathItems: never;
 }
@@ -127,6 +818,577 @@ export interface operations {
                     "application/json": components["schemas"]["Readiness"];
                 };
             };
+        };
+    };
+    listCategories: {
+        parameters: {
+            query?: {
+                /** @description Language of the response; unknown values fall back to es. */
+                locale?: components["parameters"]["Locale"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Categories ordered by sort order */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Category"][];
+                };
+            };
+        };
+    };
+    listAttributes: {
+        parameters: {
+            query?: {
+                /** @description Language of the response; unknown values fall back to es. */
+                locale?: components["parameters"]["Locale"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Attributes with their values */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Option"][];
+                };
+            };
+        };
+    };
+    browseProducts: {
+        parameters: {
+            query?: {
+                /** @description Language of the response; unknown values fall back to es. */
+                locale?: components["parameters"]["Locale"];
+                /** @description Category slug; includes subcategories */
+                category?: string;
+                /** @description Matches product names and SKUs */
+                q?: string;
+                page?: components["parameters"]["Page"];
+                page_size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page of products */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductPage"];
+                };
+            };
+            404: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    getProduct: {
+        parameters: {
+            query?: {
+                /** @description Language of the response; unknown values fall back to es. */
+                locale?: components["parameters"]["Locale"];
+            };
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Product detail */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductDetail"];
+                };
+            };
+            404: components["responses"]["Problem"];
+        };
+    };
+    getQuotes: {
+        parameters: {
+            query?: {
+                currency?: components["schemas"]["Currency"];
+                qty?: number;
+                /** @description Repeat the parameter or pass a comma-separated list (max 200). */
+                variant_id?: string[];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Quotes in request order */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Quotes"];
+                };
+            };
+            422: components["responses"]["Problem"];
+        };
+    };
+    adminListProducts: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["ProductStatus"];
+                q?: string;
+                page?: components["parameters"]["Page"];
+                page_size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Products in every status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminProductPage"];
+                };
+            };
+            401: components["responses"]["Problem"];
+        };
+    };
+    adminCreateProduct: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: components["requestBodies"]["ProductInput"];
+        responses: {
+            201: components["responses"]["AdminProduct"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    adminGetProduct: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["AdminProduct"];
+            404: components["responses"]["Problem"];
+        };
+    };
+    adminUpdateProduct: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: components["requestBodies"]["ProductInput"];
+        responses: {
+            200: components["responses"]["AdminProduct"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    adminChangeProductStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    status: components["schemas"]["ProductStatus"];
+                };
+            };
+        };
+        responses: {
+            200: components["responses"]["AdminProduct"];
+            409: components["responses"]["Problem"];
+        };
+    };
+    adminAddVariant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: components["requestBodies"]["VariantInput"];
+        responses: {
+            201: components["responses"]["AdminProduct"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    adminUpdateVariant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                variant: string;
+            };
+            cookie?: never;
+        };
+        requestBody: components["requestBodies"]["VariantInput"];
+        responses: {
+            200: components["responses"]["AdminProduct"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    adminRemoveVariant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                variant: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["AdminProduct"];
+            409: components["responses"]["Problem"];
+        };
+    };
+    adminSetDefaultVariant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                variant: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["AdminProduct"];
+        };
+    };
+    adminRequestImageUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    content_type: "image/jpeg" | "image/png" | "image/webp" | "image/avif";
+                };
+            };
+        };
+        responses: {
+            /** @description Upload target; PUT the file there, then attach the key */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageUpload"];
+                };
+            };
+            422: components["responses"]["Problem"];
+        };
+    };
+    adminAttachImage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    key: string;
+                    alt?: components["schemas"]["LocalizedString"];
+                };
+            };
+        };
+        responses: {
+            201: components["responses"]["AdminProduct"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    adminRemoveImage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                image: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["AdminProduct"];
+            404: components["responses"]["Problem"];
+        };
+    };
+    adminListCategories: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Categories with every translation */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminCategory"][];
+                };
+            };
+        };
+    };
+    adminCreateCategory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: components["requestBodies"]["CategoryInput"];
+        responses: {
+            201: components["responses"]["AdminCategory"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    adminUpdateCategory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: components["requestBodies"]["CategoryInput"];
+        responses: {
+            200: components["responses"]["AdminCategory"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    adminListAttributes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Attributes with every translation */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminAttribute"][];
+                };
+            };
+        };
+    };
+    adminCreateAttribute: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    code: string;
+                    names: components["schemas"]["LocalizedString"];
+                    sort_order?: number;
+                };
+            };
+        };
+        responses: {
+            201: components["responses"]["AdminAttribute"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    adminAddAttributeValue: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    code: string;
+                    labels: components["schemas"]["LocalizedString"];
+                };
+            };
+        };
+        responses: {
+            201: components["responses"]["AdminAttribute"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    adminListPriceLists: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Price lists, default first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PriceList"][];
+                };
+            };
+        };
+    };
+    adminCreatePriceList: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: components["requestBodies"]["PriceListInput"];
+        responses: {
+            201: components["responses"]["PriceList"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    adminUpdatePriceList: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: components["requestBodies"]["PriceListInput"];
+        responses: {
+            200: components["responses"]["PriceList"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    adminListPrices: {
+        parameters: {
+            query?: {
+                variant_id?: string[];
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every tier of each requested variant in this list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VariantPrices"][];
+                };
+            };
+        };
+    };
+    adminSetVariantPrices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                variant: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    prices: components["schemas"]["Price"][];
+                };
+            };
+        };
+        responses: {
+            /** @description Saved tiers */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VariantPrices"];
+                };
+            };
+            422: components["responses"]["Problem"];
         };
     };
 }

@@ -12,7 +12,12 @@ x-api-env: &api-env
   AWS_ENDPOINT_URL: http://localstack:4566
   SNS_TOPIC_ARN: arn:aws:sns:us-east-1:000000000000:duradent-domain-events
   S3_MEDIA_BUCKET: duradent-media-local
+  # Browsers reach LocalStack on localhost, the API on the compose network.
+  S3_PRESIGN_ENDPOINT: http://localhost:4566
+  MEDIA_BASE_URL: http://localhost:4566/duradent-media-local
   SMTP_ADDR: mailpit:1025
+  # Local-only admin token; replaced by sessions and roles in phase 3.
+  ADMIN_TOKEN: &admin-token local-dev-admin-token
 
 services:
   mysql:
@@ -58,6 +63,15 @@ services:
       mysql: { condition: service_healthy }
     restart: "no"
 
+  # Loads the demo catalog once; does nothing if data already exists.
+  seed:
+    build: { context: ./services/api, target: runtime }
+    command: ["seed"]
+    environment: *api-env
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    restart: "no"
+
   api:
     build: { context: ./services/api, target: dev }
     environment: *api-env
@@ -89,6 +103,8 @@ services:
     build: { context: ./apps/web, target: dev }
     environment:
       API_URL: http://api:8080
+      ADMIN_TOKEN: *admin-token
+      VITE_POLLING: "true"
     ports: ["4321:4321"]
     volumes:
       - ./apps/web:/app

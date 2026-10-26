@@ -1,0 +1,8 @@
+---
+import CatalogView from '../../../components/CatalogView.astro';
+import { isLocale } from '../../../i18n';
+
+if (!isLocale(Astro.params.locale)) return new Response(null, { status: 404 });
+---
+
+<CatalogView />

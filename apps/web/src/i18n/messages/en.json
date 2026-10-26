@@ -1,0 +1,105 @@
+{
+  "meta": {
+    "siteName": "Duradent",
+    "title": "Duradent · Orthodontic supplies for professionals",
+    "description": "Orthodontic brackets, archwires, elastics, instruments and adhesives for clinics and dentists in Peru."
+  },
+  "nav": {
+    "skipToContent": "Skip to content",
+    "home": "Home",
+    "catalog": "Catalog",
+    "categories": "Categories",
+    "search": "Search",
+    "searchLabel": "Search products",
+    "searchPlaceholder": "Search by name or SKU…",
+    "language": "Language",
+    "currency": "Currency",
+    "openMenu": "Open menu",
+    "closeMenu": "Close menu",
+    "mainNav": "Main navigation"
+  },
+  "currency": {
+    "PEN": "Peruvian soles (S/)",
+    "USD": "US dollars (US$)",
+    "change": "Change currency"
+  },
+  "home": {
+    "eyebrow": "Orthodontic distributor in Peru",
+    "heroTitle": "Orthodontic supplies for your practice",
+    "heroSubtitle": "Brackets, archwires, elastics and instruments with clinic pricing, delivery across Peru and electronic invoices.",
+    "heroCta": "Browse catalog",
+    "heroSecondary": "Explore brackets",
+    "categoriesTitle": "Shop by category",
+    "featuredTitle": "Featured products",
+    "seeAll": "See all",
+    "valuesTitle": "Why Duradent",
+    "valueShippingTitle": "Delivery across Peru",
+    "valueShippingText": "Next-day dispatch in Lima, courier to every region.",
+    "valueInvoiceTitle": "Electronic invoices",
+    "valueInvoiceText": "SUNAT-compliant invoices with your RUC on every order.",
+    "valuePricesTitle": "Professional pricing",
+    "valuePricesText": "Price lists for clinics, practices and distributors."
+  },
+  "catalog": {
+    "title": "Catalog",
+    "allProducts": "All products",
+    "resultCount": "{count} products",
+    "resultCountOne": "1 product",
+    "searchResults": "Results for “{query}”",
+    "empty": "No products found.",
+    "emptyHint": "Try another search or browse all categories.",
+    "clearSearch": "See all products",
+    "variantCount": "{count} options",
+    "priceOnRequest": "Price on request",
+    "from": "from"
+  },
+  "product": {
+    "breadcrumb": "Breadcrumb",
+    "sku": "SKU",
+    "weight": "Weight",
+    "grams": "{value} g",
+    "chooseOption": "Choose {option}",
+    "unitPrice": "Unit price",
+    "volumePricing": "Volume pricing",
+    "fromQty": "From {qty} units",
+    "perUnit": "each",
+    "taxNote": "Prices exclude IGV (Peruvian VAT).",
+    "priceOnRequest": "Price on request",
+    "unavailable": "This combination is not available.",
+    "addToCart": "Add to cart",
+    "cartSoon": "The cart is coming soon.",
+    "quantity": "Quantity",
+    "description": "Description",
+    "noImage": "No image available",
+    "gallery": "Product images",
+    "showImage": "Show image {index}",
+    "allVariants": "All options",
+    "option": "Option",
+    "price": "Price",
+    "variantsCount": "{count} options available",
+    "viewOption": "View"
+  },
+  "pagination": {
+    "label": "Pagination",
+    "previous": "Previous",
+    "next": "Next",
+    "page": "Page {page} of {pages}"
+  },
+  "footer": {
+    "tagline": "Orthodontic supplies for clinics and dentists.",
+    "company": "Duradent SAC",
+    "rights": "All rights reserved.",
+    "shop": "Shop",
+    "help": "Help",
+    "contact": "Contact",
+    "shipping": "Shipping",
+    "invoicing": "Invoicing"
+  },
+  "errors": {
+    "notFoundTitle": "Page not found",
+    "notFoundText": "The page you are looking for does not exist or has moved.",
+    "backHome": "Back to home",
+    "unavailableTitle": "Service unavailable",
+    "unavailableText": "We could not load the catalog. Please try again in a few minutes."
+  }
+}

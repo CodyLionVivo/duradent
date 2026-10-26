@@ -1,0 +1,105 @@
+{
+  "meta": {
+    "siteName": "Duradent",
+    "title": "Duradent · Materiais ortodônticos para profissionais",
+    "description": "Braquetes, arcos, elásticos, instrumental e adesivos ortodônticos para clínicas e dentistas no Peru."
+  },
+  "nav": {
+    "skipToContent": "Pular para o conteúdo",
+    "home": "Início",
+    "catalog": "Catálogo",
+    "categories": "Categorias",
+    "search": "Buscar",
+    "searchLabel": "Buscar produtos",
+    "searchPlaceholder": "Buscar por nome ou SKU…",
+    "language": "Idioma",
+    "currency": "Moeda",
+    "openMenu": "Abrir menu",
+    "closeMenu": "Fechar menu",
+    "mainNav": "Navegação principal"
+  },
+  "currency": {
+    "PEN": "Soles peruanos (S/)",
+    "USD": "Dólares (US$)",
+    "change": "Alterar moeda"
+  },
+  "home": {
+    "eyebrow": "Distribuidor de ortodontia no Peru",
+    "heroTitle": "Materiais ortodônticos para o seu consultório",
+    "heroSubtitle": "Braquetes, arcos, elásticos e instrumental com preços para clínicas, entrega em todo o Peru e nota fiscal eletrônica.",
+    "heroCta": "Ver catálogo",
+    "heroSecondary": "Explorar braquetes",
+    "categoriesTitle": "Compre por categoria",
+    "featuredTitle": "Produtos em destaque",
+    "seeAll": "Ver tudo",
+    "valuesTitle": "Por que a Duradent",
+    "valueShippingTitle": "Entrega em todo o Peru",
+    "valueShippingText": "Despacho em Lima em 24 horas e para as províncias por transportadora.",
+    "valueInvoiceTitle": "Nota fiscal eletrônica",
+    "valueInvoiceText": "Comprovantes SUNAT com o seu RUC em cada pedido.",
+    "valuePricesTitle": "Preços para profissionais",
+    "valuePricesText": "Tabelas de preços para clínicas, consultórios e distribuidores."
+  },
+  "catalog": {
+    "title": "Catálogo",
+    "allProducts": "Todos os produtos",
+    "resultCount": "{count} produtos",
+    "resultCountOne": "1 produto",
+    "searchResults": "Resultados para “{query}”",
+    "empty": "Nenhum produto encontrado.",
+    "emptyHint": "Tente outra busca ou veja todas as categorias.",
+    "clearSearch": "Ver todos os produtos",
+    "variantCount": "{count} opções",
+    "priceOnRequest": "Preço sob consulta",
+    "from": "a partir de"
+  },
+  "product": {
+    "breadcrumb": "Trilha de navegação",
+    "sku": "SKU",
+    "weight": "Peso",
+    "grams": "{value} g",
+    "chooseOption": "Escolha {option}",
+    "unitPrice": "Preço unitário",
+    "volumePricing": "Preço por volume",
+    "fromQty": "A partir de {qty} un.",
+    "perUnit": "cada",
+    "taxNote": "Preços não incluem IGV (imposto peruano).",
+    "priceOnRequest": "Preço sob consulta",
+    "unavailable": "Esta combinação não está disponível.",
+    "addToCart": "Adicionar ao carrinho",
+    "cartSoon": "O carrinho estará disponível em breve.",
+    "quantity": "Quantidade",
+    "description": "Descrição",
+    "noImage": "Imagem indisponível",
+    "gallery": "Imagens do produto",
+    "showImage": "Mostrar imagem {index}",
+    "allVariants": "Todas as opções",
+    "option": "Opção",
+    "price": "Preço",
+    "variantsCount": "{count} opções disponíveis",
+    "viewOption": "Ver"
+  },
+  "pagination": {
+    "label": "Paginação",
+    "previous": "Anterior",
+    "next": "Próxima",
+    "page": "Página {page} de {pages}"
+  },
+  "footer": {
+    "tagline": "Materiais ortodônticos para clínicas e dentistas.",
+    "company": "Duradent SAC",
+    "rights": "Todos os direitos reservados.",
+    "shop": "Loja",
+    "help": "Ajuda",
+    "contact": "Contato",
+    "shipping": "Entregas",
+    "invoicing": "Faturamento"
+  },
+  "errors": {
+    "notFoundTitle": "Página não encontrada",
+    "notFoundText": "A página que você procura não existe ou foi movida.",
+    "backHome": "Voltar ao início",
+    "unavailableTitle": "Serviço indisponível",
+    "unavailableText": "Não foi possível carregar o catálogo. Tente novamente em alguns minutos."
+  }
+}

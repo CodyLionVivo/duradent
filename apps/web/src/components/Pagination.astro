@@ -1,0 +1,36 @@
+---
+import { useTranslations } from '../i18n';
+
+interface Props {
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
+const { page, pageSize, total } = Astro.props;
+const t = useTranslations(Astro.locals.locale);
+const pages = Math.max(1, Math.ceil(total / pageSize));
+
+function hrefFor(p: number): string {
+  const url = new URL(Astro.url);
+  if (p <= 1) url.searchParams.delete('page');
+  else url.searchParams.set('page', String(p));
+  return url.pathname + url.search;
+}
+---
+
+{pages > 1 && (
+  <nav aria-label={t('pagination.label')} class="mt-10 flex items-center justify-between gap-4 border-t border-line pt-6 text-sm">
+    {page > 1 ? (
+      <a class="btn-secondary" href={hrefFor(page - 1)} rel="prev">← {t('pagination.previous')}</a>
+    ) : (
+      <span />
+    )}
+    <p class="text-muted" aria-live="polite">{t('pagination.page', { page, pages })}</p>
+    {page < pages ? (
+      <a class="btn-secondary" href={hrefFor(page + 1)} rel="next">{t('pagination.next')} →</a>
+    ) : (
+      <span />
+    )}
+  </nav>
+)}

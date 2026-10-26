@@ -1,0 +1,116 @@
+---
+import Logo from './Logo.astro';
+import { CURRENCIES, LOCALES, LOCALE_NAMES, localePath, switchLocalePath, useTranslations } from '../i18n';
+import { getCategories, topLevel, type Category } from '../lib/catalog';
+
+const { locale, currency } = Astro.locals;
+const t = useTranslations(locale);
+
+let categories: Category[] = [];
+try {
+  categories = topLevel(await getCategories(locale));
+} catch {
+  // The header must render even if the API is down; pages show their own error.
+}
+const q = Astro.url.searchParams.get('q') ?? '';
+const returnTo = Astro.url.pathname + Astro.url.search;
+---
+
+<header class="border-b border-line bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 sticky top-0 z-30">
+  <div class="container-page flex h-16 items-center gap-4">
+    <a href={localePath(locale)} class="shrink-0 rounded-md" aria-label={`${t('meta.siteName')} · ${t('nav.home')}`}>
+      <Logo />
+    </a>
+
+    <form role="search" action={localePath(locale, '/catalog')} method="get" class="relative ml-auto hidden max-w-md flex-1 md:block">
+      <label for="site-search" class="sr-only">{t('nav.searchLabel')}</label>
+      <input id="site-search" name="q" type="search" value={q} placeholder={t('nav.searchPlaceholder')} class="input pr-10" />
+      <button type="submit" class="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-muted hover:text-brand-700">
+        <span class="sr-only">{t('nav.search')}</span>
+        <svg aria-hidden="true" viewBox="0 0 20 20" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="9" r="6"></circle><path d="m14 14 4 4" stroke-linecap="round"></path></svg>
+      </button>
+    </form>
+
+    <div class="ml-auto flex items-center gap-2 md:ml-0">
+      <form method="post" action="/api/preferences/currency" class="flex rounded-lg border border-line p-0.5 text-xs font-semibold" aria-label={t('nav.currency')}>
+        <input type="hidden" name="return_to" value={returnTo} />
+        {CURRENCIES.map((c) => (
+          <button
+            type="submit"
+            name="currency"
+            value={c}
+            aria-pressed={c === currency ? 'true' : 'false'}
+            title={t(`currency.${c}`)}
+            class:list={['rounded-md px-2.5 py-1.5', c === currency ? 'bg-brand-700 text-white' : 'text-muted hover:text-brand-700']}
+          >
+            {c}
+          </button>
+        ))}
+      </form>
+
+      <details class="relative">
+        <summary class="btn-secondary cursor-pointer list-none px-3 py-1.5 text-xs uppercase [&::-webkit-details-marker]:hidden">
+          <span class="sr-only">{t('nav.language')}: </span>{locale === 'pt-br' ? 'PT' : locale.toUpperCase()}
+        </summary>
+        <ul class="card absolute right-0 mt-2 w-52 p-1 shadow-lg" role="list">
+          {LOCALES.map((l) => (
+            <li>
+              <a
+                href={switchLocalePath(Astro.url, l)}
+                hreflang={l}
+                lang={l}
+                aria-current={l === locale ? 'true' : undefined}
+                class:list={['block rounded-md px-3 py-2 text-sm hover:bg-surface', l === locale && 'font-semibold text-brand-700']}
+              >
+                {LOCALE_NAMES[l]}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </details>
+    </div>
+  </div>
+
+  <nav aria-label={t('nav.mainNav')} class="border-t border-line">
+    <div class="container-page">
+      <ul class="-mx-2 flex gap-1 overflow-x-auto py-2 text-sm [scrollbar-width:none]" role="list">
+        <li>
+          <a href={localePath(locale, '/catalog')} class="block whitespace-nowrap rounded-md px-2 py-1.5 font-medium text-ink hover:bg-surface hover:text-brand-700">
+            {t('catalog.allProducts')}
+          </a>
+        </li>
+        {categories.map((c) => {
+          const href = localePath(locale, `/catalog/${c.slug}`);
+          const current = Astro.url.pathname === href;
+          return (
+            <li>
+              <a
+                href={href}
+                aria-current={current ? 'page' : undefined}
+                class:list={['block whitespace-nowrap rounded-md px-2 py-1.5 hover:bg-surface hover:text-brand-700', current ? 'font-semibold text-brand-700' : 'text-muted']}
+              >
+                {c.name}
+              </a>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  </nav>
+
+  <form role="search" action={localePath(locale, '/catalog')} method="get" class="container-page pb-3 md:hidden">
+    <label for="site-search-mobile" class="sr-only">{t('nav.searchLabel')}</label>
+    <input id="site-search-mobile" name="q" type="search" value={q} placeholder={t('nav.searchPlaceholder')} class="input" />
+  </form>
+</header>
+
+<script>
+  // Islands update the URL (e.g. ?variant=); return to the page as it is now,
+  // not as it was rendered. Without JS the server-rendered value still works.
+  document.querySelectorAll<HTMLFormElement>('form[action="/api/preferences/currency"]').forEach((form) => {
+    form.addEventListener('submit', () => {
+      const input = form.querySelector<HTMLInputElement>('input[name="return_to"]');
+      if (input) input.value = location.pathname + location.search;
+    });
+  });
+</script>

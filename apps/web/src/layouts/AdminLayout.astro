@@ -1,0 +1,89 @@
+---
+import '../styles/global.css';
+import Logo from '../components/Logo.astro';
+import { useTranslations } from '../i18n';
+
+interface Props {
+  title: string;
+  /** Error from a failed form submission. */
+  error?: string;
+}
+
+const { title, error } = Astro.props;
+const t = useTranslations('es');
+const notice = Astro.url.searchParams.get('notice');
+const path = Astro.url.pathname;
+const nav = [
+  { href: '/admin/products', label: t('admin.nav.products') },
+  { href: '/admin/categories', label: t('admin.nav.categories') },
+  { href: '/admin/attributes', label: t('admin.nav.attributes') },
+  { href: '/admin/price-lists', label: t('admin.nav.priceLists') },
+];
+---
+
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>{title} · {t('admin.title')} · Duradent</title>
+  </head>
+  <body class="min-h-screen bg-surface antialiased">
+    <a href="#main" class="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-white focus:px-4 focus:py-2 focus:shadow">
+      {t('nav.skipToContent')}
+    </a>
+    <div class="flex min-h-screen flex-col md:flex-row">
+      <aside class="border-b border-line bg-white md:w-60 md:shrink-0 md:border-b-0 md:border-r">
+        <div class="flex items-center justify-between p-4">
+          <a href="/admin/products" aria-label={t('admin.title')}><Logo /></a>
+          <span class="rounded bg-brand-50 px-2 py-0.5 text-xs font-semibold text-brand-700">Admin</span>
+        </div>
+        <nav aria-label={t('admin.title')} class="px-2 pb-4">
+          <ul class="flex gap-1 overflow-x-auto md:flex-col" role="list">
+            {nav.map((item) => {
+              const active = path.startsWith(item.href);
+              return (
+                <li>
+                  <a
+                    href={item.href}
+                    aria-current={active ? 'page' : undefined}
+                    class:list={['block whitespace-nowrap rounded-lg px-3 py-2 text-sm', active ? 'bg-brand-50 font-semibold text-brand-800' : 'text-muted hover:bg-surface hover:text-ink']}
+                  >
+                    {item.label}
+                  </a>
+                </li>
+              );
+            })}
+          </ul>
+          <ul class="mt-4 hidden border-t border-line pt-4 md:block" role="list">
+            <li><a href="/es" class="block rounded-lg px-3 py-2 text-sm text-muted hover:text-ink">{t('admin.nav.viewStore')} ↗</a></li>
+            <li>
+              <form method="post" action="/admin/logout">
+                <button class="w-full rounded-lg px-3 py-2 text-left text-sm text-muted hover:text-ink">{t('admin.nav.logout')}</button>
+              </form>
+            </li>
+          </ul>
+        </nav>
+      </aside>
+
+      <main id="main" class="min-w-0 flex-1 p-4 sm:p-8" tabindex="-1">
+        <h1 class="text-2xl font-bold tracking-tight">{title}</h1>
+        {notice && !error && (
+          <p role="status" class="mt-4 rounded-lg border border-brand-200 bg-brand-50 px-4 py-3 text-sm text-brand-900">
+            {notice === 'created' ? t('admin.products.created') : t('admin.common.saved')}
+          </p>
+        )}
+        {error && (
+          <p role="alert" class="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            <strong>{t('admin.common.error')}:</strong> {error}
+          </p>
+        )}
+        <div class="mt-6">
+          <slot />
+        </div>
+      </main>
+    </div>
+  </body>
+</html>

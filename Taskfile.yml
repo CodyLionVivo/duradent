@@ -39,7 +39,7 @@ tasks:
 
   test:
     desc: All tests, including MySQL integration tests (needs Docker)
-    deps: [api:test, web:check]
+    deps: [api:test, web:check, web:test]
 
   build:
     desc: Build API binary and web bundle
@@ -78,6 +78,10 @@ tasks:
     desc: Apply migrations to the local MySQL from docker compose
     cmds: [docker compose run --rm migrate]
 
+  seed:
+    desc: Load the demo catalog (skipped if price lists already exist; use `task reset` first to reload)
+    cmds: [docker compose run --rm seed]
+
   # --- Web (Astro) -----------------------------------------------------------
   web:install:
     dir: "{{.WEB_DIR}}"
@@ -92,6 +96,11 @@ tasks:
     desc: astro check (types + diagnostics)
     dir: "{{.WEB_DIR}}"
     cmds: [npm run check]
+
+  web:test:
+    desc: Web unit tests (Vitest)
+    dir: "{{.WEB_DIR}}"
+    cmds: [npm test]
 
   web:build:
     dir: "{{.WEB_DIR}}"

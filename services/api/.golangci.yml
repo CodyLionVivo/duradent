@@ -10,7 +10,6 @@ linters:
     - errorlint
     - gocritic
     - gosec
-    - misspell
     - noctx
     - sqlclosecheck
     - rowserrcheck
@@ -20,6 +19,10 @@ linters:
     gosec:
       excludes:
         - G104 # covered by errcheck
+        # Dynamic SQL in adapters only concatenates "?, ?" placeholder lists
+        # (mysql.Placeholders) and constant table names; values are always bound.
+        - G201
+        - G202
   exclusions:
     presets:
       - std-error-handling

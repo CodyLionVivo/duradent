@@ -54,6 +54,7 @@ jobs:
       - name: API types are up to date with openapi.yaml
         run: npm run gen:api && git diff --exit-code src/lib/api/schema.d.ts
       - run: npm run check
+      - run: npm test
       - run: npm run build
 
   images:

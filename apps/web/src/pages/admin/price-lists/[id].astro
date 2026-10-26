@@ -1,0 +1,134 @@
+---
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+import Pagination from '../../../components/Pagination.astro';
+import { adminApi, ApiError, unwrap, type Schemas } from '../../../lib/api/client';
+import { errorMessage, savedRedirect, str } from '../../../lib/admin';
+import { useTranslations } from '../../../i18n';
+
+type Price = Schemas['Price'];
+const t = useTranslations('es');
+const id = Astro.params.id ?? '';
+const PAGE_SIZE = 10;
+const q = Astro.url.searchParams.get('q') ?? '';
+const page = Math.max(1, Number.parseInt(Astro.url.searchParams.get('page') ?? '1', 10) || 1);
+const VOLUME_QTY = 10;
+const cells = [
+  { name: 'pen_1', currency: 'PEN', min: 1 },
+  { name: 'pen_10', currency: 'PEN', min: VOLUME_QTY },
+  { name: 'usd_1', currency: 'USD', min: 1 },
+  { name: 'usd_10', currency: 'USD', min: VOLUME_QTY },
+] as const;
+let error = '';
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const variant = str(form, 'variant_id');
+  const prices: Price[] = [];
+  for (const c of cells) {
+    const raw = str(form, c.name).replace(',', '.');
+    if (!raw) continue;
+    const amount = Number(raw);
+    prices.push({ currency: c.currency, min_qty: c.min, unit_price: Number.isFinite(amount) ? amount.toFixed(2) : raw });
+  }
+  try {
+    unwrap(await adminApi.PUT('/v1/admin/pricing/price-lists/{id}/variants/{variant}', { params: { path: { id, variant } }, body: { prices } }));
+    const back = new URL(Astro.url);
+    back.searchParams.delete('notice');
+    return Astro.redirect(savedRedirect(back) + `#v-${variant}`, 303);
+  } catch (err) {
+    error = errorMessage(err);
+    Astro.response.status = 422;
+  }
+}
+
+let list: Schemas['PriceList'] | undefined;
+let products: Schemas['AdminProduct'][] = [];
+let total = 0;
+const prices = new Map<string, Price[]>();
+try {
+  const lists = unwrap(await adminApi.GET('/v1/admin/pricing/price-lists'));
+  list = lists.find((l) => l.id === id);
+  if (!list) return new Response(null, { status: 404 });
+
+  const pageData = unwrap(await adminApi.GET('/v1/admin/catalog/products', { params: { query: { q: q || undefined, page, page_size: PAGE_SIZE } } }));
+  total = pageData.total;
+  products = await Promise.all(
+    pageData.items.map((p) => adminApi.GET('/v1/admin/catalog/products/{id}', { params: { path: { id: p.id } } }).then(unwrap)),
+  );
+  const variantIds = products.flatMap((p) => p.variants.filter((v) => !v.archived).map((v) => v.id));
+  if (variantIds.length) {
+    const rows = unwrap(await adminApi.GET('/v1/admin/pricing/price-lists/{id}/prices', { params: { path: { id }, query: { variant_id: variantIds } } }));
+    for (const r of rows) prices.set(r.variant_id, r.prices);
+  }
+} catch (err) {
+  if (err instanceof ApiError && err.status === 404) return new Response(null, { status: 404 });
+  error ||= errorMessage(err);
+}
+
+const valueOf = (variantId: string, currency: string, min: number) =>
+  prices.get(variantId)?.find((p) => p.currency === currency && p.min_qty === min)?.unit_price ?? '';
+---
+
+<AdminLayout title={t('admin.pricing.pricesTitle', { name: list?.name ?? '' })} error={error}>
+  <div class="flex flex-wrap items-end justify-between gap-4">
+    <a href="/admin/price-lists" class="text-sm text-muted hover:text-ink">← {t('admin.common.back')}</a>
+    <form method="get" class="flex items-end gap-2">
+      <div>
+        <label for="q" class="label">{t('admin.pricing.searchProducts')}</label>
+        <input id="q" name="q" type="search" value={q} class="input w-64" />
+      </div>
+      <button class="btn-secondary">{t('admin.common.search')}</button>
+    </form>
+  </div>
+  <p class="mt-4 text-sm text-muted">{t('admin.pricing.pricesHint')}</p>
+
+  <div class="mt-6 space-y-6">
+    {products.map((p) => (
+      <section class="card overflow-x-auto" aria-labelledby={`p-${p.id}`}>
+        <h2 id={`p-${p.id}`} class="border-b border-line px-4 py-3 font-semibold">
+          <a class="hover:text-brand-700" href={`/admin/products/${p.id}`}>{p.texts.es?.name}</a>
+        </h2>
+        <table class="w-full min-w-[48rem] text-sm">
+          <thead class="bg-surface text-left text-xs uppercase tracking-wide text-muted">
+            <tr>
+              <th scope="col" class="px-4 py-2 font-semibold">{t('admin.pricing.variant')}</th>
+              <th scope="col" class="px-2 py-2 font-semibold">{t('admin.pricing.pen')} {t('admin.pricing.base')}</th>
+              <th scope="col" class="px-2 py-2 font-semibold">{t('admin.pricing.pen')} {t('admin.pricing.volume')}</th>
+              <th scope="col" class="px-2 py-2 font-semibold">{t('admin.pricing.usd')} {t('admin.pricing.base')}</th>
+              <th scope="col" class="px-2 py-2 font-semibold">{t('admin.pricing.usd')} {t('admin.pricing.volume')}</th>
+              <th scope="col" class="px-4 py-2"><span class="sr-only">{t('admin.common.actions')}</span></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-line">
+            {p.variants.filter((v) => !v.archived).map((v) => (
+              <tr id={`v-${v.id}`}>
+                <td class="px-4 py-2 font-mono text-xs">{v.sku}</td>
+                {cells.map((c) => (
+                  <td class="px-2 py-2">
+                    <label class="sr-only" for={`${c.name}-${v.id}`}>{v.sku} {c.currency} {c.min}+</label>
+                    <input
+                      id={`${c.name}-${v.id}`}
+                      form={`f-${v.id}`}
+                      name={c.name}
+                      value={valueOf(v.id, c.currency, c.min)}
+                      inputmode="decimal"
+                      pattern="\d+([.,]\d{1,2})?"
+                      class="input w-28 text-right tabular-nums"
+                    />
+                  </td>
+                ))}
+                <td class="px-4 py-2 text-right">
+                  <form id={`f-${v.id}`} method="post">
+                    <input type="hidden" name="variant_id" value={v.id} />
+                    <button class="btn-secondary px-3 py-1.5 text-xs">{t('admin.pricing.saveRow')}</button>
+                  </form>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
+    ))}
+  </div>
+  <Pagination page={page} pageSize={PAGE_SIZE} total={total} />
+</AdminLayout>

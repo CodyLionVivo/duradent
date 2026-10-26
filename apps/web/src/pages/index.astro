@@ -1,11 +1,6 @@
 ---
-import Welcome from '../components/Welcome.astro';
-import Layout from '../layouts/Layout.astro';
+// Entry point: send visitors to their language (Accept-Language), defaulting to Spanish.
+import { localePath, negotiateLocale } from '../i18n';
 
-// Welcome to Astro! Wondering what to do next? Check out the Astro documentation at https://docs.astro.build
-// Don't want to use any of this? Delete everything in this file, the `assets`, `components`, and `layouts` directories, and start fresh.
+return Astro.redirect(localePath(negotiateLocale(Astro.request.headers.get('accept-language'))), 302);
 ---
-
-<Layout>
-	<Welcome />
-</Layout>

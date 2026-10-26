@@ -1,13 +1,27 @@
 openapi: 3.1.0
 info:
   title: Duradent API
-  version: 0.1.0
+  version: 0.2.0
   description: |
     HTTP API of the Duradent store. This file is the contract between the Go
     backend and apps/web: the web regenerates its types from it with
     `task web:gen-api`. Each bounded context adds its paths here as it lands.
+
+    Money is always a decimal string with two places ("85.00") plus a
+    currency (PEN or USD). Errors use RFC 9457 `application/problem+json`
+    with a stable `code` (e.g. `catalog.sku_taken`).
+
+    Admin routes (`/v1/admin/*`) require `Authorization: Bearer <ADMIN_TOKEN>`
+    until phase 3 replaces the token with sessions and roles.
 servers:
   - url: http://localhost:8080
+tags:
+  - name: ops
+  - name: catalog
+  - name: pricing
+  - name: admin-catalog
+  - name: admin-pricing
+
 paths:
   /healthz:
     get:
@@ -38,7 +52,504 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Readiness" }
+
+  # --- Store ---------------------------------------------------------------
+  /v1/catalog/categories:
+    get:
+      summary: Category tree (flat list with parent ids)
+      operationId: listCategories
+      tags: [catalog]
+      parameters: [{ $ref: "#/components/parameters/Locale" }]
+      responses:
+        "200":
+          description: Categories ordered by sort order
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/Category" } }
+  /v1/catalog/attributes:
+    get:
+      summary: Attributes variants are described by
+      operationId: listAttributes
+      tags: [catalog]
+      parameters: [{ $ref: "#/components/parameters/Locale" }]
+      responses:
+        "200":
+          description: Attributes with their values
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/Option" } }
+  /v1/catalog/products:
+    get:
+      summary: Browse active products
+      operationId: browseProducts
+      tags: [catalog]
+      parameters:
+        - { $ref: "#/components/parameters/Locale" }
+        - { name: category, in: query, description: Category slug; includes subcategories, schema: { type: string } }
+        - { name: q, in: query, description: Matches product names and SKUs, schema: { type: string } }
+        - { $ref: "#/components/parameters/Page" }
+        - { name: page_size, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 24 } }
+      responses:
+        "200":
+          description: One page of products
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProductPage" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /v1/catalog/products/{slug}:
+    get:
+      summary: Active product with its variants
+      operationId: getProduct
+      tags: [catalog]
+      parameters:
+        - { name: slug, in: path, required: true, schema: { type: string } }
+        - { $ref: "#/components/parameters/Locale" }
+      responses:
+        "200":
+          description: Product detail
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProductDetail" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /v1/pricing/quotes:
+    get:
+      summary: Prices of variants from the public list
+      description: |
+        Variants without a price are omitted ("price on request"). Customer
+        price lists are confidential and never selectable by parameter; from
+        phase 3 the list comes from the signed-in customer's session.
+      operationId: getQuotes
+      tags: [pricing]
+      parameters:
+        - { name: currency, in: query, schema: { $ref: "#/components/schemas/Currency" } }
+        - { name: qty, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - name: variant_id
+          in: query
+          description: Repeat the parameter or pass a comma-separated list (max 200).
+          schema: { type: array, items: { type: string, format: uuid } }
+          style: form
+          explode: true
+      responses:
+        "200":
+          description: Quotes in request order
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Quotes" }
+        "422": { $ref: "#/components/responses/Problem" }
+
+  # --- Admin: catalog ---------------------------------------------------------
+  /v1/admin/catalog/products:
+    get:
+      operationId: adminListProducts
+      tags: [admin-catalog]
+      security: [{ admin: [] }]
+      parameters:
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/ProductStatus" } }
+        - { name: q, in: query, schema: { type: string } }
+        - { $ref: "#/components/parameters/Page" }
+        - { name: page_size, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+      responses:
+        "200":
+          description: Products in every status
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminProductPage" }
+        "401": { $ref: "#/components/responses/Problem" }
+    post:
+      operationId: adminCreateProduct
+      tags: [admin-catalog]
+      security: [{ admin: [] }]
+      requestBody: { $ref: "#/components/requestBodies/ProductInput" }
+      responses:
+        "201": { $ref: "#/components/responses/AdminProduct" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /v1/admin/catalog/products/{id}:
+    parameters: [{ $ref: "#/components/parameters/ID" }]
+    get:
+      operationId: adminGetProduct
+      tags: [admin-catalog]
+      security: [{ admin: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/AdminProduct" }
+        "404": { $ref: "#/components/responses/Problem" }
+    put:
+      operationId: adminUpdateProduct
+      tags: [admin-catalog]
+      security: [{ admin: [] }]
+      requestBody: { $ref: "#/components/requestBodies/ProductInput" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminProduct" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /v1/admin/catalog/products/{id}/status:
+    parameters: [{ $ref: "#/components/parameters/ID" }]
+    post:
+      summary: Publish, unpublish or archive
+      operationId: adminChangeProductStatus
+      tags: [admin-catalog]
+      security: [{ admin: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties: { status: { $ref: "#/components/schemas/ProductStatus" } }
+      responses:
+        "200": { $ref: "#/components/responses/AdminProduct" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /v1/admin/catalog/products/{id}/variants:
+    parameters: [{ $ref: "#/components/parameters/ID" }]
+    post:
+      operationId: adminAddVariant
+      tags: [admin-catalog]
+      security: [{ admin: [] }]
+      requestBody: { $ref: "#/components/requestBodies/VariantInput" }
+      responses:
+        "201": { $ref: "#/components/responses/AdminProduct" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /v1/admin/catalog/products/{id}/variants/{variant}:
+    parameters:
+      - { $ref: "#/components/parameters/ID" }
+      - { name: variant, in: path, required: true, schema: { type: string, format: uuid } }
+    put:
+      operationId: adminUpdateVariant
+      tags: [admin-catalog]
+      security: [{ admin: [] }]
+      requestBody: { $ref: "#/components/requestBodies/VariantInput" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminProduct" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+    delete:
+      summary: Archive a variant (it is kept for prices, stock and orders)
+      operationId: adminRemoveVariant
+      tags: [admin-catalog]
+      security: [{ admin: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/AdminProduct" }
+        "409": { $ref: "#/components/responses/Problem" }
+  /v1/admin/catalog/products/{id}/variants/{variant}/default:
+    parameters:
+      - { $ref: "#/components/parameters/ID" }
+      - { name: variant, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      operationId: adminSetDefaultVariant
+      tags: [admin-catalog]
+      security: [{ admin: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/AdminProduct" }
+  /v1/admin/catalog/products/{id}/images/uploads:
+    parameters: [{ $ref: "#/components/parameters/ID" }]
+    post:
+      summary: Get a presigned URL to upload an image directly to S3
+      operationId: adminRequestImageUpload
+      tags: [admin-catalog]
+      security: [{ admin: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content_type]
+              properties:
+                content_type: { type: string, enum: [image/jpeg, image/png, image/webp, image/avif] }
+      responses:
+        "200":
+          description: Upload target; PUT the file there, then attach the key
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ImageUpload" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /v1/admin/catalog/products/{id}/images:
+    parameters: [{ $ref: "#/components/parameters/ID" }]
+    post:
+      operationId: adminAttachImage
+      tags: [admin-catalog]
+      security: [{ admin: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [key]
+              properties:
+                key: { type: string }
+                alt: { $ref: "#/components/schemas/LocalizedString" }
+      responses:
+        "201": { $ref: "#/components/responses/AdminProduct" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /v1/admin/catalog/products/{id}/images/{image}:
+    parameters:
+      - { $ref: "#/components/parameters/ID" }
+      - { name: image, in: path, required: true, schema: { type: string, format: uuid } }
+    delete:
+      operationId: adminRemoveImage
+      tags: [admin-catalog]
+      security: [{ admin: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/AdminProduct" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /v1/admin/catalog/categories:
+    get:
+      operationId: adminListCategories
+      tags: [admin-catalog]
+      security: [{ admin: [] }]
+      responses:
+        "200":
+          description: Categories with every translation
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/AdminCategory" } }
+    post:
+      operationId: adminCreateCategory
+      tags: [admin-catalog]
+      security: [{ admin: [] }]
+      requestBody: { $ref: "#/components/requestBodies/CategoryInput" }
+      responses:
+        "201": { $ref: "#/components/responses/AdminCategory" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /v1/admin/catalog/categories/{id}:
+    parameters: [{ $ref: "#/components/parameters/ID" }]
+    put:
+      operationId: adminUpdateCategory
+      tags: [admin-catalog]
+      security: [{ admin: [] }]
+      requestBody: { $ref: "#/components/requestBodies/CategoryInput" }
+      responses:
+        "200": { $ref: "#/components/responses/AdminCategory" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /v1/admin/catalog/attributes:
+    get:
+      operationId: adminListAttributes
+      tags: [admin-catalog]
+      security: [{ admin: [] }]
+      responses:
+        "200":
+          description: Attributes with every translation
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/AdminAttribute" } }
+    post:
+      operationId: adminCreateAttribute
+      tags: [admin-catalog]
+      security: [{ admin: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, names]
+              properties:
+                code: { type: string, pattern: "^[a-z0-9][a-z0-9_]{0,31}$" }
+                names: { $ref: "#/components/schemas/LocalizedString" }
+                sort_order: { type: integer }
+      responses:
+        "201": { $ref: "#/components/responses/AdminAttribute" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /v1/admin/catalog/attributes/{code}/values:
+    parameters:
+      - { name: code, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: adminAddAttributeValue
+      tags: [admin-catalog]
+      security: [{ admin: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, labels]
+              properties:
+                code: { type: string, pattern: "^[a-z0-9][a-z0-9_]{0,31}$" }
+                labels: { $ref: "#/components/schemas/LocalizedString" }
+      responses:
+        "201": { $ref: "#/components/responses/AdminAttribute" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+
+  # --- Admin: pricing ---------------------------------------------------------
+  /v1/admin/pricing/price-lists:
+    get:
+      operationId: adminListPriceLists
+      tags: [admin-pricing]
+      security: [{ admin: [] }]
+      responses:
+        "200":
+          description: Price lists, default first
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/PriceList" } }
+    post:
+      operationId: adminCreatePriceList
+      tags: [admin-pricing]
+      security: [{ admin: [] }]
+      requestBody: { $ref: "#/components/requestBodies/PriceListInput" }
+      responses:
+        "201": { $ref: "#/components/responses/PriceList" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /v1/admin/pricing/price-lists/{id}:
+    parameters: [{ $ref: "#/components/parameters/ID" }]
+    put:
+      operationId: adminUpdatePriceList
+      tags: [admin-pricing]
+      security: [{ admin: [] }]
+      requestBody: { $ref: "#/components/requestBodies/PriceListInput" }
+      responses:
+        "200": { $ref: "#/components/responses/PriceList" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /v1/admin/pricing/price-lists/{id}/prices:
+    parameters:
+      - { $ref: "#/components/parameters/ID" }
+      - name: variant_id
+        in: query
+        schema: { type: array, items: { type: string, format: uuid } }
+        style: form
+        explode: true
+    get:
+      operationId: adminListPrices
+      tags: [admin-pricing]
+      security: [{ admin: [] }]
+      responses:
+        "200":
+          description: Every tier of each requested variant in this list
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/VariantPrices" } }
+  /v1/admin/pricing/price-lists/{id}/variants/{variant}:
+    parameters:
+      - { $ref: "#/components/parameters/ID" }
+      - { name: variant, in: path, required: true, schema: { type: string, format: uuid } }
+    put:
+      summary: Replace every tier of a variant in a list (empty removes it)
+      operationId: adminSetVariantPrices
+      tags: [admin-pricing]
+      security: [{ admin: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [prices]
+              properties:
+                prices: { type: array, items: { $ref: "#/components/schemas/Price" } }
+      responses:
+        "200":
+          description: Saved tiers
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VariantPrices" }
+        "422": { $ref: "#/components/responses/Problem" }
+
 components:
+  securitySchemes:
+    admin: { type: http, scheme: bearer }
+
+  parameters:
+    Locale:
+      name: locale
+      in: query
+      description: Language of the response; unknown values fall back to es.
+      schema: { $ref: "#/components/schemas/Locale" }
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, default: 1 }
+    ID:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+  requestBodies:
+    ProductInput:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [slug, texts]
+            properties:
+              slug: { type: string, pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$" }
+              brand: { type: string, maxLength: 80 }
+              category_id: { type: [string, "null"], format: uuid }
+              texts: { $ref: "#/components/schemas/Texts" }
+    VariantInput:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [sku]
+            properties:
+              sku: { type: string }
+              barcode: { type: string }
+              weight_g: { type: integer, minimum: 0, maximum: 100000 }
+              options: { $ref: "#/components/schemas/VariantOptions" }
+    CategoryInput:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [slug, texts]
+            properties:
+              slug: { type: string }
+              parent_id: { type: [string, "null"], format: uuid }
+              sort_order: { type: integer }
+              texts: { $ref: "#/components/schemas/Texts" }
+    PriceListInput:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [code, name]
+            properties:
+              code: { type: string, pattern: "^[a-z0-9][a-z0-9_-]{0,31}$" }
+              name: { type: string, maxLength: 80 }
+              is_default: { type: boolean }
+
+  responses:
+    Problem:
+      description: Error
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    AdminProduct:
+      description: The product after the change
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/AdminProduct" }
+    AdminCategory:
+      description: Category
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/AdminCategory" }
+    AdminAttribute:
+      description: Attribute
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/AdminAttribute" }
+    PriceList:
+      description: Price list
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/PriceList" }
+
   schemas:
     Liveness:
       type: object
@@ -58,8 +569,248 @@ components:
       type: object
       required: [type, title, status]
       properties:
-        type: { type: string, format: uri }
+        type: { type: string }
         title: { type: string }
         status: { type: integer }
         detail: { type: string }
-        instance: { type: string }
+        code: { type: string, description: Stable machine code, e.g. catalog.sku_taken }
+        field: { type: string, description: Offending input field }
+
+    Locale: { type: string, enum: [es, en, pt-br] }
+    Currency: { type: string, enum: [PEN, USD] }
+    Decimal: { type: string, pattern: "^-?\\d+\\.\\d{2}$", examples: ["85.00"] }
+    LocalizedString:
+      type: object
+      description: Text per locale; es is required where the text is.
+      propertyNames: { $ref: "#/components/schemas/Locale" }
+      additionalProperties: { type: string }
+    Text:
+      type: object
+      required: [name, description]
+      properties:
+        name: { type: string }
+        description: { type: string }
+    Texts:
+      type: object
+      propertyNames: { $ref: "#/components/schemas/Locale" }
+      additionalProperties: { $ref: "#/components/schemas/Text" }
+    VariantOptions:
+      type: object
+      description: Attribute code → value code, e.g. {"slot":"022"}
+      additionalProperties: { type: string }
+    ProductStatus: { type: string, enum: [draft, active, archived] }
+
+    Category:
+      type: object
+      required: [id, slug, parent_id, name, description, sort_order]
+      properties:
+        id: { type: string, format: uuid }
+        slug: { type: string }
+        parent_id: { type: [string, "null"], format: uuid }
+        name: { type: string }
+        description: { type: string }
+        sort_order: { type: integer }
+    Image:
+      type: object
+      required: [id, url, alt]
+      properties:
+        id: { type: string, format: uuid }
+        url: { type: string }
+        alt: { type: string }
+    ProductSummary:
+      type: object
+      required: [id, slug, brand, name, category_id, image, default_variant_id, variant_count]
+      properties:
+        id: { type: string, format: uuid }
+        slug: { type: string }
+        brand: { type: string }
+        name: { type: string }
+        category_id: { type: [string, "null"], format: uuid }
+        image:
+          oneOf: [{ $ref: "#/components/schemas/Image" }, { type: "null" }]
+        default_variant_id: { type: [string, "null"], format: uuid }
+        variant_count: { type: integer }
+    ProductPage:
+      type: object
+      required: [items, total, page, page_size]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/ProductSummary" } }
+        total: { type: integer }
+        page: { type: integer }
+        page_size: { type: integer }
+    Option:
+      type: object
+      required: [code, name, values]
+      properties:
+        code: { type: string }
+        name: { type: string }
+        values:
+          type: array
+          items:
+            type: object
+            required: [code, label]
+            properties:
+              code: { type: string }
+              label: { type: string }
+    Variant:
+      type: object
+      required: [id, sku, weight_g, is_default, options]
+      properties:
+        id: { type: string, format: uuid }
+        sku: { type: string }
+        weight_g: { type: integer }
+        is_default: { type: boolean }
+        options: { $ref: "#/components/schemas/VariantOptions" }
+    ProductDetail:
+      type: object
+      required: [id, slug, brand, name, description, category, images, options, variants]
+      properties:
+        id: { type: string, format: uuid }
+        slug: { type: string }
+        brand: { type: string }
+        name: { type: string }
+        description: { type: string }
+        category:
+          oneOf:
+            - type: object
+              required: [id, slug, name]
+              properties:
+                id: { type: string, format: uuid }
+                slug: { type: string }
+                name: { type: string }
+            - type: "null"
+        images: { type: array, items: { $ref: "#/components/schemas/Image" } }
+        options:
+          description: Only the attributes and values used by this product's variants.
+          type: array
+          items: { $ref: "#/components/schemas/Option" }
+        variants: { type: array, items: { $ref: "#/components/schemas/Variant" } }
+    Quotes:
+      type: object
+      required: [currency, qty, items]
+      properties:
+        currency: { $ref: "#/components/schemas/Currency" }
+        qty: { type: integer }
+        items:
+          type: array
+          items:
+            type: object
+            required: [variant_id, unit_price, tiers]
+            properties:
+              variant_id: { type: string, format: uuid }
+              unit_price: { $ref: "#/components/schemas/Decimal" }
+              tiers:
+                type: array
+                items:
+                  type: object
+                  required: [min_qty, unit_price]
+                  properties:
+                    min_qty: { type: integer }
+                    unit_price: { $ref: "#/components/schemas/Decimal" }
+
+    AdminVariant:
+      type: object
+      required: [id, sku, barcode, weight_g, is_default, archived, options]
+      properties:
+        id: { type: string, format: uuid }
+        sku: { type: string }
+        barcode: { type: string }
+        weight_g: { type: integer }
+        is_default: { type: boolean }
+        archived: { type: boolean }
+        options: { $ref: "#/components/schemas/VariantOptions" }
+    AdminImage:
+      type: object
+      required: [id, key, url, alt]
+      properties:
+        id: { type: string, format: uuid }
+        key: { type: string }
+        url: { type: string }
+        alt: { $ref: "#/components/schemas/LocalizedString" }
+    AdminProduct:
+      type: object
+      required: [id, slug, brand, status, category_id, texts, variants, images, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        slug: { type: string }
+        brand: { type: string }
+        status: { $ref: "#/components/schemas/ProductStatus" }
+        category_id: { type: [string, "null"], format: uuid }
+        texts: { $ref: "#/components/schemas/Texts" }
+        variants: { type: array, items: { $ref: "#/components/schemas/AdminVariant" } }
+        images: { type: array, items: { $ref: "#/components/schemas/AdminImage" } }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    AdminProductPage:
+      type: object
+      required: [items, total, page, page_size]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [id, slug, name, brand, status, variant_count, updated_at]
+            properties:
+              id: { type: string, format: uuid }
+              slug: { type: string }
+              name: { type: string }
+              brand: { type: string }
+              status: { $ref: "#/components/schemas/ProductStatus" }
+              variant_count: { type: integer }
+              updated_at: { type: string, format: date-time }
+        total: { type: integer }
+        page: { type: integer }
+        page_size: { type: integer }
+    AdminCategory:
+      type: object
+      required: [id, slug, parent_id, sort_order, texts]
+      properties:
+        id: { type: string, format: uuid }
+        slug: { type: string }
+        parent_id: { type: [string, "null"], format: uuid }
+        sort_order: { type: integer }
+        texts: { $ref: "#/components/schemas/Texts" }
+    AdminAttribute:
+      type: object
+      required: [code, names, sort_order, values]
+      properties:
+        code: { type: string }
+        names: { $ref: "#/components/schemas/LocalizedString" }
+        sort_order: { type: integer }
+        values:
+          type: array
+          items:
+            type: object
+            required: [code, labels]
+            properties:
+              code: { type: string }
+              labels: { $ref: "#/components/schemas/LocalizedString" }
+    ImageUpload:
+      type: object
+      required: [key, upload_url, method, headers]
+      properties:
+        key: { type: string }
+        upload_url: { type: string }
+        method: { type: string, const: PUT }
+        headers: { type: object, additionalProperties: { type: string } }
+    PriceList:
+      type: object
+      required: [id, code, name, is_default]
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string }
+        name: { type: string }
+        is_default: { type: boolean }
+    Price:
+      type: object
+      required: [currency, min_qty, unit_price]
+      properties:
+        currency: { $ref: "#/components/schemas/Currency" }
+        min_qty: { type: integer, minimum: 1 }
+        unit_price: { $ref: "#/components/schemas/Decimal" }
+    VariantPrices:
+      type: object
+      required: [variant_id, prices]
+      properties:
+        variant_id: { type: string, format: uuid }
+        prices: { type: array, items: { $ref: "#/components/schemas/Price" } }
