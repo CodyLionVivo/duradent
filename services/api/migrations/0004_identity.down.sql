@@ -1,0 +1,6 @@
+DROP TABLE IF EXISTS login_states;
+DROP TABLE IF EXISTS addresses;
+DROP TABLE IF EXISTS customers;
+DROP TABLE IF EXISTS sessions;
+DROP TABLE IF EXISTS oauth_identities;
+DROP TABLE IF EXISTS accounts;

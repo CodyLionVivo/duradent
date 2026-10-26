@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Duradent API
-  version: 0.2.0
+  version: 0.3.0
   description: |
     HTTP API of the Duradent store. This file is the contract between the Go
     backend and apps/web: the web regenerates its types from it with
@@ -11,8 +11,10 @@ info:
     currency (PEN or USD). Errors use RFC 9457 `application/problem+json`
     with a stable `code` (e.g. `catalog.sku_taken`).
 
-    Admin routes (`/v1/admin/*`) require `Authorization: Bearer <ADMIN_TOKEN>`
-    until phase 3 replaces the token with sessions and roles.
+    Signed-in customers send `Authorization: Session <token>` (the web keeps
+    the token in an httpOnly cookie and forwards it). Admin routes
+    (`/v1/admin/*`) accept a session whose account has role `admin`, or
+    `Authorization: Bearer <ADMIN_TOKEN>` for automation.
 servers:
   - url: http://localhost:8080
 tags:
@@ -21,6 +23,9 @@ tags:
   - name: pricing
   - name: admin-catalog
   - name: admin-pricing
+  - name: auth
+  - name: me
+  - name: admin-customers
 
 paths:
   /healthz:
@@ -114,13 +119,15 @@ paths:
         "404": { $ref: "#/components/responses/Problem" }
   /v1/pricing/quotes:
     get:
-      summary: Prices of variants from the public list
+      summary: Prices of variants for the caller
       description: |
-        Variants without a price are omitted ("price on request"). Customer
-        price lists are confidential and never selectable by parameter; from
-        phase 3 the list comes from the signed-in customer's session.
+        Signed-in customers get their assigned price list (falling back to the
+        public list for variants it does not price); anonymous visitors get the
+        public list. Customer lists are confidential and never selectable by
+        parameter. Variants without a price are omitted ("price on request").
       operationId: getQuotes
       tags: [pricing]
+      security: [{}, { session: [] }]
       parameters:
         - { name: currency, in: query, schema: { $ref: "#/components/schemas/Currency" } }
         - { name: qty, in: query, schema: { type: integer, minimum: 1, default: 1 } }
@@ -454,9 +461,326 @@ paths:
               schema: { $ref: "#/components/schemas/VariantPrices" }
         "422": { $ref: "#/components/responses/Problem" }
 
+  # --- Auth & profile -----------------------------------------------------------
+  /v1/auth/providers:
+    get:
+      summary: Enabled sign-in providers
+      operationId: authProviders
+      tags: [auth]
+      responses:
+        "200":
+          description: Providers, e.g. ["google","microsoft"]; "dev" only in local development
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [providers]
+                properties:
+                  providers: { type: array, items: { $ref: "#/components/schemas/Provider" } }
+  /v1/auth/register:
+    post:
+      summary: Create a password account and sign in
+      operationId: authRegister
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, minLength: 10, maxLength: 128 }
+                name: { type: string }
+                locale: { $ref: "#/components/schemas/Locale" }
+      responses:
+        "201": { $ref: "#/components/responses/Session" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+  /v1/auth/login:
+    post:
+      summary: Sign in with email and password
+      operationId: authLogin
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string }
+                password: { type: string }
+      responses:
+        "200": { $ref: "#/components/responses/Session" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+  /v1/auth/dev/login:
+    post:
+      summary: Password-less sign-in by email (local development only)
+      operationId: authDevLogin
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string }
+                name: { type: string }
+      responses:
+        "200": { $ref: "#/components/responses/Session" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /v1/auth/oidc/{provider}/start:
+    parameters:
+      - { name: provider, in: path, required: true, schema: { $ref: "#/components/schemas/Provider" } }
+    post:
+      summary: Begin an OIDC sign-in (authorization code + PKCE)
+      description: |
+        Returns the provider URL to redirect the browser to and the state,
+        which the web binds to the browser with a short-lived cookie. The
+        redirect URI is fixed by configuration (WEB_BASE_URL).
+      operationId: authOidcStart
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                return_to: { type: string, description: Same-site path to return to after sign-in }
+      responses:
+        "200":
+          description: Authorization request
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [authorization_url, state]
+                properties:
+                  authorization_url: { type: string }
+                  state: { type: string }
+        "404": { $ref: "#/components/responses/Problem" }
+  /v1/auth/oidc/{provider}/callback:
+    parameters:
+      - { name: provider, in: path, required: true, schema: { $ref: "#/components/schemas/Provider" } }
+    post:
+      summary: Complete an OIDC sign-in
+      operationId: authOidcCallback
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, state]
+              properties:
+                code: { type: string }
+                state: { type: string }
+      responses:
+        "200": { $ref: "#/components/responses/Session" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /v1/auth/logout:
+    post:
+      summary: End the current session
+      operationId: authLogout
+      tags: [auth]
+      security: [{ session: [] }]
+      responses:
+        "204": { description: Signed out }
+  /v1/me:
+    get:
+      operationId: getMe
+      tags: [me]
+      security: [{ session: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/Me" }
+        "401": { $ref: "#/components/responses/Problem" }
+    put:
+      operationId: updateMe
+      tags: [me]
+      security: [{ session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                display_name: { type: string, maxLength: 120 }
+                locale: { $ref: "#/components/schemas/Locale" }
+      responses:
+        "200": { $ref: "#/components/responses/Me" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /v1/me/password:
+    put:
+      summary: Set or change the password
+      operationId: changePassword
+      tags: [me]
+      security: [{ session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [new_password]
+              properties:
+                current_password: { type: string, description: Required when the account already has a password }
+                new_password: { type: string }
+      responses:
+        "204": { description: Saved }
+        "422": { $ref: "#/components/responses/Problem" }
+  /v1/me/customer:
+    put:
+      summary: Save the billing profile
+      operationId: saveCustomer
+      tags: [me]
+      security: [{ session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CustomerInput" }
+      responses:
+        "200":
+          description: Saved profile
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Customer" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /v1/me/addresses:
+    post:
+      operationId: addAddress
+      tags: [me]
+      security: [{ session: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AddressInput" }
+      responses:
+        "201":
+          description: Created address
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Address" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /v1/me/addresses/{id}:
+    parameters: [{ $ref: "#/components/parameters/ID" }]
+    put:
+      operationId: updateAddress
+      tags: [me]
+      security: [{ session: [] }]
+      requestBody: { $ref: "#/components/requestBodies/AddressInput" }
+      responses:
+        "200":
+          description: Updated address
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Address" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: removeAddress
+      tags: [me]
+      security: [{ session: [] }]
+      responses:
+        "204": { description: Removed }
+        "404": { $ref: "#/components/responses/Problem" }
+  /v1/me/addresses/{id}/default:
+    parameters: [{ $ref: "#/components/parameters/ID" }]
+    post:
+      operationId: setDefaultAddress
+      tags: [me]
+      security: [{ session: [] }]
+      responses:
+        "204": { description: Default set }
+        "404": { $ref: "#/components/responses/Problem" }
+
+  # --- Admin: customers ---------------------------------------------------------
+  /v1/admin/customers:
+    get:
+      operationId: adminListCustomers
+      tags: [admin-customers]
+      security: [{ admin: [] }, { session: [] }]
+      parameters:
+        - { name: q, in: query, description: "Email, name, document number or business name", schema: { type: string } }
+        - { $ref: "#/components/parameters/Page" }
+        - { name: page_size, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+      responses:
+        "200":
+          description: Accounts with their billing profile
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total, page, page_size]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [account, customer, created_at]
+                      properties:
+                        account: { $ref: "#/components/schemas/Account" }
+                        customer:
+                          oneOf: [{ $ref: "#/components/schemas/Customer" }, { type: "null" }]
+                        created_at: { type: string, format: date-time }
+                  total: { type: integer }
+                  page: { type: integer }
+                  page_size: { type: integer }
+  /v1/admin/customers/{id}/price-list:
+    parameters: [{ $ref: "#/components/parameters/ID" }]
+    put:
+      summary: Assign the price list a customer buys from (empty = public)
+      operationId: adminAssignPriceList
+      tags: [admin-customers]
+      security: [{ admin: [] }, { session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string }
+      responses:
+        "204": { description: Assigned }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /v1/admin/customers/{id}/role:
+    parameters: [{ $ref: "#/components/parameters/ID" }]
+    put:
+      operationId: adminSetRole
+      tags: [admin-customers]
+      security: [{ admin: [] }, { session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role]
+              properties:
+                role: { $ref: "#/components/schemas/Role" }
+      responses:
+        "204": { description: Saved }
+        "409": { $ref: "#/components/responses/Problem" }
+
 components:
   securitySchemes:
-    admin: { type: http, scheme: bearer }
+    admin: { type: http, scheme: bearer, description: "ADMIN_TOKEN, for automation" }
+    session:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: "Session <token>"
 
   parameters:
     Locale:
@@ -475,6 +799,23 @@ components:
       schema: { type: string, format: uuid }
 
   requestBodies:
+    AddressInput:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [recipient, line1, district, province, department]
+            properties:
+              label: { type: string, maxLength: 60 }
+              recipient: { type: string, maxLength: 120 }
+              line1: { type: string, maxLength: 200 }
+              reference: { type: string, maxLength: 200 }
+              district: { type: string, maxLength: 80 }
+              province: { type: string, maxLength: 80 }
+              department: { type: string, pattern: "^[0-9]{2}$", description: INEI department code (15 = Lima) }
+              ubigeo: { type: string, pattern: "^([0-9]{6})?$" }
+              phone: { type: string }
     ProductInput:
       required: true
       content:
@@ -524,6 +865,30 @@ components:
               is_default: { type: boolean }
 
   responses:
+    Session:
+      description: Signed in
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [token, expires_at, account]
+            properties:
+              token: { type: string }
+              expires_at: { type: string, format: date-time }
+              account: { $ref: "#/components/schemas/Account" }
+              return_to: { type: string }
+    Me:
+      description: The signed-in account with its billing profile and addresses
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [account, customer, addresses]
+            properties:
+              account: { $ref: "#/components/schemas/Account" }
+              customer:
+                oneOf: [{ $ref: "#/components/schemas/Customer" }, { type: "null" }]
+              addresses: { type: array, items: { $ref: "#/components/schemas/Address" } }
     Problem:
       description: Error
       content:
@@ -577,6 +942,52 @@ components:
         field: { type: string, description: Offending input field }
 
     Locale: { type: string, enum: [es, en, pt-br] }
+    Provider: { type: string, enum: [google, microsoft, dev] }
+    Role: { type: string, enum: [customer, admin] }
+    Account:
+      type: object
+      required: [id, email, email_verified, display_name, locale, role, has_password]
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string }
+        email_verified: { type: boolean }
+        display_name: { type: string }
+        locale: { $ref: "#/components/schemas/Locale" }
+        role: { $ref: "#/components/schemas/Role" }
+        has_password: { type: boolean }
+    CustomerInput:
+      type: object
+      required: [type, document_type, document_number]
+      properties:
+        type: { type: string, enum: [persona, empresa] }
+        document_type: { type: string, enum: [DNI, RUC, CE] }
+        document_number: { type: string }
+        business_name: { type: string, description: Razón social; required for empresa }
+        cop_number: { type: string, description: Colegio Odontológico del Perú registration }
+        phone: { type: string }
+    Customer:
+      allOf:
+        - { $ref: "#/components/schemas/CustomerInput" }
+        - type: object
+          required: [business_name, cop_number, phone, invoice_type, price_list_code]
+          properties:
+            invoice_type: { type: string, enum: ["01", "03"], description: "01 factura (RUC), 03 boleta" }
+            price_list_code: { type: string, description: Empty means the public list }
+    Address:
+      type: object
+      required: [id, label, recipient, line1, reference, district, province, department, ubigeo, phone, is_default]
+      properties:
+        id: { type: string, format: uuid }
+        label: { type: string }
+        recipient: { type: string }
+        line1: { type: string }
+        reference: { type: string }
+        district: { type: string }
+        province: { type: string }
+        department: { type: string }
+        ubigeo: { type: string }
+        phone: { type: string }
+        is_default: { type: boolean }
     Currency: { type: string, enum: [PEN, USD] }
     Decimal: { type: string, pattern: "^-?\\d+\\.\\d{2}$", examples: ["85.00"] }
     LocalizedString:

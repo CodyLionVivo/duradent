@@ -1,0 +1,92 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import ProviderButtons from '../../../components/account/ProviderButtons.astro';
+import { isLocale, localePath, useTranslations } from '../../../i18n';
+import { ApiError, unwrap } from '../../../lib/api/client';
+import { afterSignIn, apiErrorText } from '../../../lib/account';
+import { setSession } from '../../../lib/session';
+
+if (!isLocale(Astro.params.locale)) return new Response(null, { status: 404 });
+
+const { locale, api, user } = Astro.locals;
+const t = useTranslations(locale);
+const next = afterSignIn(Astro.url.searchParams.get('next'), localePath(locale, '/account'));
+if (user) return Astro.redirect(next, 302);
+
+let error = Astro.url.searchParams.get('error') ? apiErrorText(t, Astro.url.searchParams.get('error')) : '';
+let email = '';
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  email = String(form.get('email') ?? '');
+  try {
+    const signed =
+      form.get('intent') === 'dev'
+        ? unwrap(await api.POST('/v1/auth/dev/login', { body: { email, name: String(form.get('name') ?? '') } }))
+        : unwrap(await api.POST('/v1/auth/login', { body: { email, password: String(form.get('password') ?? '') } }));
+    setSession(Astro.cookies, signed.token, signed.expires_at);
+    return Astro.redirect(next, 303);
+  } catch (err) {
+    error = apiErrorText(t, err);
+    Astro.response.status = err instanceof ApiError ? err.status : 500;
+  }
+}
+
+let providers: string[] = [];
+try {
+  providers = unwrap(await api.GET('/v1/auth/providers')).providers;
+} catch {
+  // Password sign-in still works if this fails.
+}
+---
+
+<Layout title={t('account.login.title')}>
+  <section class="container-page flex justify-center py-14">
+    <div class="w-full max-w-md">
+      <h1 class="text-2xl font-bold tracking-tight">{t('account.login.title')}</h1>
+      <p class="mt-2 text-sm text-muted">{t('account.login.subtitle')}</p>
+
+      {error && <p role="alert" class="mt-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</p>}
+
+      <div class="card mt-6 space-y-5 p-6">
+        <ProviderButtons providers={providers} next={next} />
+
+        <form method="post" class="space-y-4" novalidate={false}>
+          <div>
+            <label for="email" class="label">{t('account.login.email')}</label>
+            <input id="email" name="email" type="email" autocomplete="email" required value={email} class="input" />
+          </div>
+          <div>
+            <label for="password" class="label">{t('account.login.password')}</label>
+            <input id="password" name="password" type="password" autocomplete="current-password" required class="input" />
+          </div>
+          <button class="btn-primary w-full py-3">{t('account.login.submit')}</button>
+        </form>
+
+        <p class="text-center text-sm text-muted">
+          {t('account.login.noAccount')}{' '}
+          <a class="font-semibold text-brand-700 hover:underline" href={`${localePath(locale, '/account/register')}?next=${encodeURIComponent(next)}`}>{t('account.login.createOne')}</a>
+        </p>
+      </div>
+
+      {providers.includes('dev') && (
+        <form method="post" class="mt-6 rounded-xl border border-dashed border-amber-300 bg-amber-50 p-5">
+          <input type="hidden" name="intent" value="dev" />
+          <h2 class="text-sm font-semibold text-amber-900">{t('account.login.devTitle')}</h2>
+          <p class="mt-1 text-xs text-amber-800">{t('account.login.devHint')}</p>
+          <div class="mt-3 grid gap-3 sm:grid-cols-2">
+            <div>
+              <label for="dev-email" class="label text-xs">{t('account.login.email')}</label>
+              <input id="dev-email" name="email" type="email" required value="admin@duradent.local" class="input" />
+            </div>
+            <div>
+              <label for="dev-name" class="label text-xs">{t('account.login.name')}</label>
+              <input id="dev-name" name="name" class="input" />
+            </div>
+          </div>
+          <button class="btn-secondary mt-3">{t('account.login.devSubmit')}</button>
+        </form>
+      )}
+    </div>
+  </section>
+</Layout>

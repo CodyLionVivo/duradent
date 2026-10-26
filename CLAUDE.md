@@ -41,10 +41,15 @@ Mailpit http://localhost:8025 · LocalStack http://localhost:4566 · MySQL `loca
 
 El servidor de desarrollo de Astro fuera de Docker: `astro dev --background` (ver AGENTS.md).
 
-**Tienda**: `/{es|en|pt-br}`, `/…/catalog`, `/…/catalog/{categoría}`, `/…/product/{slug}`. `/` redirige
-según `Accept-Language`. **Admin**: http://localhost:4321/admin, token local `local-dev-admin-token`
-(definido en `docker-compose.yml`; solo desarrollo). Las rutas `/v1/admin/*` del API piden
-`Authorization: Bearer <ADMIN_TOKEN>` hasta la fase 3.
+**Tienda**: `/{es|en|pt-br}`, `/…/catalog`, `/…/catalog/{categoría}`, `/…/product/{slug}`,
+`/…/account` (login, registro, perfil). `/` redirige según `Accept-Language`.
+
+**Admin**: http://localhost:4321/admin → pide iniciar sesión. En local usa el **acceso de desarrollo**
+de la página de login con `admin@duradent.local` (está en `ADMIN_EMAILS` del compose). Para scripts,
+las rutas `/v1/admin/*` del API también aceptan `Authorization: Bearer local-dev-admin-token`.
+
+**Google / Microsoft en local**: exporta `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` (o los de
+Microsoft) antes de `task up`; redirect URI a registrar: `http://localhost:4321/auth/<google|microsoft>/callback`.
 
 ## Arquitectura del backend (hexagonal)
 
@@ -64,9 +69,16 @@ compartidos sin infraestructura: `id` (UUIDv7), `money` (céntimos `int64`, nunc
 Estas reglas las verifica `internal/archtest` en cada `go test`. Si falla, corrige la dependencia;
 no relajes la regla sin registrar la decisión abajo.
 
-Contextos implementados: **catalog** (productos, variantes, categorías, atributos, imágenes en S3)
-y **pricing** (listas de precios con tramos por volumen). Previstos: cart, orders, payments,
-inventory, identity, shipping, invoicing, notifications.
+Contextos implementados: **catalog** (productos, variantes, categorías, atributos, imágenes en S3),
+**pricing** (listas de precios con tramos por volumen) e **identity** (cuentas, OIDC Google/Microsoft,
+contraseña Argon2id, sesiones, perfil de facturación RUC/DNI/CE, direcciones, roles). Previstos:
+cart, orders, payments, inventory, shipping, invoicing, notifications.
+
+**Autenticación**: `internal/platform/auth` resuelve `Authorization: Session <token>` en cada request y
+deja un `auth.Principal` (cuenta, rol, lista de precios) en el contexto. `auth.RequireUser` y
+`auth.RequireAdmin(ADMIN_TOKEN)` protegen rutas. Los contextos leen el principal del contexto, nunca
+importan identity. La web guarda el token en la cookie httpOnly `dd_session` y lo reenvía desde
+`Astro.locals.api` (cliente por request creado en `middleware.ts`), junto con la IP del cliente.
 
 `internal/apitest` prueba la API completa por HTTP contra MySQL real (solo S3 simulado).
 
@@ -83,8 +95,9 @@ inventory, identity, shipping, invoicing, notifications.
   con `code` estable (`catalog.sku_taken`). Dinero en JSON como string decimal (`"85.00"`).
   CI falla si `apps/web/src/lib/api/schema.d.ts` no está regenerado.
 - **Errores de dominio**: devuelve `apperr.Invalid/NotFound/Conflict(code, field, msg)`; el HTTP los
-  mapea a 422/404/409. Al añadir un código nuevo, añade su texto en español en
-  `apps/web/src/i18n/messages/es.json` → `admin.errors`.
+  mapea a 422/404/409. Al añadir un código nuevo, tradúcelo: errores que ve el cliente en
+  `messages/{es,en,pt-br}.json` → `codes.<contexto>.<código>`; errores del panel en `es.json` →
+  `admin.errors`. La web nunca muestra el mensaje en inglés del API.
 - **Web**: textos siempre en `src/i18n/messages/{es,en,pt-br}.json`, nunca en el markup. `es` es la
   referencia; un test falla si en/pt-br no traducen todas las claves de la tienda (el admin
   solo existe en español). Islas (Preact) solo donde haya interacción; reciben los textos ya
@@ -129,13 +142,26 @@ inventory, identity, shipping, invoicing, notifications.
 14. **Imágenes directas a S3** con URL prefirmada (PUT); el API nunca recibe los bytes.
 15. **i18n manual** (`/[locale]/…` + middleware) en lugar del routing i18n de Astro, para que
     `/admin` y `/api` queden fuera del prefijo de idioma.
-16. **Admin con token temporal** (cookie httpOnly en `/admin`) hasta la fase 3.
+16. **Admin por rol de sesión** (fase 3). `ADMIN_TOKEN` queda solo para automatización.
+17. **Sesiones opacas en MySQL**, no JWT: se pueden revocar (logout, recuperación de cuenta) y solo se
+    guarda su SHA-256. 30 días.
+18. **Admins por `ADMIN_EMAILS` con correo verificado**: un registro con contraseña (correo sin
+    verificar) nunca da admin. Si alguien verifica un correo por Google/Microsoft y ya existía una
+    cuenta sin verificar con ese correo, se le quita la contraseña y se cierran sus sesiones
+    (evita que quien registró el correo ajeno conserve acceso).
+19. **Microsoft**: su `email` no viene verificado salvo cuentas personales (tenant de consumidores) o
+    el claim opcional `xms_edov`; el resto se trata como no verificado.
+20. **`DEV_LOGIN` solo con `APP_ENV=local`** (la config falla si se activa en otro entorno).
+21. **Rate limiting en memoria** por IP (20/min en endpoints de login) y por correo (5/min en login).
+    Con N tareas el límite efectivo es N veces mayor; aceptable a esta escala.
+22. **La redirect URI de OIDC sale de `WEB_BASE_URL`**, nunca del request; el `state` es de un solo uso
+    (fila borrada en la misma transacción) y además va atado al navegador con la cookie `dd_oauth_state`.
 
 ## Estado por fases
 
 - [x] Fase 1 — monorepo, Compose, CI
 - [x] Fase 2 — catálogo, pricing, frontend i18n, admin de catálogo
-- [ ] Fase 3 — identidad (Google, Microsoft, email)
+- [x] Fase 3 — identidad (Google, Microsoft, email)
 - [ ] Fase 4 — carrito, envíos, pedidos, pagos Culqi + transferencia
 - [ ] Fase 5 — outbox relay, worker, inventario, emails, facturación
 - [ ] Fase 6 — Terraform, ALB, ECS, despliegue

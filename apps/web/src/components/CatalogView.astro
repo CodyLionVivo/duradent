@@ -25,12 +25,12 @@ let categories: Category[] = [];
 let result = { items: [] as Awaited<ReturnType<typeof browseProducts>>['items'], total: 0 };
 let quotes = new Map<string, Quote>();
 try {
-  categories = await getCategories(locale);
+  categories = await getCategories(Astro.locals.api, locale);
   if (categorySlug && !categories.some((c) => c.slug === categorySlug)) {
     state = 'notFound';
   } else {
-    result = await browseProducts({ locale, category: categorySlug, q, page, pageSize: PAGE_SIZE });
-    quotes = await getQuotes(result.items.map((p) => p.default_variant_id ?? ''), currency);
+    result = await browseProducts(Astro.locals.api, { locale, category: categorySlug, q, page, pageSize: PAGE_SIZE });
+    quotes = await getQuotes(Astro.locals.api, result.items.map((p) => p.default_variant_id ?? ''), currency);
   }
 } catch (err) {
   state = err instanceof ApiError && err.status === 404 ? 'notFound' : 'unavailable';

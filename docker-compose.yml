@@ -16,8 +16,20 @@ x-api-env: &api-env
   S3_PRESIGN_ENDPOINT: http://localhost:4566
   MEDIA_BASE_URL: http://localhost:4566/duradent-media-local
   SMTP_ADDR: mailpit:1025
-  # Local-only admin token; replaced by sessions and roles in phase 3.
-  ADMIN_TOKEN: &admin-token local-dev-admin-token
+  # Automation token for admin routes (scripts, curl). People use sessions.
+  ADMIN_TOKEN: local-dev-admin-token
+  # Identity (phase 3). Dev login lets you sign in locally without Google
+  # credentials; admin@duradent.local becomes admin on first sign-in.
+  WEB_BASE_URL: http://localhost:4321
+  DEV_LOGIN: "true"
+  ADMIN_EMAILS: admin@duradent.local
+  # The web BFF forwards the browser's IP in X-Forwarded-For.
+  TRUST_PROXY_HEADERS: "true"
+  # Fill these to try real sign-in locally (redirect URI: http://localhost:4321/auth/<provider>/callback)
+  GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+  GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+  MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID:-}
+  MICROSOFT_CLIENT_SECRET: ${MICROSOFT_CLIENT_SECRET:-}
 
 services:
   mysql:
@@ -103,7 +115,6 @@ services:
     build: { context: ./apps/web, target: dev }
     environment:
       API_URL: http://api:8080
-      ADMIN_TOKEN: *admin-token
       VITE_POLLING: "true"
     ports: ["4321:4321"]
     volumes:

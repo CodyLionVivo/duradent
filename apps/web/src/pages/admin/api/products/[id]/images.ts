@@ -1,15 +1,16 @@
-// Same-origin proxy for the image uploader island: the browser never sees the
-// admin token. Protected by the /admin cookie gate in middleware.ts.
+// Same-origin proxy for the image uploader island: the browser never talks to
+// the API. Protected by the admin-role check in middleware.ts.
 import type { APIRoute } from 'astro';
-import { adminApi, ApiError, unwrap } from '../../../../../lib/api/client';
+import { ApiError, unwrap } from '../../../../../lib/api/client';
 import { errorMessage } from '../../../../../lib/admin';
 
 type Body =
   | { action: 'presign'; content_type: 'image/jpeg' | 'image/png' | 'image/webp' | 'image/avif' }
   | { action: 'attach'; key: string; alt?: Record<string, string> };
 
-export const POST: APIRoute = async ({ params, request }) => {
+export const POST: APIRoute = async ({ params, request, locals }) => {
   const id = params.id ?? '';
+  const adminApi = locals.api;
   let body: Body;
   try {
     body = (await request.json()) as Body;

@@ -16,7 +16,8 @@
     "currency": "Moeda",
     "openMenu": "Abrir menu",
     "closeMenu": "Fechar menu",
-    "mainNav": "Navegação principal"
+    "mainNav": "Navegação principal",
+    "account": "Minha conta"
   },
   "currency": {
     "PEN": "Soles peruanos (S/)",
@@ -101,5 +102,136 @@
     "backHome": "Voltar ao início",
     "unavailableTitle": "Serviço indisponível",
     "unavailableText": "Não foi possível carregar o catálogo. Tente novamente em alguns minutos."
+  },
+  "account": {
+    "title": "Minha conta",
+    "signIn": "Entrar",
+    "signOut": "Sair",
+    "register": {
+      "title": "Crie sua conta",
+      "subtitle": "Cadastre-se para comprar e salvar seus endereços de entrega.",
+      "name": "Nome completo",
+      "passwordHint": "No mínimo 10 caracteres. Uma frase curta é mais segura que uma palavra com símbolos.",
+      "submit": "Criar conta",
+      "haveAccount": "Já tem conta?",
+      "signInLink": "Entre"
+    },
+    "login": {
+      "title": "Entre na sua conta",
+      "subtitle": "Compre com os preços atribuídos à sua clínica ou consultório.",
+      "withGoogle": "Continuar com o Google",
+      "withMicrosoft": "Continuar com a Microsoft",
+      "or": "ou com seu e-mail",
+      "email": "E-mail",
+      "password": "Senha",
+      "submit": "Entrar",
+      "noAccount": "Ainda não tem conta?",
+      "createOne": "Crie uma",
+      "devTitle": "Acesso de desenvolvimento",
+      "devHint": "Somente em desenvolvimento local: entre com qualquer e-mail, sem senha.",
+      "devSubmit": "Entrar como desenvolvedor",
+      "name": "Nome (opcional)"
+    },
+    "profile": {
+      "greeting": "Olá, {name}",
+      "details": "Dados da conta",
+      "displayName": "Nome",
+      "email": "E-mail",
+      "language": "Idioma preferido",
+      "save": "Salvar",
+      "saved": "Alterações salvas.",
+      "clinicPrices": "Você tem preços especiais atribuídos ({list}).",
+      "unverified": "Seu e-mail ainda não foi verificado."
+    },
+    "billing": {
+      "title": "Dados de faturamento",
+      "hint": "Com RUC emitimos fatura eletrônica (factura); com DNI ou carteira de estrangeiro, recibo (boleta).",
+      "type": "Tipo de cliente",
+      "persona": "Pessoa física / profissional",
+      "empresa": "Empresa ou clínica",
+      "documentType": "Tipo de documento",
+      "documentNumber": "Número do documento",
+      "businessName": "Razão social",
+      "cop": "Nº de registro no conselho (COP)",
+      "copHint": "Opcional. Ajuda a confirmar que você é profissional de saúde.",
+      "phone": "Telefone",
+      "invoiceFactura": "Você receberá fatura eletrônica (factura).",
+      "invoiceBoleta": "Você receberá recibo eletrônico (boleta).",
+      "save": "Salvar dados de faturamento",
+      "missing": "Complete seus dados de faturamento para poder comprar.",
+      "dni": "DNI",
+      "ruc": "RUC",
+      "ce": "Carteira de estrangeiro (CE)"
+    },
+    "addresses": {
+      "title": "Endereços de entrega",
+      "add": "Adicionar endereço",
+      "label": "Nome do endereço",
+      "labelHint": "Ex.: Consultório Miraflores",
+      "recipient": "Quem recebe",
+      "line1": "Endereço",
+      "reference": "Referência",
+      "district": "Distrito",
+      "province": "Província",
+      "department": "Departamento",
+      "chooseDepartment": "Escolha um departamento",
+      "phone": "Telefone de contato",
+      "default": "Padrão",
+      "makeDefault": "Usar como padrão",
+      "remove": "Excluir",
+      "empty": "Você ainda não tem endereços salvos.",
+      "optional": "opcional"
+    },
+    "password": {
+      "title": "Senha",
+      "setTitle": "Criar uma senha",
+      "setHint": "Você entra com o Google ou a Microsoft. Se quiser, crie uma senha para entrar também com seu e-mail.",
+      "current": "Senha atual",
+      "new": "Nova senha",
+      "save": "Salvar senha"
+    },
+    "errors": {
+      "generic": "Não foi possível concluir a ação. Tente novamente.",
+      "stateMismatch": "O login expirou ou foi aberto em outra janela. Tente novamente.",
+      "cancelled": "Você cancelou o login."
+    }
+  },
+  "codes": {
+    "identity": {
+      "email_invalid": "Esse e-mail não parece válido.",
+      "email_taken": "Já existe uma conta com esse e-mail. Entre na sua conta.",
+      "password_short": "A senha deve ter pelo menos 10 caracteres.",
+      "password_long": "A senha pode ter no máximo 128 caracteres.",
+      "password_weak": "Essa senha é fácil demais de adivinhar. Tente uma frase.",
+      "credentials_invalid": "E-mail ou senha incorretos.",
+      "account_disabled": "Esta conta está desativada. Fale conosco para ajudarmos.",
+      "login_state_invalid": "O login expirou ou já foi usado. Tente novamente.",
+      "provider_rejected": "O provedor não confirmou seu login.",
+      "provider_no_email": "O provedor não compartilhou um e-mail válido.",
+      "provider_unknown": "Esse método de login não está disponível.",
+      "email_in_use": "Já existe uma conta com esse e-mail. Entre primeiro com sua senha.",
+      "name_too_long": "O nome é longo demais.",
+      "customer_type_invalid": "Escolha o tipo de cliente.",
+      "document_type_invalid": "Escolha o tipo de documento.",
+      "dni_invalid": "O DNI tem 8 dígitos.",
+      "ruc_invalid": "O RUC não é válido.",
+      "ce_invalid": "A carteira de estrangeiro não é válida.",
+      "company_needs_ruc20": "Uma empresa precisa de um RUC que comece com 20.",
+      "business_name_required": "Informe a razão social.",
+      "business_name_too_long": "A razão social é longa demais.",
+      "cop_invalid": "O número de registro tem até 6 dígitos.",
+      "phone_invalid": "O telefone não é válido.",
+      "address_field_required": "Preencha todos os campos obrigatórios do endereço.",
+      "address_field_too_long": "Algum campo do endereço é longo demais.",
+      "department_invalid": "Escolha um departamento.",
+      "ubigeo_invalid": "O ubigeo não corresponde ao departamento.",
+      "too_many_addresses": "Você pode salvar até 10 endereços.",
+      "address_not_found": "Não encontramos esse endereço.",
+      "password_current_wrong": "A senha atual não está correta.",
+      "locale_invalid": "Idioma indisponível."
+    },
+    "http": {
+      "rate_limited": "Muitas tentativas. Aguarde um minuto e tente novamente."
+    }
   }
 }

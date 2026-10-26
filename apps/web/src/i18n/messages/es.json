@@ -16,7 +16,8 @@
     "currency": "Moneda",
     "openMenu": "Abrir menú",
     "closeMenu": "Cerrar menú",
-    "mainNav": "Navegación principal"
+    "mainNav": "Navegación principal",
+    "account": "Mi cuenta"
   },
   "currency": {
     "PEN": "Soles (S/)",
@@ -110,15 +111,8 @@
       "attributes": "Atributos",
       "priceLists": "Listas de precios",
       "viewStore": "Ver tienda",
-      "logout": "Salir"
-    },
-    "login": {
-      "title": "Acceso al panel",
-      "token": "Token de administración",
-      "submit": "Entrar",
-      "invalid": "Token incorrecto.",
-      "disabled": "El panel está deshabilitado: falta ADMIN_TOKEN en el servidor.",
-      "hint": "Acceso temporal hasta que exista inicio de sesión con cuentas (fase 3)."
+      "logout": "Salir",
+      "customers": "Clientes"
     },
     "common": {
       "save": "Guardar",
@@ -260,7 +254,159 @@
       "pricing.code_taken": "Ya existe una lista con ese código.",
       "pricing.name_invalid": "El nombre es obligatorio (máx. 80 caracteres).",
       "pricing.default_required": "Marca otra lista como predeterminada en lugar de desmarcar esta.",
-      "auth.required": "La sesión de administración expiró. Vuelve a entrar."
+      "identity.price_list_unknown": "Esa lista de precios no existe.",
+      "identity.customer_profile_missing": "El cliente aún no completó sus datos de facturación.",
+      "identity.self_demotion": "No puedes quitarte tu propio rol de administrador.",
+      "identity.role_invalid": "Rol no válido.",
+      "auth.forbidden": "Tu cuenta no tiene permisos de administración."
+    },
+    "customers": {
+      "title": "Clientes",
+      "empty": "No hay clientes.",
+      "count": "{count} cuentas",
+      "search": "Buscar por correo, nombre, RUC o razón social",
+      "account": "Cuenta",
+      "billing": "Facturación",
+      "priceList": "Lista de precios",
+      "publicList": "Pública (predeterminada)",
+      "role": "Rol",
+      "customer": "Cliente",
+      "admin": "Administrador",
+      "noProfile": "Sin datos de facturación",
+      "verified": "verificado",
+      "unverified": "sin verificar",
+      "since": "Desde"
+    }
+  },
+  "account": {
+    "title": "Mi cuenta",
+    "signIn": "Ingresar",
+    "signOut": "Salir",
+    "register": {
+      "title": "Crea tu cuenta",
+      "subtitle": "Regístrate para comprar y guardar tus direcciones de envío.",
+      "name": "Nombre y apellido",
+      "passwordHint": "Mínimo 10 caracteres. Una frase corta es más segura que una palabra con símbolos.",
+      "submit": "Crear cuenta",
+      "haveAccount": "¿Ya tienes cuenta?",
+      "signInLink": "Ingresa"
+    },
+    "login": {
+      "title": "Ingresa a tu cuenta",
+      "subtitle": "Compra con los precios asignados a tu clínica o consultorio.",
+      "withGoogle": "Continuar con Google",
+      "withMicrosoft": "Continuar con Microsoft",
+      "or": "o con tu correo",
+      "email": "Correo electrónico",
+      "password": "Contraseña",
+      "submit": "Ingresar",
+      "noAccount": "¿Aún no tienes cuenta?",
+      "createOne": "Crea una",
+      "devTitle": "Acceso de desarrollo",
+      "devHint": "Solo en desarrollo local: entra con cualquier correo, sin contraseña.",
+      "devSubmit": "Entrar como desarrollador",
+      "name": "Nombre (opcional)"
+    },
+    "profile": {
+      "greeting": "Hola, {name}",
+      "details": "Datos de la cuenta",
+      "displayName": "Nombre",
+      "email": "Correo",
+      "language": "Idioma preferido",
+      "save": "Guardar",
+      "saved": "Cambios guardados.",
+      "clinicPrices": "Tienes precios especiales asignados ({list}).",
+      "unverified": "Tu correo aún no está verificado."
+    },
+    "billing": {
+      "title": "Datos de facturación",
+      "hint": "Con RUC emitimos factura electrónica; con DNI o carné de extranjería, boleta.",
+      "type": "Tipo de cliente",
+      "persona": "Persona natural / profesional",
+      "empresa": "Empresa o clínica",
+      "documentType": "Tipo de documento",
+      "documentNumber": "Número de documento",
+      "businessName": "Razón social",
+      "cop": "N.º de colegiatura (COP)",
+      "copHint": "Opcional. Nos ayuda a confirmar que eres profesional de la salud.",
+      "phone": "Teléfono",
+      "invoiceFactura": "Recibirás factura electrónica.",
+      "invoiceBoleta": "Recibirás boleta electrónica.",
+      "save": "Guardar datos de facturación",
+      "missing": "Completa tus datos de facturación para poder comprar.",
+      "dni": "DNI",
+      "ruc": "RUC",
+      "ce": "Carné de extranjería"
+    },
+    "addresses": {
+      "title": "Direcciones de envío",
+      "add": "Agregar dirección",
+      "label": "Nombre de la dirección",
+      "labelHint": "Ej.: Consultorio Miraflores",
+      "recipient": "Quién recibe",
+      "line1": "Dirección",
+      "reference": "Referencia",
+      "district": "Distrito",
+      "province": "Provincia",
+      "department": "Departamento",
+      "chooseDepartment": "Elige un departamento",
+      "phone": "Teléfono de contacto",
+      "default": "Predeterminada",
+      "makeDefault": "Usar por defecto",
+      "remove": "Eliminar",
+      "empty": "Aún no tienes direcciones guardadas.",
+      "optional": "opcional"
+    },
+    "password": {
+      "title": "Contraseña",
+      "setTitle": "Crear una contraseña",
+      "setHint": "Entras con Google o Microsoft. Si quieres, crea una contraseña para entrar también con tu correo.",
+      "current": "Contraseña actual",
+      "new": "Nueva contraseña",
+      "save": "Guardar contraseña"
+    },
+    "errors": {
+      "generic": "No pudimos completar la acción. Inténtalo de nuevo.",
+      "stateMismatch": "El inicio de sesión expiró o se abrió en otra ventana. Inténtalo de nuevo.",
+      "cancelled": "Cancelaste el inicio de sesión."
+    }
+  },
+  "codes": {
+    "identity": {
+      "email_invalid": "Ese correo no parece válido.",
+      "email_taken": "Ya existe una cuenta con ese correo. Ingresa o recupera tu acceso.",
+      "password_short": "La contraseña debe tener al menos 10 caracteres.",
+      "password_long": "La contraseña puede tener como máximo 128 caracteres.",
+      "password_weak": "Esa contraseña es muy fácil de adivinar. Prueba con una frase.",
+      "credentials_invalid": "Correo o contraseña incorrectos.",
+      "account_disabled": "Esta cuenta está deshabilitada. Escríbenos para ayudarte.",
+      "login_state_invalid": "El inicio de sesión expiró o ya se usó. Inténtalo de nuevo.",
+      "provider_rejected": "El proveedor no confirmó tu inicio de sesión.",
+      "provider_no_email": "El proveedor no compartió un correo válido.",
+      "provider_unknown": "Ese método de inicio de sesión no está disponible.",
+      "email_in_use": "Ya existe una cuenta con ese correo. Ingresa con tu contraseña primero.",
+      "name_too_long": "El nombre es demasiado largo.",
+      "customer_type_invalid": "Elige el tipo de cliente.",
+      "document_type_invalid": "Elige el tipo de documento.",
+      "dni_invalid": "El DNI debe tener 8 dígitos.",
+      "ruc_invalid": "El RUC no es válido.",
+      "ce_invalid": "El carné de extranjería no es válido.",
+      "company_needs_ruc20": "Una empresa necesita un RUC que empiece con 20.",
+      "business_name_required": "Ingresa la razón social.",
+      "business_name_too_long": "La razón social es demasiado larga.",
+      "cop_invalid": "El número de colegiatura tiene hasta 6 dígitos.",
+      "phone_invalid": "El teléfono no es válido.",
+      "address_field_required": "Completa todos los campos obligatorios de la dirección.",
+      "address_field_too_long": "Algún campo de la dirección es demasiado largo.",
+      "department_invalid": "Elige un departamento.",
+      "ubigeo_invalid": "El ubigeo no corresponde al departamento.",
+      "too_many_addresses": "Puedes guardar hasta 10 direcciones.",
+      "address_not_found": "No encontramos esa dirección.",
+      "password_current_wrong": "La contraseña actual no es correcta.",
+      "locale_invalid": "Idioma no disponible."
+    },
+    "http": {
+      "rate_limited": "Demasiados intentos. Espera un minuto e inténtalo de nuevo."
     }
   }
 }

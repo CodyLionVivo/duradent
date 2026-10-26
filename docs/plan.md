@@ -313,3 +313,10 @@ Cada fase termina con: compila, `golangci-lint` + `astro check` limpios, tests v
   - El endpoint público de precios solo expone la lista predeterminada; las listas de cliente
     llegan por sesión en la fase 3.
   - Admin protegido con token temporal hasta la fase 3.
+- **Fase 3**:
+  - Acceso de desarrollo (`DEV_LOGIN`, solo local) para probar sin credenciales de Google.
+  - `customers.price_list_code` guarda el código de la lista (sin FK a pricing).
+  - Direcciones con código de departamento INEI y ubigeo opcional; el catálogo completo de ubigeos
+    se cargará si la fase 4 lo necesita para las zonas de envío.
+  - El evento `CustomerRegistered` se publicará en la fase 5 (outbox).
+  - Verificación de correo para cuentas con contraseña: fase 5 (necesita SES).

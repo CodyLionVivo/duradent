@@ -2,9 +2,11 @@
 import AdminLayout from '../../../layouts/AdminLayout.astro';
 import StatusBadge from '../../../components/admin/StatusBadge.astro';
 import Pagination from '../../../components/Pagination.astro';
-import { adminApi, unwrap } from '../../../lib/api/client';
+import { unwrap } from '../../../lib/api/client';
 import { errorMessage } from '../../../lib/admin';
 import { formatDate, useTranslations } from '../../../i18n';
+
+const adminApi = Astro.locals.api;
 
 const t = useTranslations('es');
 const PAGE_SIZE = 50;

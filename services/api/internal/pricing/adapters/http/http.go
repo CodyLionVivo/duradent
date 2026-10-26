@@ -9,6 +9,7 @@ import (
 	"github.com/CodyLionVivo/duradent/services/api/internal/kernel/apperr"
 	"github.com/CodyLionVivo/duradent/services/api/internal/kernel/id"
 	"github.com/CodyLionVivo/duradent/services/api/internal/kernel/money"
+	"github.com/CodyLionVivo/duradent/services/api/internal/platform/auth"
 	"github.com/CodyLionVivo/duradent/services/api/internal/platform/httpserver"
 	"github.com/CodyLionVivo/duradent/services/api/internal/pricing/application"
 	"github.com/CodyLionVivo/duradent/services/api/internal/pricing/domain"
@@ -46,9 +47,9 @@ type quoteDTO struct {
 	Tiers     []tierDTO `json:"tiers"`
 }
 
-// quotes prices variants from the default (public) list. Customer lists are
-// confidential: from phase 3 the list comes from the session, never from a
-// query parameter.
+// quotes prices variants for the caller: the signed-in customer's list, or
+// the default (public) list for anonymous visitors. Customer lists are
+// confidential, so the list never comes from a request parameter.
 func (h *Handler) quotes(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	currency, err := money.ParseCurrency(valueOr(q.Get("currency"), string(money.PEN)))
@@ -66,7 +67,11 @@ func (h *Handler) quotes(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
-	quotes, err := h.svc.Quote(r.Context(), application.QuoteQuery{Currency: currency, VariantIDs: ids, Qty: qty})
+	var listCode string
+	if p, ok := auth.FromContext(r.Context()); ok {
+		listCode = p.PriceListCode
+	}
+	quotes, err := h.svc.Quote(r.Context(), application.QuoteQuery{ListCode: listCode, Currency: currency, VariantIDs: ids, Qty: qty})
 	if err != nil {
 		h.fail(w, r, err)
 		return

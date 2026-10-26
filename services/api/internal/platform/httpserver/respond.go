@@ -1,7 +1,6 @@
 package httpserver
 
 import (
-	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -117,23 +116,4 @@ func QueryIDs(r *http.Request, name string) ([]id.ID, error) {
 		}
 	}
 	return out, nil
-}
-
-// RequireBearer protects admin routes with a static token until identity
-// (phase 3) replaces it with sessions and roles. An empty token disables the
-// routes entirely, which is the default outside local development.
-func RequireBearer(token string, next http.Handler) http.Handler {
-	want := []byte("Bearer " + token)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		got := []byte(r.Header.Get("Authorization"))
-		if token == "" || subtle.ConstantTimeCompare(got, want) != 1 {
-			w.Header().Set("WWW-Authenticate", `Bearer realm="duradent-admin"`)
-			p := Problem{Type: "about:blank", Title: "Unauthorized", Status: http.StatusUnauthorized, Code: "auth.required"}
-			w.Header().Set("Content-Type", "application/problem+json")
-			w.WriteHeader(http.StatusUnauthorized)
-			_ = json.NewEncoder(w).Encode(p)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
 }

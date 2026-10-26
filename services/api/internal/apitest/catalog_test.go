@@ -1,91 +1,12 @@
-// Package apitest drives the real HTTP API (handlers, services, MySQL) end to
-// end. Only object storage is faked.
 package apitest
 
 import (
-	"bytes"
-	"context"
 	"encoding/json"
-	"io"
-	"log/slog"
 	"net/http"
-	"net/http/httptest"
 	"testing"
-	"time"
 
-	cataloghttp "github.com/CodyLionVivo/duradent/services/api/internal/catalog/adapters/http"
-	catalogmysql "github.com/CodyLionVivo/duradent/services/api/internal/catalog/adapters/mysql"
-	catalogapp "github.com/CodyLionVivo/duradent/services/api/internal/catalog/application"
-	"github.com/CodyLionVivo/duradent/services/api/internal/catalog/ports"
 	"github.com/CodyLionVivo/duradent/services/api/internal/platform/httpserver"
-	"github.com/CodyLionVivo/duradent/services/api/internal/platform/mysql"
-	"github.com/CodyLionVivo/duradent/services/api/internal/platform/mysqltest"
-	pricinghttp "github.com/CodyLionVivo/duradent/services/api/internal/pricing/adapters/http"
-	pricingmysql "github.com/CodyLionVivo/duradent/services/api/internal/pricing/adapters/mysql"
-	pricingapp "github.com/CodyLionVivo/duradent/services/api/internal/pricing/application"
-	"github.com/CodyLionVivo/duradent/services/api/migrations"
 )
-
-const token = "test-admin-token"
-
-type fakeMedia struct{}
-
-func (fakeMedia) PresignUpload(_ context.Context, key, _ string, _ time.Duration) (ports.Upload, error) {
-	return ports.Upload{URL: "https://bucket.test/" + key, Method: http.MethodPut}, nil
-}
-func (fakeMedia) PublicURL(key string) string { return "https://cdn.test/" + key }
-
-type client struct {
-	t   *testing.T
-	srv *httptest.Server
-}
-
-func newServer(t *testing.T) client {
-	t.Helper()
-	db := mysqltest.Start(t)
-	if err := mysql.Migrate(db, migrations.FS, "."); err != nil {
-		t.Fatal(err)
-	}
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	now := func() time.Time { return time.Now().UTC().Truncate(time.Microsecond) }
-	catalog := catalogapp.NewService(catalogmysql.NewProducts(db), catalogmysql.NewCategories(db), catalogmysql.NewAttributes(db), fakeMedia{}, now)
-	pricing := pricingapp.NewService(pricingmysql.NewPriceLists(db), pricingmysql.NewPrices(db))
-
-	mux := httpserver.NewMux(map[string]httpserver.Pinger{"mysql": db})
-	admin := func(h http.Handler) http.Handler { return httpserver.RequireBearer(token, h) }
-	cataloghttp.Register(mux, catalog, log, admin)
-	pricinghttp.Register(mux, pricing, log, admin)
-	srv := httptest.NewServer(httpserver.Observe(log, mux))
-	t.Cleanup(srv.Close)
-	return client{t: t, srv: srv}
-}
-
-// do sends a request and decodes the JSON response into out (if not nil).
-func (c client) do(method, path string, auth bool, body any, out any) int {
-	c.t.Helper()
-	var buf io.Reader
-	if body != nil {
-		b, _ := json.Marshal(body)
-		buf = bytes.NewReader(b)
-	}
-	req, _ := http.NewRequestWithContext(context.Background(), method, c.srv.URL+path, buf)
-	req.Header.Set("Content-Type", "application/json")
-	if auth {
-		req.Header.Set("Authorization", "Bearer "+token)
-	}
-	res, err := http.DefaultClient.Do(req)
-	if err != nil {
-		c.t.Fatal(err)
-	}
-	defer func() { _ = res.Body.Close() }()
-	raw, _ := io.ReadAll(res.Body)
-	if out != nil {
-		if err := json.Unmarshal(raw, out); err != nil {
-			c.t.Fatalf("%s %s: decode %q: %v", method, path, raw, err)
-		}
-	}
-	return res.StatusCode
-}
 
 func (c client) must(want int, method, path string, body any, out any) {
 	c.t.Helper()
@@ -101,7 +22,7 @@ func (c client) must(want int, method, path string, body any, out any) {
 }
 
 func TestCatalogAndPricingEndToEnd(t *testing.T) {
-	c := newServer(t)
+	c := newServer(t).client
 
 	// Admin routes require the token.
 	if got := c.do(http.MethodGet, "/v1/admin/catalog/products", false, nil, nil); got != http.StatusUnauthorized {

@@ -9,7 +9,7 @@ const year = new Date().getFullYear();
 
 let categories: Category[] = [];
 try {
-  categories = topLevel(await getCategories(locale)).slice(0, 5);
+  categories = topLevel(await getCategories(Astro.locals.api, locale)).slice(0, 5);
 } catch {
   // Footer renders without category links if the API is down.
 }

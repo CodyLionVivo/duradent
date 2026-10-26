@@ -55,7 +55,11 @@ func (s *Service) Quote(ctx context.Context, q QuoteQuery) (map[id.ID]Quote, err
 	}
 	list := def
 	if q.ListCode != "" && q.ListCode != def.Code {
-		if list, err = s.lists.ByCode(ctx, q.ListCode); err != nil {
+		// A customer whose assigned list was removed still sees public prices.
+		switch l, err := s.lists.ByCode(ctx, q.ListCode); {
+		case err == nil:
+			list = l
+		case !apperr.IsKind(err, apperr.KindNotFound):
 			return nil, err
 		}
 	}
@@ -89,6 +93,16 @@ func (s *Service) Quote(ctx context.Context, q QuoteQuery) (map[id.ID]Quote, err
 }
 
 // --- Admin -----------------------------------------------------------------------
+
+// PriceListExists reports whether a list with this code exists (used when an
+// admin assigns a list to a customer).
+func (s *Service) PriceListExists(ctx context.Context, code string) (bool, error) {
+	_, err := s.lists.ByCode(ctx, code)
+	if apperr.IsKind(err, apperr.KindNotFound) {
+		return false, nil
+	}
+	return err == nil, err
+}
 
 func (s *Service) PriceLists(ctx context.Context) ([]*domain.PriceList, error) {
 	return s.lists.List(ctx)

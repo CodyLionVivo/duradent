@@ -1,0 +1,77 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import ProviderButtons from '../../../components/account/ProviderButtons.astro';
+import { isLocale, localePath, useTranslations } from '../../../i18n';
+import { ApiError, unwrap } from '../../../lib/api/client';
+import { afterSignIn, apiErrorText } from '../../../lib/account';
+import { setSession } from '../../../lib/session';
+
+if (!isLocale(Astro.params.locale)) return new Response(null, { status: 404 });
+
+const { locale, api, user } = Astro.locals;
+const t = useTranslations(locale);
+const next = afterSignIn(Astro.url.searchParams.get('next'), localePath(locale, '/account'));
+if (user) return Astro.redirect(next, 302);
+
+let error = '';
+let values = { name: '', email: '' };
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  values = { name: String(form.get('name') ?? ''), email: String(form.get('email') ?? '') };
+  try {
+    const signed = unwrap(
+      await api.POST('/v1/auth/register', {
+        body: { ...values, password: String(form.get('password') ?? ''), locale },
+      }),
+    );
+    setSession(Astro.cookies, signed.token, signed.expires_at);
+    return Astro.redirect(next, 303);
+  } catch (err) {
+    error = apiErrorText(t, err);
+    Astro.response.status = err instanceof ApiError ? err.status : 500;
+  }
+}
+
+let providers: string[] = [];
+try {
+  providers = unwrap(await api.GET('/v1/auth/providers')).providers;
+} catch {
+  // Registration with email still works.
+}
+---
+
+<Layout title={t('account.register.title')}>
+  <section class="container-page flex justify-center py-14">
+    <div class="w-full max-w-md">
+      <h1 class="text-2xl font-bold tracking-tight">{t('account.register.title')}</h1>
+      <p class="mt-2 text-sm text-muted">{t('account.register.subtitle')}</p>
+
+      {error && <p role="alert" class="mt-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</p>}
+
+      <div class="card mt-6 space-y-5 p-6">
+        <ProviderButtons providers={providers} next={next} />
+        <form method="post" class="space-y-4">
+          <div>
+            <label for="name" class="label">{t('account.register.name')}</label>
+            <input id="name" name="name" autocomplete="name" maxlength={120} value={values.name} class="input" />
+          </div>
+          <div>
+            <label for="email" class="label">{t('account.login.email')}</label>
+            <input id="email" name="email" type="email" autocomplete="email" required value={values.email} class="input" />
+          </div>
+          <div>
+            <label for="password" class="label">{t('account.login.password')}</label>
+            <input id="password" name="password" type="password" autocomplete="new-password" required minlength={10} maxlength={128} class="input" aria-describedby="password-hint" />
+            <p id="password-hint" class="mt-1 text-xs text-muted">{t('account.register.passwordHint')}</p>
+          </div>
+          <button class="btn-primary w-full py-3">{t('account.register.submit')}</button>
+        </form>
+        <p class="text-center text-sm text-muted">
+          {t('account.register.haveAccount')}{' '}
+          <a class="font-semibold text-brand-700 hover:underline" href={`${localePath(locale, '/account/login')}?next=${encodeURIComponent(next)}`}>{t('account.register.signInLink')}</a>
+        </p>
+      </div>
+    </div>
+  </section>
+</Layout>

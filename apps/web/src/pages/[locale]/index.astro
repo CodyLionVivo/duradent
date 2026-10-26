@@ -16,10 +16,10 @@ let quotes = new Map<string, Quote>();
 let failed = false;
 try {
   [categories, { items: featured }] = await Promise.all([
-    getCategories(locale).then(topLevel),
-    browseProducts({ locale, category: 'brackets', pageSize: 8 }),
+    getCategories(Astro.locals.api, locale).then(topLevel),
+    browseProducts(Astro.locals.api, { locale, category: 'brackets', pageSize: 8 }),
   ]);
-  quotes = await getQuotes(featured.map((p) => p.default_variant_id ?? ''), currency);
+  quotes = await getQuotes(Astro.locals.api, featured.map((p) => p.default_variant_id ?? ''), currency);
 } catch {
   failed = true;
   Astro.response.status = 503;

@@ -16,7 +16,8 @@
     "currency": "Currency",
     "openMenu": "Open menu",
     "closeMenu": "Close menu",
-    "mainNav": "Main navigation"
+    "mainNav": "Main navigation",
+    "account": "My account"
   },
   "currency": {
     "PEN": "Peruvian soles (S/)",
@@ -101,5 +102,136 @@
     "backHome": "Back to home",
     "unavailableTitle": "Service unavailable",
     "unavailableText": "We could not load the catalog. Please try again in a few minutes."
+  },
+  "account": {
+    "title": "My account",
+    "signIn": "Sign in",
+    "signOut": "Sign out",
+    "register": {
+      "title": "Create your account",
+      "subtitle": "Sign up to buy and save your shipping addresses.",
+      "name": "Full name",
+      "passwordHint": "At least 10 characters. A short phrase is safer than a word with symbols.",
+      "submit": "Create account",
+      "haveAccount": "Already have an account?",
+      "signInLink": "Sign in"
+    },
+    "login": {
+      "title": "Sign in to your account",
+      "subtitle": "Buy with the prices assigned to your clinic or practice.",
+      "withGoogle": "Continue with Google",
+      "withMicrosoft": "Continue with Microsoft",
+      "or": "or with your email",
+      "email": "Email",
+      "password": "Password",
+      "submit": "Sign in",
+      "noAccount": "Don't have an account?",
+      "createOne": "Create one",
+      "devTitle": "Development sign-in",
+      "devHint": "Local development only: sign in with any email, no password.",
+      "devSubmit": "Sign in as developer",
+      "name": "Name (optional)"
+    },
+    "profile": {
+      "greeting": "Hello, {name}",
+      "details": "Account details",
+      "displayName": "Name",
+      "email": "Email",
+      "language": "Preferred language",
+      "save": "Save",
+      "saved": "Changes saved.",
+      "clinicPrices": "You have special prices assigned ({list}).",
+      "unverified": "Your email is not verified yet."
+    },
+    "billing": {
+      "title": "Billing details",
+      "hint": "With a RUC we issue an electronic invoice (factura); with a DNI or foreigner ID, a receipt (boleta).",
+      "type": "Customer type",
+      "persona": "Individual / practitioner",
+      "empresa": "Company or clinic",
+      "documentType": "Document type",
+      "documentNumber": "Document number",
+      "businessName": "Company name",
+      "cop": "Dental board number (COP)",
+      "copHint": "Optional. Helps us confirm you are a health professional.",
+      "phone": "Phone",
+      "invoiceFactura": "You will receive an electronic invoice (factura).",
+      "invoiceBoleta": "You will receive an electronic receipt (boleta).",
+      "save": "Save billing details",
+      "missing": "Complete your billing details to be able to buy.",
+      "dni": "DNI",
+      "ruc": "RUC",
+      "ce": "Foreigner ID (CE)"
+    },
+    "addresses": {
+      "title": "Shipping addresses",
+      "add": "Add address",
+      "label": "Address name",
+      "labelHint": "E.g. Miraflores practice",
+      "recipient": "Recipient",
+      "line1": "Address",
+      "reference": "Reference",
+      "district": "District",
+      "province": "Province",
+      "department": "Department",
+      "chooseDepartment": "Choose a department",
+      "phone": "Contact phone",
+      "default": "Default",
+      "makeDefault": "Make default",
+      "remove": "Remove",
+      "empty": "You have no saved addresses yet.",
+      "optional": "optional"
+    },
+    "password": {
+      "title": "Password",
+      "setTitle": "Create a password",
+      "setHint": "You sign in with Google or Microsoft. You can also create a password to sign in with your email.",
+      "current": "Current password",
+      "new": "New password",
+      "save": "Save password"
+    },
+    "errors": {
+      "generic": "We could not complete that. Please try again.",
+      "stateMismatch": "The sign-in expired or was opened in another window. Please try again.",
+      "cancelled": "You cancelled the sign-in."
+    }
+  },
+  "codes": {
+    "identity": {
+      "email_invalid": "That email does not look valid.",
+      "email_taken": "An account with that email already exists. Sign in instead.",
+      "password_short": "The password must have at least 10 characters.",
+      "password_long": "The password can have at most 128 characters.",
+      "password_weak": "That password is too easy to guess. Try a phrase.",
+      "credentials_invalid": "Incorrect email or password.",
+      "account_disabled": "This account is disabled. Contact us for help.",
+      "login_state_invalid": "The sign-in expired or was already used. Please try again.",
+      "provider_rejected": "The provider did not confirm your sign-in.",
+      "provider_no_email": "The provider did not share a valid email.",
+      "provider_unknown": "That sign-in method is not available.",
+      "email_in_use": "An account with that email already exists. Sign in with your password first.",
+      "name_too_long": "The name is too long.",
+      "customer_type_invalid": "Choose the customer type.",
+      "document_type_invalid": "Choose the document type.",
+      "dni_invalid": "A DNI has 8 digits.",
+      "ruc_invalid": "The RUC is not valid.",
+      "ce_invalid": "The foreigner ID is not valid.",
+      "company_needs_ruc20": "A company needs a RUC starting with 20.",
+      "business_name_required": "Enter the company name.",
+      "business_name_too_long": "The company name is too long.",
+      "cop_invalid": "The dental board number has up to 6 digits.",
+      "phone_invalid": "The phone number is not valid.",
+      "address_field_required": "Fill in every required address field.",
+      "address_field_too_long": "An address field is too long.",
+      "department_invalid": "Choose a department.",
+      "ubigeo_invalid": "The ubigeo does not match the department.",
+      "too_many_addresses": "You can save up to 10 addresses.",
+      "address_not_found": "We could not find that address.",
+      "password_current_wrong": "The current password is not correct.",
+      "locale_invalid": "Language not available."
+    },
+    "http": {
+      "rate_limited": "Too many attempts. Wait a minute and try again."
+    }
   }
 }

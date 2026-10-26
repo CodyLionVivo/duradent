@@ -1,9 +1,11 @@
 ---
 import AdminLayout from '../../../layouts/AdminLayout.astro';
 import Pagination from '../../../components/Pagination.astro';
-import { adminApi, ApiError, unwrap, type Schemas } from '../../../lib/api/client';
+import { ApiError, unwrap, type Schemas } from '../../../lib/api/client';
 import { errorMessage, savedRedirect, str } from '../../../lib/admin';
 import { useTranslations } from '../../../i18n';
+
+const adminApi = Astro.locals.api;
 
 type Price = Schemas['Price'];
 const t = useTranslations('es');

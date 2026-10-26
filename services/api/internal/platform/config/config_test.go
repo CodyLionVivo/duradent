@@ -43,3 +43,23 @@ func TestLoadParsesShutdownTimeout(t *testing.T) {
 		t.Fatal("expected error for invalid duration")
 	}
 }
+
+func TestDevLoginOnlyLocal(t *testing.T) {
+	cfg, err := load(env(map[string]string{"DEV_LOGIN": "true", "ADMIN_EMAILS": " a@x.pe, ,b@x.pe "}))
+	if err != nil || !cfg.DevLogin || len(cfg.AdminEmails) != 2 || cfg.AdminEmails[1] != "b@x.pe" {
+		t.Fatalf("local: %+v %v", cfg, err)
+	}
+	prod := map[string]string{"APP_ENV": "prod", "MYSQL_DSN": "x", "S3_MEDIA_BUCKET": "b", "MEDIA_BASE_URL": "https://cdn", "WEB_BASE_URL": "https://duradent.pe"}
+	if _, err := load(env(prod)); err != nil {
+		t.Fatalf("valid prod config: %v", err)
+	}
+	prod["DEV_LOGIN"] = "true"
+	if _, err := load(env(prod)); err == nil {
+		t.Fatal("DEV_LOGIN must be rejected outside local")
+	}
+	delete(prod, "DEV_LOGIN")
+	prod["WEB_BASE_URL"] = "http://duradent.pe"
+	if _, err := load(env(prod)); err == nil {
+		t.Fatal("plain http web URL must be rejected outside local")
+	}
+}

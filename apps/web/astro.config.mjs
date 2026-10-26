@@ -17,7 +17,6 @@ export default defineConfig({
     schema: {
       // Read at runtime on the server, never inlined into the bundle.
       API_URL: envField.string({ context: 'server', access: 'secret', default: 'http://localhost:8080' }),
-      ADMIN_TOKEN: envField.string({ context: 'server', access: 'secret', optional: true }),
     },
   },
 

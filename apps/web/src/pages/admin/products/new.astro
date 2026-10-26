@@ -2,9 +2,11 @@
 import AdminLayout from '../../../layouts/AdminLayout.astro';
 import TextsFields from '../../../components/admin/TextsFields.astro';
 import CategorySelect from '../../../components/admin/CategorySelect.astro';
-import { adminApi, unwrap, type Schemas } from '../../../lib/api/client';
+import { unwrap, type Schemas } from '../../../lib/api/client';
 import { errorMessage, str, textsFromForm, type Texts } from '../../../lib/admin';
 import { useTranslations } from '../../../i18n';
+
+const adminApi = Astro.locals.api;
 
 const t = useTranslations('es');
 let error = '';

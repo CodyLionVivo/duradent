@@ -14,9 +14,9 @@ let product: ProductDetail | null = null;
 let quotes = new Map<string, Quote>();
 let state: 'ok' | 'notFound' | 'unavailable' = 'ok';
 try {
-  product = await getProduct(Astro.params.slug ?? '', locale);
+  product = await getProduct(Astro.locals.api, Astro.params.slug ?? '', locale);
   if (!product) state = 'notFound';
-  else quotes = await getQuotes(product.variants.map((v) => v.id), currency);
+  else quotes = await getQuotes(Astro.locals.api, product.variants.map((v) => v.id), currency);
 } catch {
   state = 'unavailable';
 }

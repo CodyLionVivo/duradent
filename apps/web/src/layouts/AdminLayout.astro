@@ -18,7 +18,9 @@ const nav = [
   { href: '/admin/categories', label: t('admin.nav.categories') },
   { href: '/admin/attributes', label: t('admin.nav.attributes') },
   { href: '/admin/price-lists', label: t('admin.nav.priceLists') },
+  { href: '/admin/customers', label: t('admin.nav.customers') },
 ];
+const user = Astro.locals.user;
 ---
 
 <!doctype html>
@@ -60,10 +62,11 @@ const nav = [
           <ul class="mt-4 hidden border-t border-line pt-4 md:block" role="list">
             <li><a href="/es" class="block rounded-lg px-3 py-2 text-sm text-muted hover:text-ink">{t('admin.nav.viewStore')} ↗</a></li>
             <li>
-              <form method="post" action="/admin/logout">
+              <form method="post" action="/es/account/logout">
                 <button class="w-full rounded-lg px-3 py-2 text-left text-sm text-muted hover:text-ink">{t('admin.nav.logout')}</button>
               </form>
             </li>
+            {user && <li class="px-3 pt-2 text-xs text-muted" title={user.email}>{user.display_name}</li>}
           </ul>
         </nav>
       </aside>

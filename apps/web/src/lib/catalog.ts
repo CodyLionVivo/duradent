@@ -1,5 +1,5 @@
 // Server-side data access for store pages.
-import { api, unwrap, type Schemas } from './api/client';
+import { unwrap, type ApiClient, type Schemas } from './api/client';
 import type { Currency, Locale } from '../i18n';
 
 export type Category = Schemas['Category'];
@@ -11,7 +11,7 @@ const TTL_MS = 60_000;
 const categoryCache = new Map<Locale, { at: number; data: Category[] }>();
 
 /** Categories change rarely and every page header needs them: cache for a minute. */
-export async function getCategories(locale: Locale): Promise<Category[]> {
+export async function getCategories(api: ApiClient, locale: Locale): Promise<Category[]> {
   const hit = categoryCache.get(locale);
   if (hit && Date.now() - hit.at < TTL_MS) return hit.data;
   const data = unwrap(await api.GET('/v1/catalog/categories', { params: { query: { locale } } }));
@@ -27,7 +27,7 @@ export function childrenOf(categories: Category[], parentId: string): Category[]
   return categories.filter((c) => c.parent_id === parentId);
 }
 
-export async function browseProducts(opts: {
+export async function browseProducts(api: ApiClient, opts: {
   locale: Locale;
   category?: string;
   q?: string;
@@ -50,14 +50,17 @@ export async function browseProducts(opts: {
 }
 
 /** Returns the product, or null when it does not exist or is not published. */
-export async function getProduct(slug: string, locale: Locale): Promise<ProductDetail | null> {
+export async function getProduct(api: ApiClient, slug: string, locale: Locale): Promise<ProductDetail | null> {
   const res = await api.GET('/v1/catalog/products/{slug}', { params: { path: { slug }, query: { locale } } });
   if (res.response.status === 404) return null;
   return unwrap(res);
 }
 
-/** Public-list prices keyed by variant id. Variants without a price are absent. */
-export async function getQuotes(variantIds: string[], currency: Currency): Promise<Map<string, Quote>> {
+/**
+ * Prices for the visitor keyed by variant id: the signed-in customer's list,
+ * or the public list. Variants without a price are absent.
+ */
+export async function getQuotes(api: ApiClient, variantIds: string[], currency: Currency): Promise<Map<string, Quote>> {
   const ids = [...new Set(variantIds)].filter(Boolean);
   if (ids.length === 0) return new Map();
   const data = unwrap(await api.GET('/v1/pricing/quotes', { params: { query: { currency, variant_id: ids } } }));

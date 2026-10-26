@@ -1,8 +1,10 @@
 ---
 import AdminLayout from '../../layouts/AdminLayout.astro';
-import { adminApi, unwrap, type Schemas } from '../../lib/api/client';
+import { unwrap, type Schemas } from '../../lib/api/client';
 import { errorMessage, int, localizedFromForm, savedRedirect, str } from '../../lib/admin';
 import { LOCALES, useTranslations } from '../../i18n';
+
+const adminApi = Astro.locals.api;
 
 const t = useTranslations('es');
 let error = '';

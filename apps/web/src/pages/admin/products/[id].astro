@@ -4,9 +4,11 @@ import TextsFields from '../../../components/admin/TextsFields.astro';
 import CategorySelect from '../../../components/admin/CategorySelect.astro';
 import StatusBadge from '../../../components/admin/StatusBadge.astro';
 import ImageUploader from '../../../components/islands/ImageUploader';
-import { adminApi, ApiError, unwrap, type Schemas } from '../../../lib/api/client';
+import { ApiError, unwrap, type Schemas } from '../../../lib/api/client';
 import { errorMessage, int, savedRedirect, str, textsFromForm } from '../../../lib/admin';
 import { useTranslations } from '../../../i18n';
+
+const adminApi = Astro.locals.api;
 
 type AdminProduct = Schemas['AdminProduct'];
 const t = useTranslations('es');
