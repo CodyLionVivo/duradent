@@ -636,6 +636,52 @@ paths:
         "409": { $ref: "#/components/responses/Problem" }
         "422": { $ref: "#/components/responses/Problem" }
         "429": { description: Too many attempts }
+  /v1/auth/password/forgot:
+    post:
+      summary: Email a link to create a new password ("forgot your password?")
+      description: |
+        Answers 202 for any well-formed email, whether or not it has an account,
+        so the form does not reveal who is a customer. The link is valid for one
+        hour and works once; at most 3 are sent per account and hour.
+      operationId: forgotPassword
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+                locale: { $ref: "#/components/schemas/Locale" }
+      responses:
+        "202": { description: If the email has an account, a link is on its way }
+        "422": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+  /v1/auth/password/reset:
+    post:
+      summary: Set a new password with the emailed token and sign in
+      description: |
+        Closes every other session of the account and marks its email as verified
+        (opening the link proves the mailbox). A password that breaks the policy
+        does not use up the link.
+      operationId: resetPassword
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, password]
+              properties:
+                token: { type: string, maxLength: 100 }
+                password: { type: string, minLength: 10, maxLength: 128 }
+      responses:
+        "200": { $ref: "#/components/responses/Session" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
   /v1/me/verify-email:
     post:
       summary: Email a new confirmation link (at most 3 per hour)

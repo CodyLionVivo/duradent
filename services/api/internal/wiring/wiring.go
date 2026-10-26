@@ -110,7 +110,8 @@ func Build(o Options) (*App, error) {
 		Accounts: stores.Accounts, Customers: stores.Customers, Addresses: stores.Addresses,
 		Sessions: stores.Sessions, States: stores.LoginStates, Hasher: identityargon2.Hasher{},
 		Providers: o.Providers, Now: o.Now,
-		Verifications: stores.Verifications, Mailer: verificationMailer{a.Notify, o.Log}, UoW: uow, Events: events,
+		Verifications: stores.Verifications, PasswordResets: stores.PasswordResets,
+		Mailer: accountMailer{a.Notify, o.Log}, UoW: uow, Events: events,
 	}, identityapp.Config{AdminEmails: o.AdminEmails, DevLogin: o.DevLogin})
 	if err != nil {
 		return nil, err

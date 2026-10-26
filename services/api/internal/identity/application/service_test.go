@@ -205,10 +205,53 @@ func (m memVerifs) Recent(_ context.Context, aid id.ID, since time.Time) (int, e
 	return n, nil
 }
 
-type fakeMailer struct{ tokens []string }
+type memResets map[string]ports.PasswordReset
+
+func (m memResets) Create(_ context.Context, r ports.PasswordReset) error {
+	m[r.TokenHash] = r
+	return nil
+}
+func (m memResets) Get(_ context.Context, h string) (ports.PasswordReset, error) {
+	r, ok := m[h]
+	if !ok {
+		return r, apperr.NotFound("identity.reset_not_found", "nope")
+	}
+	return r, nil
+}
+func (m memResets) Take(ctx context.Context, h string) (ports.PasswordReset, error) {
+	r, err := m.Get(ctx, h)
+	if err != nil {
+		return r, err
+	}
+	for k, v := range m {
+		if v.AccountID == r.AccountID {
+			delete(m, k)
+		}
+	}
+	return r, nil
+}
+func (m memResets) Recent(_ context.Context, aid id.ID, since time.Time) (int, error) {
+	n := 0
+	for _, r := range m {
+		if r.AccountID == aid && !r.CreatedAt.Before(since) {
+			n++
+		}
+	}
+	return n, nil
+}
+
+type fakeMailer struct {
+	tokens []string // verification links
+	resets []string // password reset links
+}
 
 func (m *fakeMailer) SendVerification(_ context.Context, _, _ string, _ locale.Locale, token string) error {
 	m.tokens = append(m.tokens, token)
+	return nil
+}
+
+func (m *fakeMailer) SendPasswordReset(_ context.Context, _, _ string, _ locale.Locale, token string) error {
+	m.resets = append(m.resets, token)
 	return nil
 }
 
@@ -230,6 +273,7 @@ type fixture struct {
 	google   *fakeProvider
 	clock    *time.Time
 	verifs   memVerifs
+	resets   memResets
 	mailer   *fakeMailer
 	events   *fakeEvents
 }
@@ -243,6 +287,7 @@ func newFixture(t *testing.T, cfg application.Config) fixture {
 		google:   &fakeProvider{},
 		clock:    &clock,
 		verifs:   memVerifs{},
+		resets:   memResets{},
 		mailer:   &fakeMailer{},
 		events:   &fakeEvents{},
 	}
@@ -251,7 +296,7 @@ func newFixture(t *testing.T, cfg application.Config) fixture {
 		States: memStates{}, Hasher: plainHasher{},
 		Providers:     map[domain.Provider]ports.OIDCProvider{domain.ProviderGoogle: f.google},
 		Now:           func() time.Time { return *f.clock },
-		Verifications: f.verifs, Mailer: f.mailer, UoW: noTx{}, Events: f.events,
+		Verifications: f.verifs, PasswordResets: f.resets, Mailer: f.mailer, UoW: noTx{}, Events: f.events,
 	}, cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -568,5 +613,70 @@ func TestVerificationExpires(t *testing.T) {
 	*f.clock = f.clock.Add(25 * time.Hour)
 	if err := f.svc.VerifyEmail(ctx, f.mailer.tokens[0]); codeOf(err) != "identity.verification_invalid" {
 		t.Fatalf("expired: %v", err)
+	}
+}
+
+func TestPasswordResetSetsANewPasswordAndClosesOtherSessions(t *testing.T) {
+	f := newFixture(t, application.Config{AdminEmails: []string{"jefa@duradent.pe"}})
+	ctx := context.Background()
+	old, _ := f.svc.Register(ctx, application.RegisterInput{Email: "jefa@duradent.pe", Password: "clave antigua 123"}, client)
+
+	if err := f.svc.RequestPasswordReset(ctx, "Jefa@Duradent.pe", locale.EN); err != nil || len(f.mailer.resets) != 1 {
+		t.Fatalf("request: %v %v", err, f.mailer.resets)
+	}
+	token := f.mailer.resets[0]
+	// A rejected password does not use up the link.
+	if _, err := f.svc.ResetPassword(ctx, token, "corta", client); codeOf(err) != "identity.password_short" {
+		t.Fatalf("weak password: %v", err)
+	}
+	signed, err := f.svc.ResetPassword(ctx, token, "una frase nueva y larga", client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The mailbox is proven: the email is verified and the listed admin is promoted.
+	if !signed.Account.EmailVerified || signed.Account.Role != domain.RoleAdmin || signed.Token == "" {
+		t.Fatalf("account after reset: %+v", signed.Account)
+	}
+	if _, err := f.svc.Authenticate(ctx, old.Token); err == nil {
+		t.Fatal("sessions opened before the reset must be closed")
+	}
+	if _, err := f.svc.Login(ctx, "jefa@duradent.pe", "clave antigua 123", client); err == nil {
+		t.Fatal("the old password must stop working")
+	}
+	if _, err := f.svc.Login(ctx, "jefa@duradent.pe", "una frase nueva y larga", client); err != nil {
+		t.Fatalf("new password: %v", err)
+	}
+	if _, err := f.svc.ResetPassword(ctx, token, "otra frase cualquiera", client); codeOf(err) != "identity.reset_invalid" {
+		t.Fatalf("a link works once: %v", err)
+	}
+}
+
+func TestPasswordResetRevealsNothingAndExpires(t *testing.T) {
+	f := newFixture(t, application.Config{})
+	ctx := context.Background()
+	if err := f.svc.RequestPasswordReset(ctx, "nadie@clinica.pe", locale.ES); err != nil || len(f.mailer.resets) != 0 {
+		t.Fatalf("unknown email must look like success and send nothing: %v %v", err, f.mailer.resets)
+	}
+	if err := f.svc.RequestPasswordReset(ctx, "no es un correo", locale.ES); codeOf(err) != "identity.email_invalid" {
+		t.Fatalf("malformed email: %v", err)
+	}
+	// Accounts created with Google can add a password this way.
+	if _, err := f.googleLogin(t, ports.Claims{Subject: "g-ana", Email: "ana@gmail.com", EmailVerified: true}); err != nil {
+		t.Fatal(err)
+	}
+	for range 5 {
+		if err := f.svc.RequestPasswordReset(ctx, "ana@gmail.com", locale.ES); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(f.mailer.resets) != 3 {
+		t.Fatalf("at most 3 links per hour, got %d", len(f.mailer.resets))
+	}
+	*f.clock = f.clock.Add(61 * time.Minute)
+	if _, err := f.svc.ResetPassword(ctx, f.mailer.resets[0], "una frase nueva y larga", client); codeOf(err) != "identity.reset_invalid" {
+		t.Fatalf("expired link: %v", err)
+	}
+	if _, err := f.svc.ResetPassword(ctx, "inventado", "una frase nueva y larga", client); codeOf(err) != "identity.reset_invalid" {
+		t.Fatalf("unknown token: %v", err)
 	}
 }

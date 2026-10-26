@@ -431,7 +431,8 @@
       "devTitle": "Acceso de desarrollo",
       "devHint": "Solo en desarrollo local: entra con cualquier correo, sin contraseña.",
       "devSubmit": "Entrar como desarrollador",
-      "name": "Nombre (opcional)"
+      "name": "Nombre (opcional)",
+      "forgot": "¿Olvidaste tu contraseña?"
     },
     "profile": {
       "greeting": "Hola, {name}",
@@ -506,6 +507,22 @@
       "goAccount": "Ir a mi cuenta",
       "confirm": "Confirmar mi correo",
       "hint": "Pulsa el botón para confirmar que este correo es tuyo."
+    },
+    "forgot": {
+      "title": "Recupera tu acceso",
+      "subtitle": "Escribe el correo de tu cuenta y te enviaremos un enlace para crear una nueva contraseña.",
+      "submit": "Enviar enlace",
+      "sent": "Si {email} tiene una cuenta en Duradent, te enviamos un enlace para crear una nueva contraseña. Vence en 1 hora; revisa también la carpeta de spam.",
+      "back": "Volver a ingresar"
+    },
+    "reset": {
+      "title": "Crea una nueva contraseña",
+      "subtitle": "Elige la contraseña nueva de tu cuenta. Al guardarla cerraremos las sesiones abiertas en otros dispositivos.",
+      "submit": "Guardar y entrar",
+      "done": "Listo: guardamos tu nueva contraseña y ya iniciaste sesión.",
+      "invalid": "Este enlace no es válido o ya venció. Los enlaces duran 1 hora y sirven una sola vez.",
+      "requestNew": "Pedir un enlace nuevo",
+      "goAccount": "Ir a mi cuenta"
     }
   },
   "codes": {
@@ -544,7 +561,8 @@
       "verification_invalid": "Este enlace no es válido o ya venció.",
       "verification_stale": "Este enlace se envió a otro correo.",
       "verification_throttled": "Ya te enviamos varios enlaces. Revisa tu bandeja o inténtalo en una hora.",
-      "already_verified": "Tu correo ya está confirmado."
+      "already_verified": "Tu correo ya está confirmado.",
+      "reset_invalid": "Este enlace no es válido o ya venció. Pide uno nuevo."
     },
     "http": {
       "rate_limited": "Demasiados intentos. Espera un minuto e inténtalo de nuevo."

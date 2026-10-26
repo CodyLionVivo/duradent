@@ -146,7 +146,8 @@
       "devTitle": "Development sign-in",
       "devHint": "Local development only: sign in with any email, no password.",
       "devSubmit": "Sign in as developer",
-      "name": "Name (optional)"
+      "name": "Name (optional)",
+      "forgot": "Forgot your password?"
     },
     "profile": {
       "greeting": "Hello, {name}",
@@ -221,6 +222,22 @@
       "goAccount": "Go to my account",
       "confirm": "Confirm my email",
       "hint": "Press the button to confirm this email is yours."
+    },
+    "forgot": {
+      "title": "Get back into your account",
+      "subtitle": "Enter your account's email and we will send you a link to create a new password.",
+      "submit": "Send link",
+      "sent": "If {email} has a Duradent account, we sent it a link to create a new password. It expires in 1 hour; check your spam folder too.",
+      "back": "Back to sign in"
+    },
+    "reset": {
+      "title": "Create a new password",
+      "subtitle": "Choose the new password for your account. When you save it, we will sign out your other devices.",
+      "submit": "Save and sign in",
+      "done": "Done: we saved your new password and you are signed in.",
+      "invalid": "This link is invalid or has expired. Links last 1 hour and work only once.",
+      "requestNew": "Ask for a new link",
+      "goAccount": "Go to my account"
     }
   },
   "codes": {
@@ -259,7 +276,8 @@
       "verification_invalid": "This link is invalid or has expired.",
       "verification_stale": "This link was sent to a different email.",
       "verification_throttled": "We already sent several links. Check your inbox or try again in an hour.",
-      "already_verified": "Your email is already confirmed."
+      "already_verified": "Your email is already confirmed.",
+      "reset_invalid": "This link is invalid or has expired. Ask for a new one."
     },
     "http": {
       "rate_limited": "Too many attempts. Wait a minute and try again."

@@ -146,7 +146,8 @@
       "devTitle": "Acesso de desenvolvimento",
       "devHint": "Somente em desenvolvimento local: entre com qualquer e-mail, sem senha.",
       "devSubmit": "Entrar como desenvolvedor",
-      "name": "Nome (opcional)"
+      "name": "Nome (opcional)",
+      "forgot": "Esqueceu sua senha?"
     },
     "profile": {
       "greeting": "Olá, {name}",
@@ -221,6 +222,22 @@
       "goAccount": "Ir para minha conta",
       "confirm": "Confirmar meu e-mail",
       "hint": "Clique no botão para confirmar que este e-mail é seu."
+    },
+    "forgot": {
+      "title": "Recupere seu acesso",
+      "subtitle": "Digite o e-mail da sua conta e enviaremos um link para criar uma nova senha.",
+      "submit": "Enviar link",
+      "sent": "Se {email} tiver uma conta na Duradent, enviamos um link para criar uma nova senha. Ele vence em 1 hora; confira também a pasta de spam.",
+      "back": "Voltar para entrar"
+    },
+    "reset": {
+      "title": "Crie uma nova senha",
+      "subtitle": "Escolha a nova senha da sua conta. Ao salvá-la, encerraremos as sessões abertas em outros dispositivos.",
+      "submit": "Salvar e entrar",
+      "done": "Pronto: salvamos sua nova senha e você já entrou.",
+      "invalid": "Este link não é válido ou já venceu. Os links duram 1 hora e funcionam uma única vez.",
+      "requestNew": "Pedir um novo link",
+      "goAccount": "Ir para minha conta"
     }
   },
   "codes": {
@@ -259,7 +276,8 @@
       "verification_invalid": "Este link é inválido ou expirou.",
       "verification_stale": "Este link foi enviado para outro e-mail.",
       "verification_throttled": "Já enviamos vários links. Verifique sua caixa ou tente em uma hora.",
-      "already_verified": "Seu e-mail já está confirmado."
+      "already_verified": "Seu e-mail já está confirmado.",
+      "reset_invalid": "Este link não é válido ou já venceu. Peça um novo."
     },
     "http": {
       "rate_limited": "Muitas tentativas. Aguarde um minuto e tente novamente."

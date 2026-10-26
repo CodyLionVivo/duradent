@@ -17,35 +17,38 @@ import (
 )
 
 type (
-	Accounts      struct{ db *sql.DB }
-	Customers     struct{ db *sql.DB }
-	Addresses     struct{ db *sql.DB }
-	Sessions      struct{ db *sql.DB }
-	LoginStates   struct{ db *sql.DB }
-	Verifications struct{ db *sql.DB }
+	Accounts       struct{ db *sql.DB }
+	Customers      struct{ db *sql.DB }
+	Addresses      struct{ db *sql.DB }
+	Sessions       struct{ db *sql.DB }
+	LoginStates    struct{ db *sql.DB }
+	Verifications  struct{ db *sql.DB }
+	PasswordResets struct{ db *sql.DB }
 )
 
 // Stores groups every identity repository over one connection pool.
 type Stores struct {
-	Accounts      *Accounts
-	Customers     *Customers
-	Addresses     *Addresses
-	Sessions      *Sessions
-	LoginStates   *LoginStates
-	Verifications *Verifications
+	Accounts       *Accounts
+	Customers      *Customers
+	Addresses      *Addresses
+	Sessions       *Sessions
+	LoginStates    *LoginStates
+	Verifications  *Verifications
+	PasswordResets *PasswordResets
 }
 
 func New(db *sql.DB) Stores {
-	return Stores{&Accounts{db}, &Customers{db}, &Addresses{db}, &Sessions{db}, &LoginStates{db}, &Verifications{db}}
+	return Stores{&Accounts{db}, &Customers{db}, &Addresses{db}, &Sessions{db}, &LoginStates{db}, &Verifications{db}, &PasswordResets{db}}
 }
 
 var (
-	_ ports.AccountRepository      = (*Accounts)(nil)
-	_ ports.CustomerRepository     = (*Customers)(nil)
-	_ ports.AddressRepository      = (*Addresses)(nil)
-	_ ports.SessionRepository      = (*Sessions)(nil)
-	_ ports.LoginStateRepository   = (*LoginStates)(nil)
-	_ ports.VerificationRepository = (*Verifications)(nil)
+	_ ports.AccountRepository       = (*Accounts)(nil)
+	_ ports.CustomerRepository      = (*Customers)(nil)
+	_ ports.AddressRepository       = (*Addresses)(nil)
+	_ ports.SessionRepository       = (*Sessions)(nil)
+	_ ports.LoginStateRepository    = (*LoginStates)(nil)
+	_ ports.VerificationRepository  = (*Verifications)(nil)
+	_ ports.PasswordResetRepository = (*PasswordResets)(nil)
 )
 
 func notFound(code, msg string, err error) error {
@@ -329,5 +332,45 @@ func (s *Verifications) Take(ctx context.Context, tokenHash string) (ports.Verif
 func (s *Verifications) Recent(ctx context.Context, accountID id.ID, since time.Time) (int, error) {
 	var n int
 	err := mysql.Conn(ctx, s.db).QueryRowContext(ctx, "SELECT COUNT(*) FROM email_verifications WHERE account_id = ? AND created_at >= ?", accountID, since).Scan(&n)
+	return n, err
+}
+
+// --- password resets ---------------------------------------------------------------------
+
+const resetCols = "token_hash, account_id, email, expires_at, created_at"
+
+func scanReset(row *sql.Row) (ports.PasswordReset, error) {
+	var r ports.PasswordReset
+	err := row.Scan(&r.TokenHash, &r.AccountID, &r.Email, &r.ExpiresAt, &r.CreatedAt)
+	return r, notFound("identity.reset_not_found", "password reset not found", err)
+}
+
+func (s *PasswordResets) Create(ctx context.Context, r ports.PasswordReset) error {
+	_, err := mysql.Conn(ctx, s.db).ExecContext(ctx, "INSERT INTO password_resets ("+resetCols+") VALUES (?, ?, ?, ?, ?)",
+		r.TokenHash, r.AccountID, r.Email, r.ExpiresAt, r.CreatedAt)
+	return err
+}
+
+func (s *PasswordResets) Get(ctx context.Context, tokenHash string) (ports.PasswordReset, error) {
+	return scanReset(mysql.Conn(ctx, s.db).QueryRowContext(ctx, "SELECT "+resetCols+" FROM password_resets WHERE token_hash = ?", tokenHash))
+}
+
+func (s *PasswordResets) Take(ctx context.Context, tokenHash string) (ports.PasswordReset, error) {
+	var r ports.PasswordReset
+	err := mysql.InTx(ctx, s.db, func(tx *sql.Tx) error {
+		var err error
+		if r, err = scanReset(tx.QueryRowContext(ctx, "SELECT "+resetCols+" FROM password_resets WHERE token_hash = ? FOR UPDATE", tokenHash)); err != nil {
+			return err
+		}
+		// A link works once; the account's other pending links die with it.
+		_, err = tx.ExecContext(ctx, "DELETE FROM password_resets WHERE account_id = ?", r.AccountID)
+		return err
+	})
+	return r, err
+}
+
+func (s *PasswordResets) Recent(ctx context.Context, accountID id.ID, since time.Time) (int, error) {
+	var n int
+	err := mysql.Conn(ctx, s.db).QueryRowContext(ctx, "SELECT COUNT(*) FROM password_resets WHERE account_id = ? AND created_at >= ?", accountID, since).Scan(&n)
 	return n, err
 }

@@ -47,7 +47,7 @@ Mailpit http://localhost:8025 · LocalStack http://localhost:4566 · MySQL `loca
 El servidor de desarrollo de Astro fuera de Docker: `astro dev --background` (ver AGENTS.md).
 
 **Tienda**: `/{es|en|pt-br}`, `/…/catalog`, `/…/catalog/{categoría}`, `/…/product/{slug}`,
-`/…/cart`, `/…/checkout`, `/…/orders`, `/…/account` (login, registro, perfil), `/…/complaints-book`
+`/…/cart`, `/…/checkout`, `/…/orders`, `/…/account` (login, registro, perfil, `forgot` y `reset` de contraseña), `/…/complaints-book`
 (Libro de Reclamaciones; aviso en el pie de todas las páginas). `/` redirige según `Accept-Language`.
 Admin del libro: `/admin/complaints`.
 
@@ -291,6 +291,14 @@ test con LocalStack real (outbox → SNS con filtro → SQS → consumidor, rein
     correo con la hoja completa (`ComplaintAnswered`); si pidió carta, el admin además la imprime y la envía.
     Plazo: fin del día 15 hábil (solo se saltan fines de semana, así el plazo calculado nunca es más tarde
     que el legal). Las hojas no se borran.
+49. **Recuperar contraseña por enlace de un solo uso.** `POST /v1/auth/password/forgot` responde 202 exista
+    o no la cuenta (máx. 3 enlaces por cuenta y hora, más los límites por IP y por correo); el enlace vale
+    1 h y solo se guarda su SHA-256 (`password_resets`, como la verificación de correo, ADR 36). La página
+    `/…/account/reset` cambia la contraseña con POST (los escáneres de correo no consumen el enlace) y una
+    contraseña rechazada no gasta el enlace. Al usarlo: se borran los demás enlaces de la cuenta, se
+    cierran todas sus sesiones, el correo queda verificado (abrir el enlace prueba el buzón; si está en
+    `ADMIN_EMAILS` pasa a admin) y la persona entra con una sesión nueva. Las cuentas de Google o
+    Microsoft también pueden usarlo para crear una contraseña.
 
 ## Estado por fases
 

@@ -16,6 +16,7 @@ type Kind string
 const (
 	KindWelcome           Kind = "welcome"
 	KindVerifyEmail       Kind = "verify_email"
+	KindPasswordReset     Kind = "password_reset"
 	KindOrderPlaced       Kind = "order_placed"
 	KindPaymentConfirmed  Kind = "payment_confirmed"
 	KindOrderShipped      Kind = "order_shipped"
@@ -82,6 +83,11 @@ var texts = map[Kind]map[locale.Locale]copyText{
 		locale.ES:   {"Confirma tu correo", "Confirma tu correo", []string{"Hola, {{.Name}}. Confirma que este correo es tuyo para proteger tu cuenta. El enlace vence en 24 horas.", "Si no creaste una cuenta en Duradent, ignora este mensaje."}, "Confirmar correo"},
 		locale.EN:   {"Confirm your email", "Confirm your email", []string{"Hello, {{.Name}}. Confirm this email is yours to protect your account. The link expires in 24 hours.", "If you did not create a Duradent account, ignore this message."}, "Confirm email"},
 		locale.PTBR: {"Confirme seu e-mail", "Confirme seu e-mail", []string{"Olá, {{.Name}}. Confirme que este e-mail é seu para proteger sua conta. O link vence em 24 horas.", "Se você não criou uma conta na Duradent, ignore esta mensagem."}, "Confirmar e-mail"},
+	},
+	KindPasswordReset: {
+		locale.ES:   {"Crea una nueva contraseña", "Crea una nueva contraseña", []string{"Hola, {{.Name}}. Recibimos un pedido para crear una nueva contraseña para tu cuenta de Duradent. El enlace vence en 1 hora y solo sirve una vez.", "Si no lo pediste, ignora este mensaje: tu contraseña no cambia."}, "Crear contraseña"},
+		locale.EN:   {"Create a new password", "Create a new password", []string{"Hello, {{.Name}}. We received a request to create a new password for your Duradent account. The link expires in 1 hour and works only once.", "If you did not ask for it, ignore this message: your password does not change."}, "Create password"},
+		locale.PTBR: {"Crie uma nova senha", "Crie uma nova senha", []string{"Olá, {{.Name}}. Recebemos um pedido para criar uma nova senha para sua conta na Duradent. O link vence em 1 hora e funciona uma única vez.", "Se você não pediu, ignore esta mensagem: sua senha não muda."}, "Criar senha"},
 	},
 	KindOrderPlaced: {
 		locale.ES:   {"Recibimos tu pedido {{.OrderNumber}}", "Pedido {{.OrderNumber}} recibido", []string{"Gracias por tu compra, {{.Name}}. Total: {{.Total}}.", "{{if eq .Method \"bank_transfer\"}}Transfiere el total indicando el número de pedido antes del {{.Deadline}}:<br>{{.BankDetails}}{{else}}Si aún no completaste el pago, hazlo antes del {{.Deadline}}.{{end}}"}, "Ver pedido"},

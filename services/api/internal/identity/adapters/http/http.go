@@ -55,6 +55,8 @@ func Register(mux *http.ServeMux, svc *application.Service, log *slog.Logger, op
 	mux.Handle("POST /v1/auth/oidc/{provider}/callback", limited(h.oidcCallback))
 	mux.HandleFunc("POST /v1/auth/logout", h.logout)
 	mux.Handle("POST /v1/auth/verify-email", limited(h.verifyEmail))
+	mux.Handle("POST /v1/auth/password/forgot", limited(h.forgotPassword))
+	mux.Handle("POST /v1/auth/password/reset", limited(h.resetPassword))
 
 	u := func(pattern string, fn http.HandlerFunc) { mux.Handle(pattern, auth.RequireUser(fn)) }
 	u("GET /v1/me", h.me)
@@ -513,6 +515,41 @@ func (h *Handler) verifyEmail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// forgotPassword always answers 202 for a well-formed email: the response
+// does not tell whether the address has an account.
+func (h *Handler) forgotPassword(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Email  string `json:"email"`
+		Locale string `json:"locale"`
+	}
+	if err := httpserver.Decode(w, r, &in); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	if ok, retry := h.perEmail.Allow("reset|" + strings.ToLower(strings.TrimSpace(in.Email))); !ok {
+		ratelimit.TooMany(w, retry)
+		return
+	}
+	if err := h.svc.RequestPasswordReset(r.Context(), in.Email, locale.ParseOrDefault(in.Locale)); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusAccepted)
+}
+
+func (h *Handler) resetPassword(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Token    string `json:"token"`
+		Password string `json:"password"`
+	}
+	if err := httpserver.Decode(w, r, &in); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	s, err := h.svc.ResetPassword(r.Context(), in.Token, in.Password, h.client(r))
+	h.respondSession(w, r, http.StatusOK, s, "", err)
 }
 
 func (h *Handler) resendVerification(w http.ResponseWriter, r *http.Request) {

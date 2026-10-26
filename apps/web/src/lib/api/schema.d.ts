@@ -588,6 +588,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/auth/password/forgot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Email a link to create a new password ("forgot your password?")
+         * @description Answers 202 for any well-formed email, whether or not it has an account,
+         *     so the form does not reveal who is a customer. The link is valid for one
+         *     hour and works once; at most 3 are sent per account and hour.
+         */
+        post: operations["forgotPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/password/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set a new password with the emailed token and sign in
+         * @description Closes every other session of the account and marks its email as verified
+         *     (opening the link proves the mailbox). A password that breaks the policy
+         *     does not use up the link.
+         */
+        post: operations["resetPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/me/verify-email": {
         parameters: {
             query?: never;
@@ -2933,6 +2977,55 @@ export interface operations {
                 };
                 content?: never;
             };
+        };
+    };
+    forgotPassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: email */
+                    email: string;
+                    locale?: components["schemas"]["Locale"];
+                };
+            };
+        };
+        responses: {
+            /** @description If the email has an account */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            422: components["responses"]["Problem"];
+            429: components["responses"]["Problem"];
+        };
+    };
+    resetPassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    token: string;
+                    password: string;
+                };
+            };
+        };
+        responses: {
+            200: components["responses"]["Session"];
+            422: components["responses"]["Problem"];
+            429: components["responses"]["Problem"];
         };
     };
     resendVerification: {

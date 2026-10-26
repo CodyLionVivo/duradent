@@ -229,6 +229,13 @@ func (s *Service) SendVerification(ctx context.Context, r ports.Recipient, token
 	return s.send(ctx, id.New(), domain.KindVerifyEmail, r, "", domain.Data{Name: r.Name, Link: link})
 }
 
+// SendPasswordReset emails a link to create a new password, right away and
+// for the same reason as SendVerification.
+func (s *Service) SendPasswordReset(ctx context.Context, r ports.Recipient, token string) error {
+	link := s.link(r.Locale, "/account/reset?token="+token)
+	return s.send(ctx, id.New(), domain.KindPasswordReset, r, "", domain.Data{Name: r.Name, Link: link})
+}
+
 func (s *Service) link(l locale.Locale, path string) string {
 	return s.cfg.WebBaseURL + "/" + string(l) + path
 }

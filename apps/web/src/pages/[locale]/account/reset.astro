@@ -1,0 +1,70 @@
+---
+// Page of the emailed reset link. Opening it changes nothing (mail scanners
+// prefetch links); the new password is sent with a POST, which signs the
+// person in. Post/Redirect/Get to ?done=1 so a reload does not resend it.
+import Layout from '../../../layouts/Layout.astro';
+import { isLocale, localePath, useTranslations } from '../../../i18n';
+import { ApiError, unwrap } from '../../../lib/api/client';
+import { apiErrorText } from '../../../lib/account';
+import { adoptCart, setSession } from '../../../lib/session';
+
+if (!isLocale(Astro.params.locale)) return new Response(null, { status: 404 });
+
+const { locale, api } = Astro.locals;
+const t = useTranslations(locale);
+const done = Astro.url.searchParams.get('done') === '1';
+
+let token = Astro.url.searchParams.get('token') ?? '';
+let invalid = !done && !token;
+let error = '';
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  token = String(form.get('token') ?? '');
+  try {
+    const signed = unwrap(
+      await api.POST('/v1/auth/password/reset', { body: { token, password: String(form.get('password') ?? '') } }),
+    );
+    setSession(Astro.cookies, signed.token, signed.expires_at);
+    await adoptCart(Astro.cookies, signed.token, Astro.locals.clientIP);
+    return Astro.redirect(`${localePath(locale, '/account/reset')}?done=1`, 303);
+  } catch (err) {
+    if (err instanceof ApiError && err.problem?.code === 'identity.reset_invalid') invalid = true;
+    else error = apiErrorText(t, err);
+    Astro.response.status = err instanceof ApiError ? err.status : 500;
+  }
+}
+---
+
+<Layout title={t('account.reset.title')}>
+  <section class="container-page flex justify-center py-14">
+    <div class="w-full max-w-md">
+      <h1 class="text-2xl font-bold tracking-tight">{t('account.reset.title')}</h1>
+
+      {done ? (
+        <>
+          <p role="status" class="mt-6 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-900">{t('account.reset.done')}</p>
+          <a href={localePath(locale, '/account')} class="btn-primary mt-6 inline-flex">{t('account.reset.goAccount')}</a>
+        </>
+      ) : invalid ? (
+        <>
+          <p role="alert" class="mt-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-800">{t('account.reset.invalid')}</p>
+          <a href={localePath(locale, '/account/forgot')} class="btn-primary mt-6 inline-flex">{t('account.reset.requestNew')}</a>
+        </>
+      ) : (
+        <>
+          <p class="mt-2 text-sm text-muted">{t('account.reset.subtitle')}</p>
+          {error && <p role="alert" class="mt-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</p>}
+          <form method="post" class="card mt-6 space-y-4 p-6">
+            <input type="hidden" name="token" value={token} />
+            <div>
+              <label for="password" class="label">{t('account.password.new')}</label>
+              <input id="password" name="password" type="password" autocomplete="new-password" required minlength={10} maxlength={128} class="input" aria-describedby="password-hint" />
+              <p id="password-hint" class="mt-1 text-xs text-muted">{t('account.register.passwordHint')}</p>
+            </div>
+            <button class="btn-primary w-full py-3">{t('account.reset.submit')}</button>
+          </form>
+        </>
+      )}
+    </div>
+  </section>
+</Layout>
