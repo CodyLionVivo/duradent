@@ -35,7 +35,10 @@
     "valueInvoiceTitle": "Electronic invoices",
     "valueInvoiceText": "SUNAT-compliant invoices with your RUC on every order.",
     "valuePricesTitle": "Professional pricing",
-    "valuePricesText": "Price lists for clinics, practices and distributors."
+    "valuePricesText": "Price lists for clinics, practices and distributors.",
+    "storeCaption": "Our store in Lima",
+    "storeAddress": "Av. Emancipación 271, stores 108 and 126 · Downtown Lima",
+    "storeAlt": "Inside the Duradent store: the company sign, display cases with orthodontic products and a dental chair on show."
   },
   "catalog": {
     "title": "Catalog",
@@ -48,7 +51,20 @@
     "clearSearch": "See all products",
     "variantCount": "{count} options",
     "priceOnRequest": "Price on request",
-    "from": "from"
+    "from": "from",
+    "filters": "Filters",
+    "categories": "Categories",
+    "brand": "Brand",
+    "apply": "Apply filters",
+    "showResults": "Show results",
+    "clearAll": "Clear filters",
+    "showMore": "Show more",
+    "sortBy": "Sort by",
+    "sortName": "Name (A–Z)",
+    "sortNewest": "Newest",
+    "activeFilters": "Active filters",
+    "remove": "Remove filter: {label}",
+    "close": "Close filters"
   },
   "product": {
     "breadcrumb": "Breadcrumb",
@@ -88,8 +104,11 @@
     "shop": "Shop",
     "help": "Help",
     "contact": "Contact",
-    "shipping": "Shipping",
-    "invoicing": "Invoicing"
+    "follow": "Follow us",
+    "facebook": "Duradent on Facebook",
+    "instagram": "Duradent on Instagram",
+    "phone": "Phone",
+    "visit": "Visit us"
   },
   "errors": {
     "notFoundTitle": "Page not found",
@@ -372,5 +391,16 @@
     "shipped": "Shipped",
     "delivered": "Delivered",
     "cancelled": "Cancelled"
+  },
+  "legal": {
+    "title": "Legal information",
+    "terms": "Terms and conditions",
+    "privacy": "Privacy policy",
+    "returns": "Exchanges and returns",
+    "updated": "Last updated: {date}",
+    "spanishPrevails": "This is a translation for your convenience; the Spanish version prevails.",
+    "acceptOrder": "By placing your order you accept the",
+    "acceptAccount": "By creating your account you accept the",
+    "and": "and the"
   }
 }

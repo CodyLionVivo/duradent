@@ -35,7 +35,10 @@
     "valueInvoiceTitle": "Nota fiscal eletrônica",
     "valueInvoiceText": "Comprovantes SUNAT com o seu RUC em cada pedido.",
     "valuePricesTitle": "Preços para profissionais",
-    "valuePricesText": "Tabelas de preços para clínicas, consultórios e distribuidores."
+    "valuePricesText": "Tabelas de preços para clínicas, consultórios e distribuidores.",
+    "storeCaption": "Nossa loja em Lima",
+    "storeAddress": "Av. Emancipación 271, lojas 108 e 126 · Centro de Lima",
+    "storeAlt": "Interior da loja Duradent: a placa da empresa, vitrines com produtos ortodônticos e uma cadeira odontológica em exposição."
   },
   "catalog": {
     "title": "Catálogo",
@@ -48,7 +51,20 @@
     "clearSearch": "Ver todos os produtos",
     "variantCount": "{count} opções",
     "priceOnRequest": "Preço sob consulta",
-    "from": "a partir de"
+    "from": "a partir de",
+    "filters": "Filtros",
+    "categories": "Categorias",
+    "brand": "Marca",
+    "apply": "Aplicar filtros",
+    "showResults": "Ver resultados",
+    "clearAll": "Limpar filtros",
+    "showMore": "Ver mais",
+    "sortBy": "Ordenar por",
+    "sortName": "Nome (A–Z)",
+    "sortNewest": "Mais recentes",
+    "activeFilters": "Filtros aplicados",
+    "remove": "Remover filtro: {label}",
+    "close": "Fechar filtros"
   },
   "product": {
     "breadcrumb": "Trilha de navegação",
@@ -88,8 +104,11 @@
     "shop": "Loja",
     "help": "Ajuda",
     "contact": "Contato",
-    "shipping": "Entregas",
-    "invoicing": "Faturamento"
+    "follow": "Siga-nos",
+    "facebook": "Duradent no Facebook",
+    "instagram": "Duradent no Instagram",
+    "phone": "Telefone",
+    "visit": "Visite-nos"
   },
   "errors": {
     "notFoundTitle": "Página não encontrada",
@@ -372,5 +391,16 @@
     "shipped": "Enviado",
     "delivered": "Entregue",
     "cancelled": "Cancelado"
+  },
+  "legal": {
+    "title": "Informações legais",
+    "terms": "Termos e condições",
+    "privacy": "Política de privacidade",
+    "returns": "Trocas e devoluções",
+    "updated": "Última atualização: {date}",
+    "spanishPrevails": "Esta é uma tradução para sua conveniência; a versão em espanhol prevalece.",
+    "acceptOrder": "Ao confirmar seu pedido você aceita os",
+    "acceptAccount": "Ao criar sua conta você aceita os",
+    "and": "e a"
   }
 }

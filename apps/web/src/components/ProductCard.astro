@@ -22,9 +22,14 @@ const categories = product.image ? [] : await getCategories(Astro.locals.api, lo
 // labelled "from" whenever a buyer could pay more (fewer units, other variants).
 const lowest = quote ? (quote.tiers.at(-1)?.unit_price ?? quote.unit_price) : undefined;
 const isFrom = !!quote && (quote.tiers.length > 1 || product.variant_count > 1);
+
+// Fixed structure (one-line brand, two-line name, a reserved options line) so
+// every card in a grid has the same height and the prices line up. Empty
+// slots keep their line with a non-breaking space.
+const blank = '\u00a0';
 ---
 
-<article class="card group relative flex flex-col overflow-hidden transition duration-300 hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-[0_12px_30px_-12px_rgb(4_104_128_/_0.35)] focus-within:shadow-md">
+<article class="card group relative flex h-full flex-col overflow-hidden transition duration-300 hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-[0_12px_30px_-12px_rgb(4_104_128_/_0.35)] focus-within:shadow-md">
   <div class="aspect-square bg-surface">
     {product.image ? (
       <img
@@ -41,13 +46,13 @@ const isFrom = !!quote && (quote.tiers.length > 1 || product.variant_count > 1);
     )}
   </div>
   <div class="flex flex-1 flex-col gap-1 p-4">
-    {product.brand && <p class="text-xs font-medium uppercase tracking-wide text-muted">{product.brand}</p>}
-    <h3 class="text-sm font-semibold leading-snug text-ink">
+    <p class="truncate text-xs font-medium uppercase tracking-wide text-muted">{product.brand || blank}</p>
+    <h3 class="line-clamp-2 min-h-[2.5rem] text-sm font-semibold leading-5 text-ink" title={product.name}>
       <a href={href} class="after:absolute after:inset-0 focus:outline-none">{product.name}</a>
     </h3>
-    {product.variant_count > 1 && (
-      <p class="text-xs text-muted">{t('catalog.variantCount', { count: product.variant_count })}</p>
-    )}
+    <p class="min-h-4 text-xs leading-4 text-muted">
+      {product.variant_count > 1 ? t('catalog.variantCount', { count: product.variant_count }) : blank}
+    </p>
     <p class="mt-auto pt-3 text-base font-semibold text-brand-800">
       {lowest ? (
         <>

@@ -13,7 +13,8 @@ interface Props {
 const { locale } = Astro.locals;
 const t = useTranslations(locale);
 const { title, description = t('meta.description') } = Astro.props;
-const fullTitle = title ? `${title} · ${t('meta.siteName')}` : t('meta.title');
+// The tab shows only the page name ("Catálogo"), or "Duradent" on the home page.
+const tabTitle = title ?? t('meta.siteName');
 ---
 
 <!doctype html>
@@ -22,11 +23,11 @@ const fullTitle = title ? `${title} · ${t('meta.siteName')}` : t('meta.title');
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <BrandIcons />
-    <title>{fullTitle}</title>
+    <title>{tabTitle}</title>
     <meta name="description" content={description} />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content={t('meta.siteName')} />
-    <meta property="og:title" content={fullTitle} />
+    <meta property="og:title" content={title ?? t('meta.title')} />
     <meta property="og:description" content={description} />
     <meta property="og:image" content={new URL('/brand/og-image.png', Astro.url).href} />
     <meta property="og:image:width" content="1200" />

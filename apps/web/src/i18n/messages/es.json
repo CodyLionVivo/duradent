@@ -35,7 +35,10 @@
     "valueInvoiceTitle": "Factura electrónica",
     "valueInvoiceText": "Comprobantes SUNAT con tu RUC en cada pedido.",
     "valuePricesTitle": "Precios para profesionales",
-    "valuePricesText": "Listas de precios para clínicas, consultorios y distribuidores."
+    "valuePricesText": "Listas de precios para clínicas, consultorios y distribuidores.",
+    "storeCaption": "Nuestra tienda en Lima",
+    "storeAddress": "Av. Emancipación 271, tiendas 108 y 126 · Cercado de Lima",
+    "storeAlt": "Interior de la tienda Duradent: el letrero de la empresa, vitrinas con productos de ortodoncia y un sillón dental en exhibición."
   },
   "catalog": {
     "title": "Catálogo",
@@ -48,7 +51,20 @@
     "clearSearch": "Ver todos los productos",
     "variantCount": "{count} opciones",
     "priceOnRequest": "Precio a consultar",
-    "from": "desde"
+    "from": "desde",
+    "filters": "Filtros",
+    "categories": "Categorías",
+    "brand": "Marca",
+    "apply": "Aplicar filtros",
+    "showResults": "Ver resultados",
+    "clearAll": "Limpiar filtros",
+    "showMore": "Ver más",
+    "sortBy": "Ordenar por",
+    "sortName": "Nombre (A–Z)",
+    "sortNewest": "Más recientes",
+    "activeFilters": "Filtros aplicados",
+    "remove": "Quitar filtro: {label}",
+    "close": "Cerrar filtros"
   },
   "product": {
     "breadcrumb": "Ruta de navegación",
@@ -88,8 +104,11 @@
     "shop": "Tienda",
     "help": "Ayuda",
     "contact": "Contacto",
-    "shipping": "Envíos",
-    "invoicing": "Facturación"
+    "follow": "Síguenos",
+    "facebook": "Duradent en Facebook",
+    "instagram": "Duradent en Instagram",
+    "phone": "Teléfono",
+    "visit": "Visítanos"
   },
   "errors": {
     "notFoundTitle": "Página no encontrada",
@@ -622,5 +641,16 @@
     "shipped": "Enviado",
     "delivered": "Entregado",
     "cancelled": "Cancelado"
+  },
+  "legal": {
+    "title": "Información legal",
+    "terms": "Términos y condiciones",
+    "privacy": "Política de privacidad",
+    "returns": "Cambios y devoluciones",
+    "updated": "Última actualización: {date}",
+    "spanishPrevails": "La versión en español es la que prevalece.",
+    "acceptOrder": "Al confirmar tu pedido aceptas los",
+    "acceptAccount": "Al crear tu cuenta aceptas los",
+    "and": "y la"
   }
 }

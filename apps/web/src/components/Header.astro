@@ -15,7 +15,7 @@ try {
 const q = Astro.url.searchParams.get('q') ?? '';
 ---
 
-<header class="border-b border-line bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 sticky top-0 z-30">
+<header class="sticky top-0 z-30 border-b border-line bg-white">
   <div class="container-page flex h-16 items-center gap-4">
     <a href={localePath(locale)} class="shrink-0 rounded-md" aria-label={`${t('meta.siteName')} · ${t('nav.home')}`}>
       <Logo />

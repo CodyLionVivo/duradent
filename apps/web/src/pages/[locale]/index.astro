@@ -41,11 +41,11 @@ const values = [
     <ErrorState kind="unavailable" />
   ) : (
     <>
-      <section class="relative isolate overflow-hidden">
+      <section class="hero relative isolate overflow-hidden" data-hero>
         <HeroBackdrop />
-        <div class="container-page relative grid items-center gap-10 py-16 sm:py-20 lg:grid-cols-[1fr_1.05fr] lg:py-24">
+        <div class="container-page relative grid items-center gap-10 py-12 sm:py-16 lg:grid-cols-[1fr_1fr] lg:gap-14 lg:py-20">
           <div class="hero-copy">
-            <p class="inline-flex items-center gap-2 rounded-full border border-brand-200 bg-white/70 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-brand-700 backdrop-blur">
+            <p class="inline-flex items-center gap-2 rounded-full border border-brand-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-wider text-brand-700">
               <span class="h-1.5 w-1.5 rounded-full bg-brand-500"></span>{t('home.eyebrow')}
             </p>
             <h1 class="mt-5 text-4xl font-bold tracking-tight text-ink sm:text-5xl lg:text-6xl">
@@ -54,12 +54,15 @@ const values = [
             <p class="mt-5 max-w-xl text-lg text-muted">{t('home.heroSubtitle')}</p>
             <div class="mt-8 flex flex-wrap gap-3">
               <a href={localePath(locale, '/catalog')} class="btn-primary btn-glow px-6 py-3 text-base">{t('home.heroCta')} <span aria-hidden="true">→</span></a>
-              <a href={localePath(locale, '/catalog/brackets')} class="btn-secondary bg-white/80 px-6 py-3 text-base backdrop-blur">{t('home.heroSecondary')}</a>
+              <a href={localePath(locale, '/catalog/brackets')} class="btn-secondary px-6 py-3 text-base">{t('home.heroSecondary')}</a>
             </div>
           </div>
-          <div class="hidden lg:block">
-            <HeroScene chips={values.map((v) => ({ label: v.title, icon: v.icon }))} />
-          </div>
+          <HeroScene
+            alt={t('home.storeAlt')}
+            caption={t('home.storeCaption')}
+            address={t('home.storeAddress')}
+            chips={values.map((v) => ({ label: v.title, icon: v.icon }))}
+          />
         </div>
       </section>
 
@@ -118,3 +121,36 @@ const values = [
     </>
   )}
 </Layout>
+
+<script>
+  // Looping hero animations pause while the hero is off screen and while the
+  // visitor is scrolling, so they never compete with the scroll for frames.
+  const hero = document.querySelector<HTMLElement>('[data-hero]');
+  if (hero) {
+    let visible = true;
+    let scrolling = false;
+    let idle: number | undefined;
+    const update = () => hero.toggleAttribute('data-paused', !visible || scrolling);
+    if ('IntersectionObserver' in window) {
+      new IntersectionObserver(([entry]) => {
+        visible = entry.isIntersecting;
+        update();
+      }).observe(hero);
+    }
+    addEventListener(
+      'scroll',
+      () => {
+        if (!scrolling) {
+          scrolling = true;
+          update();
+        }
+        clearTimeout(idle);
+        idle = window.setTimeout(() => {
+          scrolling = false;
+          update();
+        }, 180);
+      },
+      { passive: true },
+    );
+  }
+</script>

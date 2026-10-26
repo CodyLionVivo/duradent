@@ -145,6 +145,9 @@ test con LocalStack real (outbox → SNS con filtro → SQS → consumidor, rein
   el navegador nunca ve el token de admin. Variables del servidor vía `astro:env/server`.
 - **Formularios del admin**: HTML normal con Post/Redirect/Get (`intent` para varias acciones en una
   página); funcionan sin JS. Astro rechaza POST de formularios de otro origen (checkOrigin).
+- **Textos legales**: Markdown por idioma en `apps/web/src/content/legal/<locale>/{terms,privacy,returns}.md` (colección `legal`, ruta `/{locale}/legal/{slug}`). El español es la versión que prevalece; al cambiar uno, actualiza los tres idiomas y la fecha `updated`. Teléfono de la tienda en `src/lib/legal.ts`.
+- **Imágenes propias**: en `apps/web/src/assets/` (las optimiza `astro:assets`, p. ej. la foto de la tienda del hero). El logotipo y los iconos están en `public/brand/`.
+- **Efectos visuales**: solo animar `transform`/`opacity`; nada de `filter: blur` ni `backdrop-filter` sobre elementos animados (hacían lento el scroll del inicio). Las animaciones del hero se pausan fuera de pantalla y durante el scroll.
 - **Accesibilidad**: contraste AA en los tokens de `global.css`, foco visible, `label` en cada
   campo, `aria-live` en resultados y precios, `fieldset/legend` por idioma.
 - **Config**: solo variables de entorno (`internal/platform/config`). En AWS los secretos llegan
@@ -270,6 +273,7 @@ test con LocalStack real (outbox → SNS con filtro → SQS → consumidor, rein
     API rechaza cualquier otra con `*.currency_invalid`. La migración 0009 borra los precios en USD y la
     columna `shipping_rates.amount_usd`. Volver a vender en dólares exige reintroducirlos en el dominio,
     el admin de precios, las tarifas y la facturación (tipo de cambio SBS).
+47. **Filtros del catálogo con facetas disyuntivas** (`GET /v1/catalog/products?brand=…&attr=código:valor&sort=name|newest`): cada grupo se cuenta ignorando su propia selección; los valores de un atributo son alternativas y atributos distintos deben cumplirse en la **misma variante**. La web es un formulario GET (filtros en la URL, sin JS) con barra lateral sticky en escritorio y `popover` en móvil. Precio y stock no son filtros todavía: viven en otros contextos (pricing por lista de cliente, inventory).
 
 ## Estado por fases
 

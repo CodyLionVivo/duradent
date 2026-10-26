@@ -165,6 +165,10 @@ const zoneKey = `checkout.zone_${quote?.shipping.zone || 'pickup'}` as 'checkout
           <button type="submit" formmethod="get" formaction={here} class="btn-secondary mt-4 w-full">{t('checkout.refresh')}</button>
         </noscript>
         <button type="submit" class="btn-primary mt-6 w-full py-3" disabled={!canPlace}>{t('checkout.place')}</button>
+        <p class="mt-3 text-center text-xs text-muted">
+          {t('legal.acceptOrder')} <a class="font-medium text-brand-700 underline" href={localePath(locale, '/legal/terms')}>{t('legal.terms')}</a>
+          {t('legal.and')} <a class="font-medium text-brand-700 underline" href={localePath(locale, '/legal/privacy')}>{t('legal.privacy')}</a>.
+        </p>
         <p class="mt-2 text-xs text-muted">{t('checkout.terms')}</p>
       </aside>
     </form>
