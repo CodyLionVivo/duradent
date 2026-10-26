@@ -37,8 +37,17 @@ variable "microsoft_client_id" {
   default = ""
 }
 variable "bank_details" { type = string }
+variable "route53_zone_id" {
+  description = "Route 53 hosted zone of duradent.pe; empty if the DNS lives elsewhere."
+  type        = string
+  default     = ""
+}
 
-# Production: NAT gateway and database replica per AZ, two tasks minimum.
+# Production, economical setup (~USD 120 a month): tasks with a public IP
+# instead of NAT gateways, a single-AZ database with daily backups, one web
+# and one API task that scale out on CPU. To raise availability when sales
+# justify it: nat_gateways = 2, db_multi_az = true, db_instance_class =
+# "db.t4g.small" and min = 2 in web_count/api_count (no data migration).
 module "stack" {
   source                 = "../../modules/stack"
   env                    = "prod"
@@ -49,12 +58,13 @@ module "stack" {
   api_repository_url     = var.api_repository_url
   web_repository_url     = var.web_repository_url
   image_tag              = var.image_tag
-  single_nat_gateway     = false
-  db_instance_class      = "db.t4g.small"
-  db_multi_az            = true
+  nat_gateways           = 0
+  db_instance_class      = "db.t4g.micro"
+  db_multi_az            = false
   db_deletion_protection = true
-  web_count              = { min = 2, max = 6 }
-  api_count              = { min = 2, max = 6 }
+  web_count              = { min = 1, max = 4 }
+  api_count              = { min = 1, max = 4 }
+  route53_zone_id        = var.route53_zone_id
   alarm_email            = var.alarm_email
   admin_emails           = var.admin_emails
   culqi_public_key       = var.culqi_public_key

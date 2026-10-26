@@ -3,6 +3,11 @@
 
 variable "name" { type = string }
 variable "bucket_name" { type = string }
+variable "force_destroy" {
+  description = "Delete the bucket even with images in it (disposable environments only)."
+  type        = bool
+  default     = false
+}
 variable "upload_origins" {
   description = "Browser origins allowed to PUT presigned uploads (the store URL)."
   type        = list(string)
@@ -19,7 +24,8 @@ variable "certificate_arn" {
 }
 
 resource "aws_s3_bucket" "media" {
-  bucket = var.bucket_name
+  bucket        = var.bucket_name
+  force_destroy = var.force_destroy
 }
 
 resource "aws_s3_bucket_public_access_block" "media" {

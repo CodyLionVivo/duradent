@@ -37,8 +37,15 @@ variable "microsoft_client_id" {
   default = ""
 }
 variable "bank_details" { type = string }
+variable "route53_zone_id" {
+  description = "Route 53 hosted zone of duradent.pe; empty if the DNS lives elsewhere."
+  type        = string
+  default     = ""
+}
 
-# Staging is smaller: one NAT gateway, single-AZ database, one task each.
+# Staging only exists while it is needed: `task staging:up` creates it and
+# deploys main, `task staging:down` destroys it (database included). While it
+# is down it costs nothing; up, about USD 4 a day.
 module "stack" {
   source                 = "../../modules/stack"
   env                    = "staging"
@@ -50,12 +57,14 @@ module "stack" {
   api_repository_url     = var.api_repository_url
   web_repository_url     = var.web_repository_url
   image_tag              = var.image_tag
-  single_nat_gateway     = true
+  nat_gateways           = 0
+  disposable             = true
   db_instance_class      = "db.t4g.micro"
   db_multi_az            = false
   db_deletion_protection = false
   web_count              = { min = 1, max = 2 }
   api_count              = { min = 1, max = 2 }
+  route53_zone_id        = var.route53_zone_id
   alarm_email            = var.alarm_email
   admin_emails           = var.admin_emails
   culqi_public_key       = var.culqi_public_key

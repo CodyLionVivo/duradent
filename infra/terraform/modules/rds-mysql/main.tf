@@ -21,6 +21,16 @@ variable "multi_az" {
   type    = bool
   default = true
 }
+variable "final_snapshot" {
+  description = "Keep a snapshot when the database is destroyed (off for disposable environments)."
+  type        = bool
+  default     = true
+}
+variable "secret_recovery_days" {
+  description = "0 deletes the DSN secret at once, so the same name can be created again."
+  type        = number
+  default     = 7
+}
 variable "deletion_protection" {
   type    = bool
   default = true
@@ -102,8 +112,8 @@ resource "aws_db_instance" "this" {
   maintenance_window              = "sun:09:00-sun:10:00"
   auto_minor_version_upgrade      = true
   deletion_protection             = var.deletion_protection
-  skip_final_snapshot             = false
-  final_snapshot_identifier       = "${var.name}-final"
+  skip_final_snapshot             = !var.final_snapshot
+  final_snapshot_identifier       = var.final_snapshot ? "${var.name}-final" : null
   copy_tags_to_snapshot           = true
   performance_insights_enabled    = true
   enabled_cloudwatch_logs_exports = ["error", "slowquery"]
@@ -112,7 +122,7 @@ resource "aws_db_instance" "this" {
 resource "aws_secretsmanager_secret" "dsn" {
   name                    = "${var.name}/mysql-dsn"
   description             = "MYSQL_DSN for the duradent containers"
-  recovery_window_in_days = 7
+  recovery_window_in_days = var.secret_recovery_days
 }
 
 resource "aws_secretsmanager_secret_version" "dsn" {

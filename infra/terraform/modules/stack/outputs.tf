@@ -26,7 +26,8 @@ output "culqi_webhook_url_prefix" {
 output "deploy" {
   value = {
     cluster        = aws_ecs_cluster.this.name
-    subnets        = module.network.private_subnet_ids
+    subnets        = module.network.task_subnet_ids
+    public_ip      = module.network.tasks_need_public_ip ? "ENABLED" : "DISABLED"
     security_group = aws_security_group.tasks.id
     migrate_family = module.migrate.task_definition_family
     services = {

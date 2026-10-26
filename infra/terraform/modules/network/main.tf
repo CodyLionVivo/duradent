@@ -1,15 +1,25 @@
-# VPC across two availability zones: public subnets for the ALB and NAT
-# gateways, private subnets for ECS tasks and RDS.
+# VPC across two availability zones: public subnets for the ALB, private
+# subnets for RDS.
+#
+# ECS tasks need to reach the internet (Culqi, Nubefact, OIDC, AWS APIs). With
+# NAT gateways they live in the private subnets; without them (nat_gateways =
+# 0, the economical default: a NAT gateway costs ~USD 33 a month) they run in
+# the public subnets with a public IP, and their security group still only
+# lets in the ALB and the other tasks.
 
 variable "name" { type = string }
 variable "cidr" {
   type    = string
   default = "10.20.0.0/16"
 }
-variable "single_nat_gateway" {
-  description = "One NAT gateway (cheaper, staging) instead of one per AZ (prod)."
-  type        = bool
-  default     = false
+variable "nat_gateways" {
+  description = "0: tasks in public subnets (cheapest); 1: one shared NAT; 2: one per AZ (highest availability)."
+  type        = number
+  default     = 0
+  validation {
+    condition     = contains([0, 1, 2], var.nat_gateways)
+    error_message = "nat_gateways must be 0, 1 or 2."
+  }
 }
 
 data "aws_availability_zones" "available" {
@@ -65,13 +75,13 @@ resource "aws_route_table_association" "public" {
 }
 
 resource "aws_eip" "nat" {
-  count  = var.single_nat_gateway ? 1 : 2
+  count  = var.nat_gateways
   domain = "vpc"
   tags   = { Name = "${var.name}-nat-${count.index}" }
 }
 
 resource "aws_nat_gateway" "this" {
-  count         = var.single_nat_gateway ? 1 : 2
+  count         = var.nat_gateways
   allocation_id = aws_eip.nat[count.index].id
   subnet_id     = aws_subnet.public[count.index].id
   tags          = { Name = "${var.name}-${local.azs[count.index]}" }
@@ -81,9 +91,12 @@ resource "aws_nat_gateway" "this" {
 resource "aws_route_table" "private" {
   count  = 2
   vpc_id = aws_vpc.this.id
-  route {
-    cidr_block     = "0.0.0.0/0"
-    nat_gateway_id = aws_nat_gateway.this[var.single_nat_gateway ? 0 : count.index].id
+  dynamic "route" {
+    for_each = var.nat_gateways > 0 ? [1] : []
+    content {
+      cidr_block     = "0.0.0.0/0"
+      nat_gateway_id = aws_nat_gateway.this[min(count.index, var.nat_gateways - 1)].id
+    }
   }
   tags = { Name = "${var.name}-private-${local.azs[count.index]}" }
 }
@@ -94,12 +107,12 @@ resource "aws_route_table_association" "private" {
   route_table_id = aws_route_table.private[count.index].id
 }
 
-# S3 traffic (images, ECR layers) skips the NAT gateway.
+# S3 traffic (images, ECR layers) stays inside AWS (free gateway endpoint).
 resource "aws_vpc_endpoint" "s3" {
   vpc_id            = aws_vpc.this.id
   service_name      = "com.amazonaws.${data.aws_region.current.region}.s3"
   vpc_endpoint_type = "Gateway"
-  route_table_ids   = aws_route_table.private[*].id
+  route_table_ids   = concat(aws_route_table.private[*].id, [aws_route_table.public.id])
   tags              = { Name = "${var.name}-s3" }
 }
 
@@ -109,3 +122,7 @@ output "vpc_id" { value = aws_vpc.this.id }
 output "vpc_cidr" { value = aws_vpc.this.cidr_block }
 output "public_subnet_ids" { value = aws_subnet.public[*].id }
 output "private_subnet_ids" { value = aws_subnet.private[*].id }
+
+# Where ECS tasks run, and whether they need a public IP to reach the internet.
+output "task_subnet_ids" { value = var.nat_gateways > 0 ? aws_subnet.private[*].id : aws_subnet.public[*].id }
+output "tasks_need_public_ip" { value = var.nat_gateways == 0 }

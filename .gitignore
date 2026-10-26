@@ -34,3 +34,6 @@ coverage.out
 *.tfvars
 !*.tfvars.example
 infra/terraform/backend.hcl
+
+# Secrets files for put-secret-value (never committed)
+infra/**/app*.json

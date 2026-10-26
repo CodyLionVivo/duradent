@@ -19,6 +19,8 @@ out="$(terraform -chdir="$root" output -json deploy)"
 cluster="$(jq -r .cluster <<<"$out")"
 subnets="$(jq -r '.subnets | join(",")' <<<"$out")"
 sg="$(jq -r .security_group <<<"$out")"
+# Without NAT gateways the tasks run in public subnets and need a public IP.
+public_ip="$(jq -r '.public_ip // "DISABLED"' <<<"$out")"
 
 # register_revision <family> <image-kind>: copy the latest revision with a new image.
 register_revision() {
@@ -40,7 +42,7 @@ migrate_arn="$(register_revision "$migrate_family" api)"
 
 echo "==> running migrations (${migrate_arn##*/})"
 task="$(aws ecs run-task --cluster "$cluster" --task-definition "$migrate_arn" --launch-type FARGATE \
-  --network-configuration "awsvpcConfiguration={subnets=[${subnets}],securityGroups=[${sg}],assignPublicIp=DISABLED}" \
+  --network-configuration "awsvpcConfiguration={subnets=[${subnets}],securityGroups=[${sg}],assignPublicIp=${public_ip}}" \
   --started-by "deploy-${tag:0:20}" --query 'tasks[0].taskArn' --output text)"
 aws ecs wait tasks-stopped --cluster "$cluster" --tasks "$task"
 code="$(aws ecs describe-tasks --cluster "$cluster" --tasks "$task" --query 'tasks[0].containers[0].exitCode' --output text)"

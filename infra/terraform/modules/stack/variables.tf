@@ -42,18 +42,23 @@ variable "image_tag" {
   type        = string
 }
 
-variable "single_nat_gateway" {
-  type    = bool
-  default = false
+# Defaults are the economical setup (~USD 120 a month for prod): no NAT
+# gateway, one small single-AZ database, one web and one API task that scale
+# out on CPU. Raise them per environment when sales justify it.
+variable "nat_gateways" {
+  description = "0: tasks in public subnets with a public IP; 1 or 2: tasks behind NAT in private subnets."
+  type        = number
+  default     = 0
 }
 
 variable "db_instance_class" {
   type    = string
-  default = "db.t4g.small"
+  default = "db.t4g.micro"
 }
 variable "db_multi_az" {
-  type    = bool
-  default = true
+  description = "A standby copy in another zone (doubles the database cost)."
+  type        = bool
+  default     = false
 }
 variable "db_deletion_protection" {
   type    = bool
@@ -62,11 +67,23 @@ variable "db_deletion_protection" {
 
 variable "web_count" {
   type    = object({ min = number, max = number })
-  default = { min = 2, max = 6 }
+  default = { min = 1, max = 4 }
 }
 variable "api_count" {
   type    = object({ min = number, max = number })
-  default = { min = 2, max = 6 }
+  default = { min = 1, max = 4 }
+}
+
+variable "disposable" {
+  description = "Can be destroyed and created again at will (on-demand staging): no final database snapshot, secrets deleted at once, media bucket emptied."
+  type        = bool
+  default     = false
+}
+
+variable "route53_zone_id" {
+  description = "Hosted zone of the domain in Route 53; when set, Terraform points the domain at the ALB. Empty: set the DNS record by hand."
+  type        = string
+  default     = ""
 }
 
 variable "alarm_email" {

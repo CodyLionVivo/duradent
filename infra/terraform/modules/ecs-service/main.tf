@@ -32,6 +32,11 @@ variable "secrets" {
 variable "execution_role_arn" { type = string }
 variable "task_role_arn" { type = string }
 variable "subnet_ids" { type = list(string) }
+variable "assign_public_ip" {
+  description = "Public subnets without NAT: the task needs a public IP to reach the internet."
+  type        = bool
+  default     = false
+}
 variable "security_group_ids" { type = list(string) }
 variable "container_port" {
   type    = number
@@ -125,7 +130,7 @@ resource "aws_ecs_service" "this" {
   network_configuration {
     subnets          = var.subnet_ids
     security_groups  = var.security_group_ids
-    assign_public_ip = false
+    assign_public_ip = var.assign_public_ip
   }
 
   dynamic "load_balancer" {

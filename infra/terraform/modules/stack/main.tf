@@ -42,9 +42,9 @@ resource "aws_sns_topic_subscription" "alarm_email" {
 # --- building blocks ------------------------------------------------------------------
 
 module "network" {
-  source             = "../network"
-  name               = local.name
-  single_nat_gateway = var.single_nat_gateway
+  source       = "../network"
+  name         = local.name
+  nat_gateways = var.nat_gateways
 }
 
 module "alb" {
@@ -93,7 +93,9 @@ module "db" {
   client_security_group_ids = [aws_security_group.tasks.id]
   instance_class            = var.db_instance_class
   multi_az                  = var.db_multi_az
-  deletion_protection       = var.db_deletion_protection
+  deletion_protection       = var.db_deletion_protection && !var.disposable
+  final_snapshot            = !var.disposable
+  secret_recovery_days      = var.disposable ? 0 : 7
   alarm_topic_arn           = aws_sns_topic.alarms.arn
 }
 
@@ -108,9 +110,24 @@ module "media" {
   source          = "../s3-cdn"
   name            = local.name
   bucket_name     = "${local.name}-media-${data.aws_caller_identity.current.account_id}"
+  force_destroy   = var.disposable
   upload_origins  = [local.web_url]
   aliases         = var.cdn_aliases
   certificate_arn = var.cdn_certificate_arn
+}
+
+# With the domain in Route 53 the store's name follows the ALB, also when an
+# on-demand staging is created again (a new ALB gets a new address).
+resource "aws_route53_record" "site" {
+  count   = var.route53_zone_id == "" ? 0 : 1
+  zone_id = var.route53_zone_id
+  name    = var.domain
+  type    = "A"
+  alias {
+    name                   = module.alb.dns_name
+    zone_id                = module.alb.zone_id
+    evaluate_target_health = true
+  }
 }
 
 module "ses" {
@@ -129,7 +146,7 @@ module "ses" {
 resource "aws_secretsmanager_secret" "app" {
   name                    = "${local.name}/app"
   description             = "Culqi, Nubefact, OIDC and admin token for duradent ${var.env}"
-  recovery_window_in_days = 7
+  recovery_window_in_days = var.disposable ? 0 : 7
 }
 
 locals {
@@ -276,7 +293,8 @@ locals {
   common = {
     cluster_arn               = aws_ecs_cluster.this.arn
     execution_role_arn        = aws_iam_role.execution.arn
-    subnet_ids                = module.network.private_subnet_ids
+    subnet_ids                = module.network.task_subnet_ids
+    assign_public_ip          = module.network.tasks_need_public_ip
     security_group_ids        = [aws_security_group.tasks.id]
     service_connect_namespace = aws_service_discovery_http_namespace.this.arn
     log_retention_days        = var.log_retention_days
@@ -300,6 +318,7 @@ module "api" {
   cluster_arn               = local.common.cluster_arn
   execution_role_arn        = local.common.execution_role_arn
   subnet_ids                = local.common.subnet_ids
+  assign_public_ip          = local.common.assign_public_ip
   security_group_ids        = local.common.security_group_ids
   service_connect_namespace = local.common.service_connect_namespace
   log_retention_days        = local.common.log_retention_days
@@ -326,6 +345,7 @@ module "web" {
   cluster_arn               = local.common.cluster_arn
   execution_role_arn        = local.common.execution_role_arn
   subnet_ids                = local.common.subnet_ids
+  assign_public_ip          = local.common.assign_public_ip
   security_group_ids        = local.common.security_group_ids
   service_connect_namespace = local.common.service_connect_namespace
   log_retention_days        = local.common.log_retention_days
@@ -345,6 +365,7 @@ module "worker" {
   cluster_arn               = local.common.cluster_arn
   execution_role_arn        = local.common.execution_role_arn
   subnet_ids                = local.common.subnet_ids
+  assign_public_ip          = local.common.assign_public_ip
   security_group_ids        = local.common.security_group_ids
   service_connect_namespace = local.common.service_connect_namespace
   log_retention_days        = local.common.log_retention_days
@@ -363,6 +384,7 @@ module "relay" {
   cluster_arn               = local.common.cluster_arn
   execution_role_arn        = local.common.execution_role_arn
   subnet_ids                = local.common.subnet_ids
+  assign_public_ip          = local.common.assign_public_ip
   security_group_ids        = local.common.security_group_ids
   service_connect_namespace = local.common.service_connect_namespace
   log_retention_days        = local.common.log_retention_days
@@ -381,6 +403,7 @@ module "migrate" {
   cluster_arn        = local.common.cluster_arn
   execution_role_arn = local.common.execution_role_arn
   subnet_ids         = local.common.subnet_ids
+  assign_public_ip   = local.common.assign_public_ip
   security_group_ids = local.common.security_group_ids
   log_retention_days = local.common.log_retention_days
 }

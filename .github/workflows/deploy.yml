@@ -146,7 +146,18 @@ jobs:
             -backend-config="dynamodb_table=${{ vars.TF_LOCK_TABLE }}" \
             -backend-config="region=${{ env.AWS_REGION }}" \
             -backend-config="key=staging.tfstate"
-      - run: infra/scripts/deploy.sh staging "${{ needs.build.outputs.tag }}"
+      # Staging only exists on demand (task staging:up); while it is down the
+      # images are built anyway and this job ends without deploying.
+      - name: Is staging up?
+        id: staging
+        run: |
+          if terraform -chdir=infra/terraform/envs/staging output -json deploy >/dev/null 2>&1; then
+            echo "up=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Staging is down; ${{ needs.build.outputs.tag }} was built but not deployed (task staging:up)."
+          fi
+      - if: steps.staging.outputs.up == 'true'
+        run: infra/scripts/deploy.sh staging "${{ needs.build.outputs.tag }}"
 
   deploy-manual:
     name: Deploy ${{ github.event.inputs.tag }} to ${{ github.event.inputs.environment }}

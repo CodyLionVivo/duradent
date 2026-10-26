@@ -271,9 +271,13 @@ test con LocalStack real (outbox → SNS con filtro → SQS → consumidor, rein
     operaciones carga los valores; ECS los inyecta por clave. Nada sensible en tfvars ni en el estado.
 43. **GitHub Actions entra a AWS por OIDC**: `duradent-github-deploy` (solo `main` y los entornos
     `staging`/`prod`) y `duradent-github-plan` (solo lectura, PRs). Sin llaves de AWS guardadas.
-44. **Staging barato**: un NAT gateway, RDS single-AZ `db.t4g.micro`, una tarea por servicio, sin
-    protección de borrado. Prod: NAT por AZ, RDS Multi-AZ con protección y snapshot final, mínimo dos
-    tareas de web y API con autoescalado por CPU (60 %).
+44. **Modo económico para empezar (~USD 120/mes en prod)**: sin NAT gateways (las tareas corren en
+    las subredes públicas con IP pública; su security group solo deja entrar al ALB y a las otras
+    tareas; RDS sigue en las privadas), RDS single-AZ `db.t4g.micro` con respaldos diarios, protección
+    de borrado y snapshot final, y una tarea de web y otra de API con autoescalado por CPU (60 %, hasta
+    4). Antes eran ~USD 380/mes (NAT por AZ, Multi-AZ, dos tareas mínimo y staging fijo). Para subir
+    disponibilidad cuando las ventas lo justifiquen, en `envs/prod/main.tf`: `nat_gateways = 2`,
+    `db_multi_az = true`, `db_instance_class = "db.t4g.small"`, `min = 2`; sin migrar datos.
 45. **Imágenes por CloudFront con OAC** (bucket privado). La web sube con PUT prefirmado; el CORS del
     bucket solo acepta el origen de la tienda.
 46. **Solo soles (PEN).** Duradent vende solo en soles: sin selector de moneda en la tienda, precios y
@@ -309,6 +313,13 @@ test con LocalStack real (outbox → SNS con filtro → SQS → consumidor, rein
     (sí `?page=N`); `x-default` en español. JSON-LD: `Store` en el inicio (con RUC), `Product` con una
     `Offer` por variante con precio (soles, `valueAddedTaxIncluded: false`, stock solo si se conoce) y
     `BreadcrumbList` en producto y catálogo. Cuenta, carrito, checkout y pedidos llevan `noindex`.
+51. **Staging bajo demanda**: no está siempre encendido (le costaría ~USD 135/mes). `task staging:up`
+    lo crea con Terraform, carga sus secretos desde el archivo de `STAGING_SECRETS` y despliega `main`;
+    `task staging:down` lo destruye con su base de datos (~USD 4 por día encendido, 0 apagado). Es
+    `disposable`: sin snapshot final, secretos borrados al momento (el mismo nombre se puede volver a
+    crear) y bucket de imágenes vaciado. El merge a `main` construye las imágenes siempre y despliega
+    en staging solo si existe. Con el dominio en Route 53 (`route53_zone_id`) Terraform apunta
+    `staging.duradent.pe` al ALB nuevo en cada `up`; si no, hay que actualizar el registro a mano.
 
 ## Estado por fases
 
@@ -346,7 +357,9 @@ supuesto `duradent.pe` / `staging.duradent.pe`: cámbialo en `envs/*/main.tf` si
    con `CULQI_SECRET_KEY`, `CULQI_WEBHOOK_SECRET` (24 caracteres aleatorios o más), `NUBEFACT_URL`,
    `NUBEFACT_TOKEN`, `GOOGLE_CLIENT_SECRET`, `MICROSOFT_CLIENT_SECRET`, `ADMIN_TOKEN` (32 o más, o vacío).
    Borra `app.json` después.
-7. DNS: CNAME/alias del dominio al `alb_dns_name`; registros de `ses_dns_records` (DKIM, MAIL FROM,
+7. DNS: con el dominio en Route 53 pon `route53_zone_id` en los tfvars y Terraform crea el alias al
+   ALB (recomendado: el dominio raíz `duradent.pe` no admite CNAME en la mayoría de proveedores); si
+   no, CNAME/ALIAS del dominio al `alb_dns_name`. Registros de `ses_dns_records` (DKIM, MAIL FROM,
    DMARC). Pide a AWS sacar SES del sandbox. Confirma el correo de suscripción a las alarmas (SNS).
 8. Webhook en CulqiPanel: `culqi_webhook_url_prefix` + `CULQI_WEBHOOK_SECRET`. Redirect URIs de
    Google/Microsoft: `https://<dominio>/auth/<google|microsoft>/callback`.
@@ -355,10 +368,18 @@ supuesto `duradent.pe` / `staging.duradent.pe`: cámbialo en `envs/*/main.tf` si
 
 ### Despliegue normal
 
-Merge a `main` → imágenes `duradent/{api,web}:<sha>` → staging automático (migración + rollout).
+Merge a `main` → imágenes `duradent/{api,web}:<sha>` → staging (migración + rollout) si está encendido.
 Prod: Actions → *Deploy* → *Run workflow* con `environment=prod` y el mismo SHA → aprobación del
 revisor. Cambios de infraestructura: PR (el plan sale en el job *Terraform plan*) y `terraform apply`
 local tras el merge; actualiza la copia de tfvars en S3 si cambió.
+
+### Staging bajo demanda (ADR 51)
+
+- Encender: `STAGING_SECRETS=<ruta>/app.json task staging:up` (despliega `origin/main`; otro SHA con
+  `-- <sha>`). Guarda ese `app.json` de staging fuera del repo (gestor de contraseñas): son llaves de
+  prueba (Culqi sandbox, Nubefact demo) y se recargan en cada encendido. Cada `up` reenvía el correo de
+  suscripción a las alarmas.
+- Apagar al terminar las pruebas: `task staging:down` (pide confirmación; borra la base de staging).
 
 ### Rollback
 

@@ -133,3 +133,32 @@ tasks:
   deploy:
     desc: "Roll an image tag out: task deploy -- staging <git-sha>"
     cmds: ["bash infra/scripts/deploy.sh {{.CLI_ARGS}}"]
+
+  # Staging exists only while it is needed (ADR 51). Its secrets (Culqi sandbox,
+  # Nubefact demo…) are reloaded on every start from the file in STAGING_SECRETS.
+  staging:up:
+    desc: "Create staging and deploy main (or a SHA): STAGING_SECRETS=app.json task staging:up [-- <git-sha>]"
+    cmds:
+      - |
+        set -e
+        tag="{{.CLI_ARGS}}"
+        tag="${tag:-$(git rev-parse origin/main)}"
+        tf="terraform -chdir=infra/terraform/envs/staging"
+        $tf init -input=false -backend-config=../../backend.hcl -backend-config="key=staging.tfstate"
+        $tf apply -input=false -var "image_tag=${tag}"
+        if [ -z "${STAGING_SECRETS:-}" ]; then
+          echo "Staging was created without secrets. Load them and deploy:"
+          echo "  aws secretsmanager put-secret-value --secret-id duradent-staging/app --secret-string file://app.json"
+          echo "  task deploy -- staging ${tag}"
+          exit 0
+        fi
+        aws secretsmanager put-secret-value --secret-id duradent-staging/app --secret-string "file://${STAGING_SECRETS}" >/dev/null
+        bash infra/scripts/deploy.sh staging "${tag}"
+        echo "Staging is up at https://staging.duradent.pe (point its DNS at: $($tf output -raw alb_dns_name))"
+
+  staging:down:
+    desc: Destroy staging, database included (costs nothing while down)
+    prompt: Esto borra staging completo, incluida su base de datos. ¿Seguir?
+    cmds:
+      - terraform -chdir=infra/terraform/envs/staging init -input=false -backend-config=../../backend.hcl -backend-config="key=staging.tfstate"
+      - terraform -chdir=infra/terraform/envs/staging destroy -input=false
