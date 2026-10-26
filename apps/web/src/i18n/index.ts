@@ -3,7 +3,7 @@
 import es from './messages/es.json';
 import en from './messages/en.json';
 import ptBR from './messages/pt-br.json';
-import { CURRENCY, DEFAULT_LOCALE, INTL_LOCALE, type Locale } from './locales';
+import { CURRENCY, DEFAULT_LOCALE, INTL_LOCALE, TIME_ZONE, type Locale } from './locales';
 
 export * from './locales';
 
@@ -65,7 +65,12 @@ export function formatNumber(value: number, locale: Locale): string {
 }
 
 export function formatDate(iso: string, locale: Locale): string {
-  return new Intl.DateTimeFormat(INTL_LOCALE[locale], { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(iso));
+  return new Intl.DateTimeFormat(INTL_LOCALE[locale], { dateStyle: 'medium', timeStyle: 'short', timeZone: TIME_ZONE }).format(new Date(iso));
+}
+
+/** A day without the time ("13 nov. 2026"), in Lima. */
+export function formatDay(iso: string, locale: Locale): string {
+  return new Intl.DateTimeFormat(INTL_LOCALE[locale], { dateStyle: 'long', timeZone: TIME_ZONE }).format(new Date(iso));
 }
 
 /** Builds a path inside a locale: localePath('en', '/catalog') → /en/catalog */

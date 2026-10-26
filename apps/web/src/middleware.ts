@@ -61,7 +61,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
   response.headers.set('X-Content-Type-Options', 'nosniff');
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
   response.headers.set('X-Frame-Options', 'DENY');
-  if (first === 'admin' || /\/(account|cart|checkout|orders)/.test(url.pathname)) {
+  if (first === 'admin' || /\/(account|cart|checkout|orders|complaints-book)/.test(url.pathname)) {
     response.headers.set('Cache-Control', 'no-store');
   }
   return response;

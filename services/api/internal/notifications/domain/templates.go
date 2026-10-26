@@ -24,6 +24,11 @@ const (
 	KindInvoiceIssued     Kind = "invoice_issued"
 	KindAdminStockLow     Kind = "admin_stock_low"
 	KindAdminInvoiceError Kind = "admin_invoice_error"
+	// Libro de Reclamaciones: the consumer's copy of the sheet, the store's
+	// answer, and the alert to operations.
+	KindComplaintFiled      Kind = "complaint_filed"
+	KindComplaintAnswered   Kind = "complaint_answered"
+	KindAdminComplaintFiled Kind = "admin_complaint_filed"
 )
 
 // Message is a rendered email.
@@ -51,6 +56,12 @@ type Data struct {
 	LogoURL      string // absolute URL of the PNG logo (email clients do not show SVG)
 	SKU          string
 	Available    int
+	// Complaints: sheet number, "reclamo"/"queja" in the reader's language,
+	// the store's answer and the whole sheet.
+	Code          string
+	ComplaintKind string
+	Response      string
+	Sheet         []Row
 }
 
 type copyText struct {
@@ -108,6 +119,39 @@ var texts = map[Kind]map[locale.Locale]copyText{
 	KindAdminInvoiceError: {
 		locale.ES: {"Error al emitir comprobante · {{.OrderNumber}}", "Comprobante rechazado", []string{"No se pudo emitir el comprobante del pedido {{.OrderNumber}}: {{.Reason}}"}, "Ver pedido"},
 	},
+	KindComplaintFiled: {
+		locale.ES: {"Hoja de reclamación N.° {{.Code}}", "Recibimos tu {{.ComplaintKind}}", []string{
+			"Hola, {{.Name}}. Registramos tu {{.ComplaintKind}} en nuestro Libro de Reclamaciones con el número {{.Code}}. Abajo está la copia de tu hoja de reclamación.",
+			"Te responderemos a más tardar el {{.Deadline}}, dentro del plazo de 15 días hábiles.",
+			"La formulación del reclamo no impide acudir a otras vías de solución de controversias ni es requisito previo para interponer una denuncia ante el INDECOPI.",
+		}, ""},
+		locale.EN: {"Complaint sheet No. {{.Code}}", "We received your {{.ComplaintKind}}", []string{
+			"Hello, {{.Name}}. We registered your {{.ComplaintKind}} in our Complaints Book (Libro de Reclamaciones) with number {{.Code}}. Your copy of the sheet is below.",
+			"We will answer by {{.Deadline}}, within 15 business days.",
+			"Filing a claim does not prevent you from using other ways to settle the dispute, nor is it required before filing a complaint with INDECOPI.",
+		}, ""},
+		locale.PTBR: {"Folha de reclamação n.º {{.Code}}", "Recebemos sua {{.ComplaintKind}}", []string{
+			"Olá, {{.Name}}. Registramos sua {{.ComplaintKind}} no nosso Livro de Reclamações (Libro de Reclamaciones) com o número {{.Code}}. Abaixo está a cópia da sua folha.",
+			"Responderemos até {{.Deadline}}, dentro do prazo de 15 dias úteis.",
+			"Apresentar uma reclamação não impede recorrer a outras vias de solução de controvérsias nem é requisito prévio para denunciar perante o INDECOPI.",
+		}, ""},
+	},
+	KindComplaintAnswered: {
+		locale.ES: {"Respuesta a tu hoja de reclamación N.° {{.Code}}", "Respuesta a tu {{.ComplaintKind}}", []string{
+			"Hola, {{.Name}}. Esta es nuestra respuesta a tu hoja de reclamación N.° {{.Code}}:", "{{.Response}}",
+		}, ""},
+		locale.EN: {"Answer to your complaint sheet No. {{.Code}}", "Answer to your {{.ComplaintKind}}", []string{
+			"Hello, {{.Name}}. This is our answer to your complaint sheet No. {{.Code}}:", "{{.Response}}",
+		}, ""},
+		locale.PTBR: {"Resposta à sua folha de reclamação n.º {{.Code}}", "Resposta à sua {{.ComplaintKind}}", []string{
+			"Olá, {{.Name}}. Esta é a nossa resposta à sua folha de reclamação n.º {{.Code}}:", "{{.Response}}",
+		}, ""},
+	},
+	KindAdminComplaintFiled: {
+		locale.ES: {"Nuevo {{.ComplaintKind}} N.° {{.Code}} · responder antes del {{.Deadline}}", "Libro de Reclamaciones", []string{
+			"{{.Name}} registró un {{.ComplaintKind}} (hoja N.° {{.Code}}). La respuesta debe enviarse a más tardar el {{.Deadline}}: el plazo de 15 días hábiles no se puede ampliar.",
+		}, "Responder"},
+	},
 }
 
 const layout = `<!doctype html>
@@ -119,6 +163,9 @@ const layout = `<!doctype html>
 <tr><td style="padding:8px 28px 24px">
 <h1 style="font-size:20px;margin:0 0 12px">{{.Title}}</h1>
 {{range .Body}}<p style="font-size:15px;line-height:1.55;margin:0 0 12px">{{.}}</p>{{end}}
+{{if .Sheet}}<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0 4px;border:1px solid #e3e8ee;border-radius:8px;font-size:13px;line-height:1.45">
+{{range .Sheet}}{{if .Section}}<tr><td colspan="2" style="padding:10px 12px 6px;background:#f7f9fb;font-weight:bold;color:#046880">{{.Label}}</td></tr>{{else}}<tr><td style="padding:6px 12px;color:#52606d;vertical-align:top;width:38%">{{.Label}}</td><td style="padding:6px 12px;white-space:pre-line;vertical-align:top">{{.Value}}</td></tr>{{end}}{{end}}
+</table>{{end}}
 {{if .Link}}<p style="margin:20px 0 4px"><a href="{{.Link}}" style="display:inline-block;background:#046880;color:#ffffff;text-decoration:none;font-weight:bold;padding:12px 20px;border-radius:8px">{{.Button}}</a></p>{{end}}
 </td></tr>
 <tr><td style="padding:16px 28px;border-top:1px solid #e3e8ee;font-size:12px;color:#52606d">Duradent SAC · Insumos de ortodoncia · Perú</td></tr>
@@ -145,7 +192,8 @@ func Render(kind Kind, l locale.Locale, to string, d Data) (Message, error) {
 		if err := t.Execute(&b, d); err != nil {
 			return "", err
 		}
-		return template.HTML(b.String()), nil //nolint:gosec // html/template escaped every field
+		// Line breaks of escaped values (an answer, bank details) survive in HTML.
+		return template.HTML(strings.ReplaceAll(b.String(), "\n", "<br>")), nil //nolint:gosec // html/template escaped every field
 	}
 	subject, err := exec(c.Subject)
 	if err != nil {
@@ -166,13 +214,20 @@ func Render(kind Kind, l locale.Locale, to string, d Data) (Message, error) {
 		body = append(body, h)
 		text.WriteString(plain(string(h)) + "\n\n")
 	}
+	for _, r := range d.Sheet {
+		if r.Section {
+			text.WriteString("\n" + r.Label + "\n")
+		} else {
+			text.WriteString(r.Label + ": " + r.Value + "\n")
+		}
+	}
 	if d.Link != "" {
 		text.WriteString(c.Button + ": " + d.Link + "\n")
 	}
 	var out bytes.Buffer
 	err = layoutTmpl.Execute(&out, map[string]any{
 		"Lang": string(l), "Subject": plain(string(subject)), "Title": title, "Body": body, "Link": d.Link, "Button": c.Button,
-		"Logo": d.LogoURL,
+		"Logo": d.LogoURL, "Sheet": d.Sheet,
 	})
 	if err != nil {
 		return Message{}, err

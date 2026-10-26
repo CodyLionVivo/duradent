@@ -70,7 +70,7 @@ Você pode cancelar um pedido não pago na sua conta. Pedidos pagos que ainda n�
 
 ## 10. Reclamações
 
-Se tiver algum problema com sua compra, ligue para [+51 933 741 379](tel:+51933741379) ou visite nossa loja. Você também pode registrar uma reclamação ou queixa no nosso Livro de Reclamações (Libro de Reclamaciones), conforme o Código de Proteção e Defesa do Consumidor do Peru (Lei n.º 29571).
+Se tiver algum problema com sua compra, ligue para [+51 933 741 379](tel:+51933741379) ou visite nossa loja. Você também pode registrar uma reclamação ou queixa no nosso [Livro de Reclamações (Libro de Reclamaciones)](/pt-br/complaints-book) virtual, conforme o Código de Proteção e Defesa do Consumidor do Peru (Lei n.º 29571): enviamos uma cópia da folha para o seu e-mail e respondemos em até 15 dias úteis.
 
 ## 11. Propriedade intelectual
 

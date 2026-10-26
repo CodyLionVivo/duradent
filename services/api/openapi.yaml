@@ -32,6 +32,8 @@ tags:
   - name: cart
   - name: orders
   - name: admin-orders
+  - name: complaints
+  - name: admin-complaints
 
 paths:
   /healthz:
@@ -1337,6 +1339,102 @@ paths:
         "200": { $ref: "#/components/responses/Order" }
         "409": { $ref: "#/components/responses/Problem" }
 
+  /v1/complaints/provider:
+    get:
+      summary: Company details printed on every sheet of the Libro de Reclamaciones
+      operationId: complaintsProvider
+      tags: [complaints]
+      responses:
+        "200":
+          description: Provider and legal answer deadline
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [provider, response_days]
+                properties:
+                  provider: { $ref: "#/components/schemas/ComplaintProvider" }
+                  response_days: { type: integer, description: Business days to answer, examples: [15] }
+  /v1/complaints:
+    post:
+      summary: File a sheet in the Libro de Reclamaciones (signed in or not)
+      description: |
+        Numbers the sheet (correlative per year), stores it and emails the
+        consumer a copy. Send an `Idempotency-Key` header: a retry with the same
+        key returns the sheet filed the first time. Limited to 10 per hour per IP.
+      operationId: fileComplaint
+      tags: [complaints]
+      security: [{}, { session: [] }]
+      parameters:
+        - { name: Idempotency-Key, in: header, schema: { type: string, maxLength: 64 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ComplaintInput" }
+      responses:
+        "201":
+          description: The numbered sheet
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Complaint" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "429": { $ref: "#/components/responses/Problem" }
+  /v1/admin/complaints:
+    get:
+      summary: Sheets of the Libro de Reclamaciones, open ones first (most urgent on top)
+      operationId: adminListComplaints
+      tags: [admin-complaints]
+      security: [{ admin: [] }, { session: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Page" }
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/ComplaintStatus" } }
+        - { name: q, in: query, description: "Sheet number (000012-2026), name, email, document or order number", schema: { type: string } }
+      responses:
+        "200":
+          description: A page of sheets plus the unanswered and overdue counts
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ComplaintPage" }
+  /v1/admin/complaints/{id}:
+    parameters: [{ $ref: "#/components/parameters/ID" }]
+    get:
+      operationId: adminGetComplaint
+      tags: [admin-complaints]
+      security: [{ admin: [] }, { session: [] }]
+      responses:
+        "200":
+          description: The sheet
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Complaint" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /v1/admin/complaints/{id}/answer:
+    parameters: [{ $ref: "#/components/parameters/ID" }]
+    post:
+      summary: Record the store's answer and email it to the consumer (once)
+      operationId: adminAnswerComplaint
+      tags: [admin-complaints]
+      security: [{ admin: [] }, { session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [response]
+              properties:
+                response: { type: string, maxLength: 5000 }
+      responses:
+        "200":
+          description: The answered sheet
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Complaint" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+
 components:
   securitySchemes:
     admin: { type: http, scheme: bearer, description: "ADMIN_TOKEN, for automation" }
@@ -1603,6 +1701,78 @@ components:
         last_error: { type: string, description: Admin only }
         attempts: { type: integer, description: Admin only }
         created_at: { type: string, format: date-time }
+    ComplaintStatus: { type: string, enum: [open, answered] }
+    ComplaintProvider:
+      type: object
+      required: [name, ruc, address]
+      properties:
+        name: { type: string, examples: ["Duradent S.A.C."] }
+        ruc: { type: string }
+        address: { type: string }
+    ComplaintInput:
+      type: object
+      required: [kind, name, document_type, document_number, address, email, item_type, item_description, detail, request, response_channel]
+      properties:
+        kind: { type: string, enum: [reclamo, queja], description: "reclamo: about the products or services; queja: anything else (attention, service)" }
+        name: { type: string, maxLength: 120 }
+        document_type: { type: string, enum: [DNI, CE, RUC, PAS] }
+        document_number: { type: string, maxLength: 15 }
+        address: { type: string, maxLength: 200 }
+        phone: { type: string, maxLength: 30 }
+        email: { type: string, format: email }
+        guardian: { type: string, maxLength: 120, description: Parent or guardian of a minor }
+        item_type: { type: string, enum: [producto, servicio] }
+        order_number: { type: string, maxLength: 20 }
+        amount: { type: string, description: "Amount claimed in soles (optional)", examples: ["120.50"] }
+        item_description: { type: string, maxLength: 500 }
+        detail: { type: string, maxLength: 3000 }
+        request: { type: string, maxLength: 1000, description: "What the consumer asks for (pedido)" }
+        response_channel: { type: string, enum: [email, address], description: How the consumer wants the answer }
+        locale: { $ref: "#/components/schemas/Locale" }
+    Complaint:
+      type: object
+      description: A sheet (hoja de reclamación) of the Libro de Reclamaciones.
+      required: [id, code, kind, status, locale, filed_at, due_at, provider, consumer, item_type, order_number, amount, item_description, detail, request, response_channel, response, answered_at]
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string, examples: ["000001-2026"] }
+        kind: { type: string, enum: [reclamo, queja] }
+        status: { $ref: "#/components/schemas/ComplaintStatus" }
+        locale: { $ref: "#/components/schemas/Locale" }
+        filed_at: { type: string, format: date-time }
+        due_at: { type: string, format: date-time, description: End of the 15th business day (Lima) }
+        provider: { $ref: "#/components/schemas/ComplaintProvider" }
+        consumer:
+          type: object
+          required: [name, document_type, document_number, address, phone, email, guardian]
+          properties:
+            name: { type: string }
+            document_type: { type: string }
+            document_number: { type: string }
+            address: { type: string }
+            phone: { type: string }
+            email: { type: string }
+            guardian: { type: string }
+        item_type: { type: string, enum: [producto, servicio] }
+        order_number: { type: string }
+        amount: { oneOf: [{ $ref: "#/components/schemas/Decimal" }, { type: "null" }] }
+        item_description: { type: string }
+        detail: { type: string }
+        request: { type: string }
+        response_channel: { type: string, enum: [email, address] }
+        response: { type: string }
+        answered_at: { oneOf: [{ type: string, format: date-time }, { type: "null" }] }
+        answered_by: { type: string, description: Admin only }
+    ComplaintPage:
+      type: object
+      required: [items, total, page, page_size, open, overdue]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Complaint" } }
+        total: { type: integer }
+        page: { type: integer }
+        page_size: { type: integer }
+        open: { type: integer, description: Unanswered sheets }
+        overdue: { type: integer, description: Unanswered sheets past their deadline }
     OrderBilling:
       type: object
       required: [customer_type, document_type, document_number, business_name, invoice_type]

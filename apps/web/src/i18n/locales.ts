@@ -33,6 +33,9 @@ export const LOCALE_NAMES: Record<Locale, string> = {
 export const CURRENCY = 'PEN' as const;
 export type Currency = typeof CURRENCY;
 
+/** Dates are shown in Lima time, whatever the server's time zone. */
+export const TIME_ZONE = 'America/Lima';
+
 /** Picks the best supported locale from an Accept-Language header. */
 export function negotiateLocale(header: string | null): Locale {
   if (!header) return DEFAULT_LOCALE;

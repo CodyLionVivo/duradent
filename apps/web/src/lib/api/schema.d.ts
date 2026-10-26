@@ -1278,6 +1278,99 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/complaints/provider": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Company details printed on every sheet of the Libro de Reclamaciones */
+        get: operations["complaintsProvider"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/complaints": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * File a sheet in the Libro de Reclamaciones (signed in or not)
+         * @description Numbers the sheet (correlative per year), stores it and emails the
+         *     consumer a copy. Send an `Idempotency-Key` header: a retry with the same
+         *     key returns the sheet filed the first time. Limited to 10 per hour per IP.
+         */
+        post: operations["fileComplaint"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/complaints": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Sheets of the Libro de Reclamaciones, open ones first (most urgent on top) */
+        get: operations["adminListComplaints"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/complaints/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get: operations["adminGetComplaint"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/complaints/{id}/answer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Record the store's answer and email it to the consumer (once) */
+        post: operations["adminAnswerComplaint"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1377,6 +1470,100 @@ export interface components {
             attempts?: number;
             /** Format: date-time */
             created_at: string;
+        };
+        /** @enum {string} */
+        ComplaintStatus: "open" | "answered";
+        ComplaintProvider: {
+            /** @example Duradent S.A.C. */
+            name: string;
+            ruc: string;
+            address: string;
+        };
+        ComplaintInput: {
+            /**
+             * @description reclamo: about the products or services; queja: anything else (attention, service)
+             * @enum {string}
+             */
+            kind: "reclamo" | "queja";
+            name: string;
+            /** @enum {string} */
+            document_type: "DNI" | "CE" | "RUC" | "PAS";
+            document_number: string;
+            address: string;
+            phone?: string;
+            /** Format: email */
+            email: string;
+            /** @description Parent or guardian of a minor */
+            guardian?: string;
+            /** @enum {string} */
+            item_type: "producto" | "servicio";
+            order_number?: string;
+            /**
+             * @description Amount claimed in soles (optional)
+             * @example 120.50
+             */
+            amount?: string;
+            item_description: string;
+            detail: string;
+            /** @description What the consumer asks for (pedido) */
+            request: string;
+            /**
+             * @description How the consumer wants the answer
+             * @enum {string}
+             */
+            response_channel: "email" | "address";
+            locale?: components["schemas"]["Locale"];
+        };
+        /** @description A sheet (hoja de reclamación) of the Libro de Reclamaciones. */
+        Complaint: {
+            /** Format: uuid */
+            id: string;
+            /** @example 000001-2026 */
+            code: string;
+            /** @enum {string} */
+            kind: "reclamo" | "queja";
+            status: components["schemas"]["ComplaintStatus"];
+            locale: components["schemas"]["Locale"];
+            /** Format: date-time */
+            filed_at: string;
+            /**
+             * Format: date-time
+             * @description End of the 15th business day (Lima)
+             */
+            due_at: string;
+            provider: components["schemas"]["ComplaintProvider"];
+            consumer: {
+                name: string;
+                document_type: string;
+                document_number: string;
+                address: string;
+                phone: string;
+                email: string;
+                guardian: string;
+            };
+            /** @enum {string} */
+            item_type: "producto" | "servicio";
+            order_number: string;
+            amount: components["schemas"]["Decimal"] | null;
+            item_description: string;
+            detail: string;
+            request: string;
+            /** @enum {string} */
+            response_channel: "email" | "address";
+            response: string;
+            answered_at: string | null;
+            /** @description Admin only */
+            answered_by?: string;
+        };
+        ComplaintPage: {
+            items: components["schemas"]["Complaint"][];
+            total: number;
+            page: number;
+            page_size: number;
+            /** @description Unanswered sheets */
+            open: number;
+            /** @description Unanswered sheets past their deadline */
+            overdue: number;
         };
         OrderBilling: {
             customer_type: string;
@@ -3724,6 +3911,140 @@ export interface operations {
         responses: {
             200: components["responses"]["Order"];
             409: components["responses"]["Problem"];
+        };
+    };
+    complaintsProvider: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Provider and legal answer deadline */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        provider: components["schemas"]["ComplaintProvider"];
+                        /**
+                         * @description Business days to answer
+                         * @example 15
+                         */
+                        response_days: number;
+                    };
+                };
+            };
+        };
+    };
+    fileComplaint: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ComplaintInput"];
+            };
+        };
+        responses: {
+            /** @description The numbered sheet */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Complaint"];
+                };
+            };
+            422: components["responses"]["Problem"];
+            429: components["responses"]["Problem"];
+        };
+    };
+    adminListComplaints: {
+        parameters: {
+            query?: {
+                page?: components["parameters"]["Page"];
+                status?: components["schemas"]["ComplaintStatus"];
+                /** @description Sheet number (000012-2026), name, email, document or order number */
+                q?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of sheets plus the unanswered and overdue counts */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComplaintPage"];
+                };
+            };
+        };
+    };
+    adminGetComplaint: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The sheet */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Complaint"];
+                };
+            };
+            404: components["responses"]["Problem"];
+        };
+    };
+    adminAnswerComplaint: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    response: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The answered sheet */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Complaint"];
+                };
+            };
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
         };
     };
 }

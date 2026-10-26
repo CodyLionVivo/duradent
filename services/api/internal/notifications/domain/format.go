@@ -31,6 +31,15 @@ func FormatMoney(m money.Money) string {
 	return fmt.Sprintf("%s%s %s.%s", sign, symbol, b.String(), cents)
 }
 
+// FormatDate writes a day in Lima, in the reader's language.
+func FormatDate(t time.Time, l locale.Locale) string {
+	t = t.In(lima)
+	if l == locale.EN {
+		return t.Format("Jan 2, 2006")
+	}
+	return t.Format("02/01/2006")
+}
+
 // FormatDeadline writes a date and time in Lima, in the reader's language.
 func FormatDeadline(t time.Time, l locale.Locale) string {
 	t = t.In(lima)

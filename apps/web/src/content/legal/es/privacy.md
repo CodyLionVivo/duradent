@@ -18,6 +18,7 @@ En Duradent cuidamos tus datos personales. Esta política explica qué datos tra
 | Facturación | Tipo y número de documento (DNI, RUC, carné de extranjería), razón social, número de colegiatura (opcional), teléfono | Al completar tu perfil |
 | Envío | Direcciones de entrega, nombre de quien recibe, teléfono de contacto | Al agregar direcciones |
 | Pedidos y pagos | Productos, importes, estado del pedido, comprobantes y referencias de pago | Al comprar |
+| Libro de Reclamaciones | Nombre, documento, domicilio, teléfono, correo y el detalle de tu reclamo o queja | Al registrar una hoja de reclamación |
 | Técnicos | Dirección IP, navegador, cookies necesarias para la sesión, el carrito y el idioma | Al usar la tienda |
 
 **No guardamos los datos de tu tarjeta**: los recibe y procesa directamente Culqi. Tampoco usamos cookies de publicidad ni de seguimiento de terceros.
@@ -53,6 +54,7 @@ La tienda y sus correos se alojan en servidores de Amazon Web Services ubicados 
 
 - Los datos de tu cuenta, mientras la mantengas activa.
 - Los pedidos, comprobantes y registros de pago, durante el plazo que exige la normativa tributaria y contable.
+- Las hojas del Libro de Reclamaciones y sus respuestas, durante el plazo que exige su reglamento.
 - Los registros técnicos de seguridad, por un periodo limitado.
 
 Luego los eliminamos o anonimizamos.

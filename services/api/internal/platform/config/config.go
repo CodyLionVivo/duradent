@@ -82,6 +82,12 @@ type Config struct {
 	SeriesBoleta  string
 	SeriesCreditF string
 	SeriesCreditB string
+
+	// The company as printed on the Libro de Reclamaciones sheets. The RUC is
+	// required outside local.
+	CompanyName    string
+	CompanyRUC     string
+	CompanyAddress string
 }
 
 // Load reads configuration from the environment, applying defaults suitable
@@ -131,6 +137,9 @@ func load(getenv func(string) string) (Config, error) {
 		SeriesBoleta:       valueOr(getenv("INVOICE_SERIES_BOLETA"), "B001"),
 		SeriesCreditF:      valueOr(getenv("INVOICE_SERIES_CREDIT_F"), "FC01"),
 		SeriesCreditB:      valueOr(getenv("INVOICE_SERIES_CREDIT_B"), "BC01"),
+		CompanyName:        valueOr(getenv("COMPANY_NAME"), "Duradent S.A.C."),
+		CompanyRUC:         getenv("COMPANY_RUC"),
+		CompanyAddress:     valueOr(getenv("COMPANY_ADDRESS"), "Av. Emancipación 271, tiendas 108 y 126, Cercado de Lima, Lima"),
 	}
 	if len(cfg.OpsEmails) == 0 {
 		cfg.OpsEmails = cfg.AdminEmails
@@ -180,6 +189,9 @@ func load(getenv func(string) string) (Config, error) {
 	}
 	if cfg.AdminToken != "" && len(cfg.AdminToken) < 32 {
 		return Config{}, errors.New("ADMIN_TOKEN must be at least 32 characters")
+	}
+	if len(cfg.CompanyRUC) != 11 || strings.Trim(cfg.CompanyRUC, "0123456789") != "" {
+		return Config{}, errors.New("COMPANY_RUC must be the company's 11-digit RUC")
 	}
 	return cfg, nil
 }

@@ -19,7 +19,7 @@ locals {
   # Keep in sync with notifications/application.Events and invoicing/application.Events.
   consumers = {
     notifications = ["CustomerRegistered", "OrderPlaced", "PaymentConfirmed", "OrderShipped", "OrderCancelled",
-    "OrderRefunded", "InvoiceIssued", "InvoiceRejected", "StockLow"]
+    "OrderRefunded", "InvoiceIssued", "InvoiceRejected", "StockLow", "ComplaintFiled", "ComplaintAnswered"]
     invoicing = ["PaymentConfirmed", "OrderRefunded"]
   }
 }
@@ -154,6 +154,9 @@ locals {
     MICROSOFT_CLIENT_ID     = var.microsoft_client_id
     CULQI_PUBLIC_KEY        = var.culqi_public_key
     BANK_DETAILS            = var.bank_details
+    COMPANY_NAME            = var.company.name
+    COMPANY_RUC             = var.company.ruc
+    COMPANY_ADDRESS         = var.company.address
     SNS_TOPIC_ARN           = module.messaging.topic_arn
     SQS_NOTIFICATIONS_URL   = module.messaging.queue_urls["notifications"]
     SQS_INVOICING_URL       = module.messaging.queue_urls["invoicing"]

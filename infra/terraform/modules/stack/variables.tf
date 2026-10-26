@@ -94,6 +94,15 @@ variable "microsoft_client_id" {
 }
 variable "bank_details" { type = string }
 
+# The company as printed on the Libro de Reclamaciones sheets.
+variable "company" {
+  type = object({ name = string, ruc = string, address = string })
+  validation {
+    condition     = can(regex("^[0-9]{11}$", var.company.ruc))
+    error_message = "company.ruc must be the company's 11-digit RUC."
+  }
+}
+
 variable "invoice_series" {
   type    = object({ factura = string, boleta = string, credit_f = string, credit_b = string })
   default = { factura = "F001", boleta = "B001", credit_f = "FC01", credit_b = "BC01" }

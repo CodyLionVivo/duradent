@@ -70,7 +70,7 @@ You can cancel an unpaid order from your account. Paid orders that have not been
 
 ## 10. Complaints
 
-If you have a problem with your purchase, call us on [+51 933 741 379](tel:+51933741379) or visit our store. You may also file a claim or complaint in our Complaints Book (Libro de Reclamaciones), under Peru's Consumer Protection and Defense Code (Law No. 29571).
+If you have a problem with your purchase, call us on [+51 933 741 379](tel:+51933741379) or visit our store. You may also file a claim or complaint in our online [Complaints Book (Libro de Reclamaciones)](/en/complaints-book), under Peru's Consumer Protection and Defense Code (Law No. 29571): we email you a copy of the sheet and answer within 15 business days at the latest.
 
 ## 11. Intellectual property
 

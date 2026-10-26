@@ -37,6 +37,7 @@ variable "microsoft_client_id" {
   default = ""
 }
 variable "bank_details" { type = string }
+variable "company_ruc" { type = string }
 
 # Production: NAT gateway and database replica per AZ, two tasks minimum.
 module "stack" {
@@ -61,7 +62,12 @@ module "stack" {
   google_client_id       = var.google_client_id
   microsoft_client_id    = var.microsoft_client_id
   bank_details           = var.bank_details
-  log_retention_days     = 90
+  company = {
+    name    = "Duradent S.A.C."
+    ruc     = var.company_ruc
+    address = "Av. Emancipación 271, tiendas 108 y 126, Cercado de Lima, Lima"
+  }
+  log_retention_days = 90
 }
 
 output "alb_dns_name" { value = module.stack.alb_dns_name }

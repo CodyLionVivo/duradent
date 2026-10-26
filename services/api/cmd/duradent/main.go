@@ -20,6 +20,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 
 	catalogs3 "github.com/CodyLionVivo/duradent/services/api/internal/catalog/adapters/s3"
+	complaintsdomain "github.com/CodyLionVivo/duradent/services/api/internal/complaints/domain"
 	identityoidc "github.com/CodyLionVivo/duradent/services/api/internal/identity/adapters/oidc"
 	identitydomain "github.com/CodyLionVivo/duradent/services/api/internal/identity/domain"
 	identityports "github.com/CodyLionVivo/duradent/services/api/internal/identity/ports"
@@ -213,6 +214,7 @@ func build(ctx context.Context, cfg config.Config, awsCfg aws.Config, db *sql.DB
 		InvoiceSeries: invoicingdomain.Series{
 			Factura: cfg.SeriesFactura, Boleta: cfg.SeriesBoleta, CreditNoteF: cfg.SeriesCreditF, CreditNoteB: cfg.SeriesCreditB,
 		},
+		Company: complaintsdomain.Provider{Name: cfg.CompanyName, RUC: cfg.CompanyRUC, Address: cfg.CompanyAddress},
 	})
 }
 

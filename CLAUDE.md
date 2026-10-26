@@ -47,8 +47,9 @@ Mailpit http://localhost:8025 · LocalStack http://localhost:4566 · MySQL `loca
 El servidor de desarrollo de Astro fuera de Docker: `astro dev --background` (ver AGENTS.md).
 
 **Tienda**: `/{es|en|pt-br}`, `/…/catalog`, `/…/catalog/{categoría}`, `/…/product/{slug}`,
-`/…/cart`, `/…/checkout`, `/…/orders`, `/…/account` (login, registro, perfil). `/` redirige según
-`Accept-Language`.
+`/…/cart`, `/…/checkout`, `/…/orders`, `/…/account` (login, registro, perfil), `/…/complaints-book`
+(Libro de Reclamaciones; aviso en el pie de todas las páginas). `/` redirige según `Accept-Language`.
+Admin del libro: `/admin/complaints`.
 
 **Pagos en local**: sin `CULQI_SECRET_KEY` el API usa una pasarela simulada y la página del pedido
 muestra botones "Pago aprobado / Tarjeta rechazada / Yape". Con llaves sandbox de Culqi
@@ -86,8 +87,9 @@ Contextos implementados: **catalog** (productos, variantes, categorías, atribut
 contraseña Argon2id, sesiones, perfil de facturación RUC/DNI/CE, direcciones, roles), **inventory**
 (stock, reservas por pedido, movimientos), **shipping** (zonas Lima/Provincias/Recojo y tarifas por
 peso), **orders** (carrito, pedidos, pagos Culqi y transferencia, reembolsos),
-**notifications** (correos transaccionales es/en/pt-br por SMTP/Mailpit o SES, `email_log`) e
-**invoicing** (facturas, boletas y notas de crédito SUNAT vía Nubefact, series correlativas).
+**notifications** (correos transaccionales es/en/pt-br por SMTP/Mailpit o SES, `email_log`),
+**invoicing** (facturas, boletas y notas de crédito SUNAT vía Nubefact, series correlativas) y
+**complaints** (Libro de Reclamaciones virtual: hojas numeradas por año, respuesta en 15 días hábiles).
 
 **Composición**: `internal/wiring` construye todos los contextos y monta las rutas; lo usan
 `cmd/duradent` y `internal/apitest`, así los tests ejercitan exactamente el mismo cableado. Los
@@ -100,7 +102,9 @@ con `FOR UPDATE SKIP LOCKED`, backoff exponencial hasta 10 min por fila fallida)
 una cola SQS por contexto (`platform/messaging.Consumer`: long polling, idempotencia por
 `processed_messages`, error → reintento y DLQ tras 5 recepciones). Cada contexto declara los tipos que
 consume (`notifications/application.Events`, `invoicing/application.Events`), que deben coincidir con las
-filter policies de `infra/local/localstack/init-aws.sh` (y de Terraform). El worker además corre cada
+filter policies de `infra/local/localstack/init-aws.sh` (y de Terraform; `wiring/events_test.go` lo
+comprueba). En una LocalStack ya creada, una policy nueva no se aplica sola: `task reset && task up`
+o vuelve a correr el script dentro del contenedor. El worker además corre cada
 minuto la expiración de pedidos impagos y el reintento de comprobantes pendientes.
 
 **Ver correos y eventos en local**: Mailpit http://localhost:8025 recibe todos los correos. Comprobantes
@@ -146,6 +150,8 @@ test con LocalStack real (outbox → SNS con filtro → SQS → consumidor, rein
 - **Formularios del admin**: HTML normal con Post/Redirect/Get (`intent` para varias acciones en una
   página); funcionan sin JS. Astro rechaza POST de formularios de otro origen (checkOrigin).
 - **Textos legales**: Markdown por idioma en `apps/web/src/content/legal/<locale>/{terms,privacy,returns}.md` (colección `legal`, ruta `/{locale}/legal/{slug}`). El español es la versión que prevalece; al cambiar uno, actualiza los tres idiomas y la fecha `updated`. Teléfono de la tienda en `src/lib/legal.ts`.
+- **Fechas**: la web las muestra en hora de Lima (`TIME_ZONE` en `i18n/locales.ts`) aunque el servidor
+  esté en UTC; usa `formatDate`/`formatDay`, nunca `Intl.DateTimeFormat` sin `timeZone`.
 - **Imágenes propias**: en `apps/web/src/assets/` (las optimiza `astro:assets`, p. ej. la foto de la tienda del hero). El logotipo y los iconos están en `public/brand/`.
 - **Efectos visuales**: solo animar `transform`/`opacity`; nada de `filter: blur` ni `backdrop-filter` sobre elementos animados (hacían lento el scroll del inicio). Las animaciones del hero se pausan fuera de pantalla y durante el scroll.
 - **Accesibilidad**: contraste AA en los tokens de `global.css`, foco visible, `label` en cada
@@ -274,6 +280,17 @@ test con LocalStack real (outbox → SNS con filtro → SQS → consumidor, rein
     columna `shipping_rates.amount_usd`. Volver a vender en dólares exige reintroducirlos en el dominio,
     el admin de precios, las tarifas y la facturación (tipo de cambio SBS).
 47. **Filtros del catálogo con facetas disyuntivas** (`GET /v1/catalog/products?brand=…&attr=código:valor&sort=name|newest`): cada grupo se cuenta ignorando su propia selección; los valores de un atributo son alternativas y atributos distintos deben cumplirse en la **misma variante**. La web es un formulario GET (filtros en la URL, sin JS) con barra lateral sticky en escritorio y `popover` en móvil. Precio y stock no son filtros todavía: viven en otros contextos (pricing por lista de cliente, inventory).
+48. **Libro de Reclamaciones virtual** (Ley 29571 y su reglamento; contexto `complaints`). Cualquiera,
+    con o sin sesión, registra un reclamo o una queja en `/…/complaints-book`; el aviso (libro abierto y la
+    frase "Libro de Reclamaciones") está en el pie de todas las páginas, también en la de inicio. Cada hoja:
+    número correlativo por año en hora de Lima (`000001-2026`, tabla `complaint_sequences` como las series
+    de comprobantes), datos del proveedor congelados (`COMPANY_NAME/RUC/ADDRESS`; el RUC es obligatorio
+    fuera de local), `Idempotency-Key` por carga del formulario y 10 envíos por hora por IP. El consumidor
+    recibe al momento la hoja en pantalla (imprimible) y una copia por correo (`ComplaintFiled`);
+    operaciones recibe una alerta. La respuesta se registra una sola vez en `/admin/complaints` y viaja por
+    correo con la hoja completa (`ComplaintAnswered`); si pidió carta, el admin además la imprime y la envía.
+    Plazo: fin del día 15 hábil (solo se saltan fines de semana, así el plazo calculado nunca es más tarde
+    que el legal). Las hojas no se borran.
 
 ## Estado por fases
 
@@ -302,7 +319,8 @@ supuesto `duradent.pe` / `staging.duradent.pe`: cámbialo en `envs/*/main.tf` si
 3. Certificados ACM (validación DNS) para `staging.duradent.pe` y `duradent.pe` en us-east-1.
 4. Sube una imagen: un push a `main` corre el job *build* (el deploy fallará hasta el paso 6, es normal).
 5. Por entorno, **prod primero** (crea la identidad SES del dominio): copia `terraform.tfvars.example` a
-   `terraform.tfvars` y rellénalo (`image_tag` = el SHA subido);
+   `terraform.tfvars` y rellénalo (`image_tag` = el SHA subido; `company_ruc` = RUC de Duradent S.A.C.,
+   sale en cada hoja del Libro de Reclamaciones);
    `terraform init -backend-config=../../backend.hcl -backend-config="key=<env>.tfstate"`; `terraform apply`;
    guarda la copia aplicada con `aws s3 cp terraform.tfvars s3://<bucket>/tfvars/<env>.tfvars` (la usa
    el plan de los PRs).

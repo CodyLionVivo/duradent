@@ -70,7 +70,7 @@ Puedes cancelar un pedido no pagado desde tu cuenta. Los pedidos pagados que aú
 
 ## 10. Reclamos
 
-Si tienes un problema con tu compra, llámanos al [+51 933 741 379](tel:+51933741379) o acércate a nuestra tienda. También puedes registrar un reclamo o una queja en nuestro Libro de Reclamaciones, conforme al Código de Protección y Defensa del Consumidor (Ley N.° 29571).
+Si tienes un problema con tu compra, llámanos al [+51 933 741 379](tel:+51933741379) o acércate a nuestra tienda. También puedes registrar un reclamo o una queja en nuestro [Libro de Reclamaciones](/es/complaints-book) virtual, conforme al Código de Protección y Defensa del Consumidor (Ley N.° 29571): te enviamos una copia de la hoja a tu correo y te respondemos en un plazo máximo de 15 días hábiles.
 
 ## 11. Propiedad intelectual
 

@@ -18,6 +18,7 @@ At Duradent we take care of your personal data. This policy explains what data w
 | Billing | Document type and number (DNI, RUC, foreign resident card), company name, professional registration number (optional), phone | When you complete your profile |
 | Delivery | Delivery addresses, recipient's name, contact phone | When you add addresses |
 | Orders and payments | Products, amounts, order status, tax documents and payment references | When you buy |
+| Complaints Book | Name, ID document, address, phone, email and the details of your claim or complaint | When you file a complaint sheet |
 | Technical | IP address, browser, cookies needed for the session, the cart and the language | When you use the store |
 
 **We do not store your card details**: Culqi receives and processes them directly. We do not use advertising or third-party tracking cookies.
@@ -53,6 +54,7 @@ The store and its emails are hosted on Amazon Web Services servers in the United
 
 - Account data, while your account remains active.
 - Orders, tax documents and payment records, for the period required by tax and accounting rules.
+- Complaints Book sheets and their answers, for the period its regulations require.
 - Technical security logs, for a limited period.
 
 Afterwards we delete or anonymise it.

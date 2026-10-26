@@ -11,6 +11,7 @@ import (
 
 	"github.com/CodyLionVivo/duradent/services/api/internal/kernel/id"
 	"github.com/CodyLionVivo/duradent/services/api/internal/kernel/locale"
+	"github.com/CodyLionVivo/duradent/services/api/internal/kernel/money"
 	"github.com/CodyLionVivo/duradent/services/api/internal/notifications/domain"
 	"github.com/CodyLionVivo/duradent/services/api/internal/notifications/ports"
 )
@@ -43,7 +44,7 @@ func NewService(d Deps, cfg Config) *Service {
 // Events lists the event types this context consumes (SQS filter policy).
 var Events = []string{
 	"CustomerRegistered", "OrderPlaced", "PaymentConfirmed", "OrderShipped", "OrderCancelled",
-	"OrderRefunded", "InvoiceIssued", "InvoiceRejected", "StockLow",
+	"OrderRefunded", "InvoiceIssued", "InvoiceRejected", "StockLow", "ComplaintFiled", "ComplaintAnswered",
 }
 
 type payload struct {
@@ -101,8 +102,79 @@ func (s *Service) Handle(ctx context.Context, e ports.Event) error {
 		return s.ops(ctx, e.ID, domain.KindAdminStockLow, "", domain.Data{
 			SKU: sku, Available: p.Available, Link: s.cfg.WebBaseURL + "/admin/inventory",
 		})
+	case "ComplaintFiled", "ComplaintAnswered":
+		return s.complaint(ctx, e)
 	}
 	return nil
+}
+
+// sheet is the payload of the complaints events (complaints/application.Sheet).
+type sheet struct {
+	ComplaintID     string     `json:"complaint_id"`
+	Code            string     `json:"code"`
+	Kind            string     `json:"kind"`
+	Locale          string     `json:"locale"`
+	FiledAt         time.Time  `json:"filed_at"`
+	DueAt           time.Time  `json:"due_at"`
+	ProviderName    string     `json:"provider_name"`
+	ProviderRUC     string     `json:"provider_ruc"`
+	ProviderAddress string     `json:"provider_address"`
+	Name            string     `json:"name"`
+	DocType         string     `json:"document_type"`
+	DocNumber       string     `json:"document_number"`
+	Address         string     `json:"address"`
+	Phone           string     `json:"phone"`
+	Email           string     `json:"email"`
+	Guardian        string     `json:"guardian"`
+	ItemType        string     `json:"item_type"`
+	OrderNumber     string     `json:"order_number"`
+	Amount          string     `json:"amount"`
+	ItemDescription string     `json:"item_description"`
+	Detail          string     `json:"detail"`
+	Request         string     `json:"request"`
+	Channel         string     `json:"response_channel"`
+	Response        string     `json:"response"`
+	AnsweredAt      *time.Time `json:"answered_at"`
+}
+
+// complaint emails the consumer their copy of the sheet (or the answer) and,
+// for a new sheet, alerts operations: the 15-day deadline starts now.
+func (s *Service) complaint(ctx context.Context, e ports.Event) error {
+	var p sheet
+	if err := json.Unmarshal(e.Payload, &p); err != nil {
+		return fmt.Errorf("payload of %s: %w", e.Type, err)
+	}
+	c := domain.Complaint{
+		ID: p.ComplaintID, Code: p.Code, Kind: p.Kind, Locale: locale.ParseOrDefault(p.Locale), FiledAt: p.FiledAt, DueAt: p.DueAt,
+		ProviderName: p.ProviderName, ProviderRUC: p.ProviderRUC, ProviderAddress: p.ProviderAddress,
+		Name: p.Name, DocType: p.DocType, DocNumber: p.DocNumber, Address: p.Address, Phone: p.Phone, Email: p.Email,
+		Guardian: p.Guardian, ItemType: p.ItemType, OrderNumber: p.OrderNumber, ItemDescription: p.ItemDescription,
+		Detail: p.Detail, Request: p.Request, Channel: p.Channel, Response: p.Response, AnsweredAt: p.AnsweredAt,
+	}
+	if p.Amount != "" {
+		m, err := money.Parse(p.Amount, money.PEN)
+		if err != nil {
+			return fmt.Errorf("amount of complaint %s: %w", p.Code, err)
+		}
+		c.Amount = &m
+	}
+	data := func(l locale.Locale) domain.Data {
+		return domain.Data{
+			Name: c.Name, Code: c.Code, ComplaintKind: domain.ComplaintKind(c.Kind, l), Response: c.Response,
+			Deadline: domain.FormatDate(c.DueAt, l), Sheet: domain.ComplaintRows(c, l),
+		}
+	}
+	kind := domain.KindComplaintFiled
+	if e.Type == "ComplaintAnswered" {
+		kind = domain.KindComplaintAnswered
+	}
+	r := ports.Recipient{Email: c.Email, Name: c.Name, Locale: c.Locale}
+	if err := s.send(ctx, e.ID, kind, r, c.OrderNumber, data(c.Locale)); err != nil || kind != domain.KindComplaintFiled {
+		return err
+	}
+	d := data(locale.ES)
+	d.Link = s.cfg.WebBaseURL + "/admin/complaints/" + c.ID
+	return s.ops(ctx, e.ID, domain.KindAdminComplaintFiled, c.OrderNumber, d)
 }
 
 func (s *Service) orderEmail(ctx context.Context, e ports.Event, p payload, kind domain.Kind) error {
