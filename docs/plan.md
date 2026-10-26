@@ -328,3 +328,12 @@ Cada fase termina con: compila, `golangci-lint` + `astro check` limpios, tests v
   - El job de expiración corre en el proceso `worker`.
   - Tarifas de envío sembradas en la migración 0006 (editables por SQL; falta pantalla de admin).
   - Cancelación de pedidos pagados y reembolsos Culqi: fase 5.
+- **Fase 5**:
+  - Solo `notifications` e `invoicing` consumen eventos (colas `duradent-notifications` y
+    `duradent-invoicing` con filter policy); inventario se confirma/libera/repone de forma síncrona.
+  - Reembolsos en el contexto `orders` (`Refund`), con reposición de stock (`Restock`).
+  - Tablas nuevas (migración 0008): `email_log`, `invoices`, `invoice_series`, `email_verifications`;
+    `orders.refunded_at/refund_ref`, estado de pago `refunded`, reserva `returned`.
+  - PDF/XML de comprobantes: se enlazan los de Nubefact (no se copian a S3 todavía).
+  - El correo de stock bajo muestra el id de la variante (el evento `StockLow` aún no lleva SKU).
+  - Tipo de cambio USD por configuración (`USD_EXCHANGE_RATE`), no por API de la SBS.

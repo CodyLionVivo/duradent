@@ -19,8 +19,8 @@ type StockRepository interface {
 	Get(ctx context.Context, variantIDs []id.ID) (map[id.ID]domain.StockItem, error)
 	Save(ctx context.Context, items ...*domain.StockItem) error
 	AddReservations(ctx context.Context, rs []domain.Reservation) error
-	// ActiveReservations locks the order's active reservations.
-	ActiveReservations(ctx context.Context, orderID id.ID) ([]domain.Reservation, error)
+	// Reservations locks the order's reservations in the given status.
+	Reservations(ctx context.Context, orderID id.ID, status domain.ReservationStatus) ([]domain.Reservation, error)
 	SetReservationStatus(ctx context.Context, orderID id.ID, from, to domain.ReservationStatus) error
 	AddMovements(ctx context.Context, ms []domain.Movement) error
 	Movements(ctx context.Context, variantID id.ID, limit int) ([]domain.Movement, error)

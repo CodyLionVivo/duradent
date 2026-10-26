@@ -11,7 +11,7 @@ const t = useTranslations(locale);
 const here = localePath(locale, '/account');
 if (!user) return Astro.redirect(`${localePath(locale, '/account/login')}?next=${encodeURIComponent(here)}`, 302);
 
-type Section = 'profile' | 'billing' | 'addresses' | 'password';
+type Section = 'profile' | 'billing' | 'addresses' | 'password' | 'verify';
 let error: { section: Section; text: string } | null = null;
 let formValues: Record<string, string> = {};
 
@@ -21,7 +21,8 @@ if (Astro.request.method === 'POST') {
   formValues = Object.fromEntries([...form.entries()].map(([k, val]) => [k, String(val)]));
   const intent = v('intent');
   const section: Section =
-    intent === 'customer' ? 'billing' : intent === 'password' ? 'password' : intent === 'profile' ? 'profile' : 'addresses';
+    intent === 'customer' ? 'billing' : intent === 'password' ? 'password' : intent === 'profile' ? 'profile'
+      : intent === 'resend_verification' ? 'verify' : 'addresses';
   try {
     switch (intent) {
       case 'profile':
@@ -45,6 +46,9 @@ if (Astro.request.method === 'POST') {
             district: v('district'), province: v('province'), department: v('department'), phone: v('phone'),
           },
         }));
+        break;
+      case 'resend_verification':
+        unwrap(await api.POST('/v1/me/verify-email'));
         break;
       case 'remove_address':
         unwrap(await api.DELETE('/v1/me/addresses/{id}', { params: { path: { id: v('address_id') } } }));
@@ -92,6 +96,13 @@ const notice = (s: Section) =>
       </div>
     </div>
 
+    {me && !me.account.email_verified && (
+      <div id="verify" class="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <p>{saved === 'verify' ? t('account.verify.resent') : t('account.verify.pending', { email: me.account.email })}</p>
+        {error?.section === 'verify' && <p role="alert" class="w-full text-red-800">{error.text}</p>}
+        <form method="post"><input type="hidden" name="intent" value="resend_verification" /><button class="btn-secondary">{t('account.verify.resend')}</button></form>
+      </div>
+    )}
     {c?.price_list_code && (
       <p class="mt-4 rounded-lg border border-brand-200 bg-brand-50 px-4 py-3 text-sm text-brand-900">{t('account.profile.clinicPrices', { list: c.price_list_code })}</p>
     )}

@@ -54,11 +54,13 @@ func Register(mux *http.ServeMux, svc *application.Service, log *slog.Logger, op
 	mux.Handle("POST /v1/auth/oidc/{provider}/start", limited(h.oidcStart))
 	mux.Handle("POST /v1/auth/oidc/{provider}/callback", limited(h.oidcCallback))
 	mux.HandleFunc("POST /v1/auth/logout", h.logout)
+	mux.Handle("POST /v1/auth/verify-email", limited(h.verifyEmail))
 
 	u := func(pattern string, fn http.HandlerFunc) { mux.Handle(pattern, auth.RequireUser(fn)) }
 	u("GET /v1/me", h.me)
 	u("PUT /v1/me", h.updateMe)
 	u("PUT /v1/me/password", h.changePassword)
+	mux.Handle("POST /v1/me/verify-email", auth.RequireUser(limited(h.resendVerification)))
 	u("PUT /v1/me/customer", h.saveCustomer)
 	u("POST /v1/me/addresses", h.addAddress)
 	u("PUT /v1/me/addresses/{id}", h.updateAddress)
@@ -496,4 +498,27 @@ func (h *Handler) adminRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) verifyEmail(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Token string `json:"token"`
+	}
+	if err := httpserver.Decode(w, r, &in); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	if err := h.svc.VerifyEmail(r.Context(), in.Token); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) resendVerification(w http.ResponseWriter, r *http.Request) {
+	if err := h.svc.ResendVerification(r.Context(), principal(r).AccountID); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusAccepted)
 }

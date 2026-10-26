@@ -102,6 +102,8 @@ type Stock interface {
 	Reserve(ctx context.Context, orderID id.ID, lines []LineQty) error
 	Confirm(ctx context.Context, orderID id.ID) error
 	Release(ctx context.Context, orderID id.ID) error
+	// Restock puts sold units back on hand (refund).
+	Restock(ctx context.Context, orderID id.ID) error
 }
 
 type Shipping interface {
@@ -161,6 +163,14 @@ type PaymentGateway interface {
 	Charge(ctx context.Context, r ChargeRequest) (Charge, error)
 	// GetCharge re-reads a charge from the provider (webhook reconciliation).
 	GetCharge(ctx context.Context, chargeID string) (Charge, error)
+	// Refund returns the money of a confirmed charge and gives the
+	// provider's refund id.
+	Refund(ctx context.Context, r RefundRequest) (string, error)
 	// Name is "culqi" or "fake" (local development without keys).
 	Name() string
+}
+
+type RefundRequest struct {
+	ChargeID    string
+	AmountMinor int64
 }

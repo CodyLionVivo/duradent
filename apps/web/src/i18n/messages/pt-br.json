@@ -195,6 +195,17 @@
       "generic": "Não foi possível concluir a ação. Tente novamente.",
       "stateMismatch": "O login expirou ou foi aberto em outra janela. Tente novamente.",
       "cancelled": "Você cancelou o login."
+    },
+    "verify": {
+      "title": "Confirmação de e-mail",
+      "success": "Pronto! Seu e-mail foi confirmado.",
+      "invalid": "Este link é inválido ou expirou. Peça um novo na sua conta.",
+      "pending": "Confirme seu e-mail: enviamos um link para {email}.",
+      "resend": "Reenviar link",
+      "resent": "Enviamos um novo link. Verifique sua caixa de entrada.",
+      "goAccount": "Ir para minha conta",
+      "confirm": "Confirmar meu e-mail",
+      "hint": "Clique no botão para confirmar que este e-mail é seu."
     }
   },
   "codes": {
@@ -229,7 +240,11 @@
       "too_many_addresses": "Você pode salvar até 10 endereços.",
       "address_not_found": "Não encontramos esse endereço.",
       "password_current_wrong": "A senha atual não está correta.",
-      "locale_invalid": "Idioma indisponível."
+      "locale_invalid": "Idioma indisponível.",
+      "verification_invalid": "Este link é inválido ou expirou.",
+      "verification_stale": "Este link foi enviado para outro e-mail.",
+      "verification_throttled": "Já enviamos vários links. Verifique sua caixa ou tente em uma hora.",
+      "already_verified": "Seu e-mail já está confirmado."
     },
     "http": {
       "rate_limited": "Muitas tentativas. Aguarde um minuto e tente novamente."
@@ -350,7 +365,11 @@
     "simulateDeclined": "Cartão recusado",
     "simulateYape": "Pagamento com Yape",
     "culqiMissing": "Pagamentos on-line indisponíveis no momento.",
-    "view": "Ver pedido"
+    "view": "Ver pedido",
+    "refunded": "Reembolsamos {amount} em {date}. Dependendo do seu banco, pode levar alguns dias para aparecer.",
+    "invoices": "Comprovantes eletrônicos",
+    "invoicesPending": "Estamos emitindo seu comprovante; ele aparecerá aqui em alguns minutos.",
+    "downloadPdf": "Baixar PDF"
   },
   "status": {
     "pending_payment": "Aguardando pagamento",

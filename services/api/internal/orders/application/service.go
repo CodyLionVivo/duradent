@@ -540,6 +540,11 @@ func (s *Service) MyOrders(ctx context.Context, accountID id.ID, limit, offset i
 	return s.d.Orders.List(ctx, ports.OrderFilter{AccountID: accountID, Limit: limit, Offset: offset})
 }
 
+// ByNumber returns any order (for other contexts; not exposed to customers).
+func (s *Service) ByNumber(ctx context.Context, number string) (*domain.Order, error) {
+	return s.d.Orders.ByNumber(ctx, number)
+}
+
 // MyOrder returns the order only if it belongs to the account.
 func (s *Service) MyOrder(ctx context.Context, accountID id.ID, number string) (*domain.Order, error) {
 	o, err := s.d.Orders.ByNumber(ctx, number)
@@ -727,6 +732,83 @@ func (s *Service) Deliver(ctx context.Context, adminID, orderID id.ID) (*domain.
 		func(o *domain.Order) (string, any) {
 			return "OrderDelivered", map[string]any{"order_id": o.ID, "number": o.Number}
 		})
+}
+
+// Refund cancels a paid order that has not shipped and returns the money:
+// Culqi charges are refunded through Culqi; bank transfers are returned by
+// hand and the admin enters the bank operation number. Stock goes back on
+// hand and OrderRefunded triggers the credit note and the customer email.
+func (s *Service) Refund(ctx context.Context, adminID, orderID id.ID, reason, reference string) (*domain.Order, error) {
+	reason, reference = strings.TrimSpace(reason), strings.TrimSpace(reference)
+	if reason == "" {
+		return nil, apperr.Invalid("orders.reason_required", "reason", "enter the reason for the refund")
+	}
+	o, err := s.d.Orders.ByID(ctx, orderID)
+	if err != nil {
+		return nil, err
+	}
+	pays, err := s.d.Payments.ByOrder(ctx, orderID)
+	if err != nil {
+		return nil, err
+	}
+	var paid *domain.Payment
+	for i := range pays {
+		if pays[i].Status == domain.PaymentConfirmed {
+			paid = &pays[i]
+		}
+	}
+	if err := o.CanRefund(paid != nil); err != nil {
+		return nil, err
+	}
+
+	ref := reference
+	if paid.Method == domain.MethodCulqi {
+		// Outside the transaction: a second click is rejected by Culqi
+		// (the charge has nothing left to refund).
+		if ref, err = s.d.Gateway.Refund(ctx, ports.RefundRequest{ChargeID: paid.ProviderRef, AmountMinor: paid.Amount.Minor}); err != nil {
+			s.d.Log.ErrorContext(ctx, "culqi refund", "order", o.Number, "charge", paid.ProviderRef, "error", err)
+			return nil, apperr.Conflict("orders.refund_failed", "", "Culqi did not accept the refund; try again or refund it from the Culqi panel")
+		}
+	} else if ref == "" || len(ref) > 60 {
+		return nil, apperr.Invalid("orders.reference_required", "reference", "enter the bank operation number of the returned transfer")
+	}
+
+	var out *domain.Order
+	err = s.d.UoW.InTx(ctx, func(ctx context.Context) error {
+		locked, err := s.d.Orders.Lock(ctx, orderID)
+		if err != nil {
+			return err
+		}
+		now := s.d.Now()
+		if err := locked.Refund(reason, ref, adminActor(adminID), now); err != nil {
+			return err
+		}
+		if err := s.d.Orders.Update(ctx, locked); err != nil {
+			return err
+		}
+		p := domain.Payment{ID: id.New(), OrderID: orderID, Method: paid.Method, Status: domain.PaymentRefunded,
+			Amount: paid.Amount, ProviderRef: ref, Reference: reference, ConfirmedBy: adminID, CreatedAt: now}
+		if paid.Method == domain.MethodBankTransfer {
+			p.ProviderRef = ""
+		}
+		if err := s.d.Payments.Add(ctx, p); err != nil {
+			return err
+		}
+		if err := s.d.Stock.Restock(ctx, orderID); err != nil {
+			return err
+		}
+		out = locked
+		return s.record(ctx, locked, "OrderRefunded", map[string]any{
+			"order_id": locked.ID, "number": locked.Number, "amount": paid.Amount.Decimal(), "currency": paid.Amount.Currency,
+			"method": paid.Method, "refund_ref": ref, "reason": reason,
+		})
+	})
+	if err != nil {
+		// Money may already be back with the customer: make it visible.
+		s.d.Log.ErrorContext(ctx, "refund not recorded", "order", o.Number, "refund_ref", ref, "error", err)
+		return nil, err
+	}
+	return out, nil
 }
 
 func (s *Service) CancelByAdmin(ctx context.Context, adminID, orderID id.ID, reason string) (*domain.Order, error) {

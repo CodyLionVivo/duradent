@@ -174,3 +174,35 @@ func TestOverdue(t *testing.T) {
 		t.Fatal("paid orders are never overdue")
 	}
 }
+
+func TestRefund(t *testing.T) {
+	now := time.Now()
+	o := newOrder(t, MethodCulqi, 10000, 1)
+	if code(o.CanRefund(false)) != "orders.not_refundable" {
+		t.Fatal("unpaid orders have nothing to refund")
+	}
+	_ = o.MarkPaid("culqi", "chr_1", now)
+	if err := o.Refund("cliente desistió", "ref_1", "admin", now); err != nil {
+		t.Fatal(err)
+	}
+	if o.Status != StatusCancelled || o.RefundRef != "ref_1" || o.RefundedAt == nil || o.CancelReason != "cliente desistió" {
+		t.Fatalf("%+v", o)
+	}
+	if code(o.CanRefund(true)) != "orders.already_refunded" {
+		t.Fatal("refunds happen once")
+	}
+
+	shipped := newOrder(t, MethodCulqi, 10000, 1)
+	_ = shipped.MarkPaid("culqi", "chr_2", now)
+	_ = shipped.Ship("Olva", "OLV-1", "admin", now)
+	if code(shipped.CanRefund(true)) != "orders.not_refundable" {
+		t.Fatal("shipped orders are returned, not refunded here")
+	}
+
+	// A payment that arrived after the order expired is refundable.
+	late := newOrder(t, MethodCulqi, 10000, 1)
+	_ = late.Cancel("payment window expired", "system", now)
+	if err := late.Refund("pago tardío", "ref_3", "admin", now); err != nil || late.RefundedAt == nil {
+		t.Fatal(err)
+	}
+}

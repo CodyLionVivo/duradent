@@ -119,6 +119,9 @@ func (b stockBridge) Confirm(ctx context.Context, orderID id.ID) error {
 func (b stockBridge) Release(ctx context.Context, orderID id.ID) error {
 	return b.svc.Release(ctx, orderID)
 }
+func (b stockBridge) Restock(ctx context.Context, orderID id.ID) error {
+	return b.svc.Restock(ctx, orderID)
+}
 
 type shippingBridge struct{ svc *shippingapp.Service }
 

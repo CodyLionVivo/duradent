@@ -7,6 +7,7 @@ import (
 
 	"github.com/CodyLionVivo/duradent/services/api/internal/identity/domain"
 	"github.com/CodyLionVivo/duradent/services/api/internal/kernel/id"
+	"github.com/CodyLionVivo/duradent/services/api/internal/kernel/locale"
 )
 
 type AccountRepository interface {
@@ -81,4 +82,35 @@ type OIDCProvider interface {
 	// Exchange trades the code for tokens and returns the verified ID token
 	// claims; it checks signature, issuer, audience, expiry and nonce.
 	Exchange(ctx context.Context, code, verifier, redirectURI, nonce string) (Claims, error)
+}
+
+// Verification is a pending email confirmation; only the token's hash is stored.
+type Verification struct {
+	TokenHash string
+	AccountID id.ID
+	Email     string
+	ExpiresAt time.Time
+	CreatedAt time.Time
+}
+
+type VerificationRepository interface {
+	Create(ctx context.Context, v Verification) error
+	// Take returns and deletes the verification; NotFound if unknown.
+	Take(ctx context.Context, tokenHash string) (Verification, error)
+	// Recent counts verifications created for the account since t (throttling).
+	Recent(ctx context.Context, accountID id.ID, since time.Time) (int, error)
+}
+
+// VerificationMailer emails the confirmation link.
+type VerificationMailer interface {
+	SendVerification(ctx context.Context, email, name string, l locale.Locale, token string) error
+}
+
+type UnitOfWork interface {
+	InTx(ctx context.Context, fn func(ctx context.Context) error) error
+}
+
+// Events records domain events in the current transaction (outbox).
+type Events interface {
+	Record(ctx context.Context, aggregateType string, aggregateID id.ID, eventType string, payload any, at time.Time) error
 }

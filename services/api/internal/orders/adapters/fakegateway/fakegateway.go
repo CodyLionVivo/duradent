@@ -80,3 +80,14 @@ func (g *Gateway) Charges() []ports.Charge {
 	}
 	return out
 }
+
+// Refund succeeds for any known, succeeded charge.
+func (g *Gateway) Refund(_ context.Context, r ports.RefundRequest) (string, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	c, ok := g.charges[r.ChargeID]
+	if !ok || !c.Succeeded || r.AmountMinor > c.AmountMinor {
+		return "", errors.New("fake gateway: charge cannot be refunded")
+	}
+	return "ref_test_" + id.New().String()[24:], nil
+}

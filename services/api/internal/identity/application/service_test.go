@@ -12,6 +12,7 @@ import (
 	"github.com/CodyLionVivo/duradent/services/api/internal/identity/ports"
 	"github.com/CodyLionVivo/duradent/services/api/internal/kernel/apperr"
 	"github.com/CodyLionVivo/duradent/services/api/internal/kernel/id"
+	"github.com/CodyLionVivo/duradent/services/api/internal/kernel/locale"
 )
 
 // --- fakes ---------------------------------------------------------------------------
@@ -180,12 +181,57 @@ func (f *fakeProvider) Exchange(_ context.Context, code, verifier, _, nonce stri
 	return f.claims, nil
 }
 
+type memVerifs map[string]ports.Verification
+
+func (m memVerifs) Create(_ context.Context, v ports.Verification) error {
+	m[v.TokenHash] = v
+	return nil
+}
+func (m memVerifs) Take(_ context.Context, h string) (ports.Verification, error) {
+	v, ok := m[h]
+	if !ok {
+		return v, apperr.NotFound("identity.verification_not_found", "nope")
+	}
+	delete(m, h)
+	return v, nil
+}
+func (m memVerifs) Recent(_ context.Context, aid id.ID, since time.Time) (int, error) {
+	n := 0
+	for _, v := range m {
+		if v.AccountID == aid && !v.CreatedAt.Before(since) {
+			n++
+		}
+	}
+	return n, nil
+}
+
+type fakeMailer struct{ tokens []string }
+
+func (m *fakeMailer) SendVerification(_ context.Context, _, _ string, _ locale.Locale, token string) error {
+	m.tokens = append(m.tokens, token)
+	return nil
+}
+
+type fakeEvents struct{ types []string }
+
+func (e *fakeEvents) Record(_ context.Context, _ string, _ id.ID, t string, _ any, _ time.Time) error {
+	e.types = append(e.types, t)
+	return nil
+}
+
+type noTx struct{}
+
+func (noTx) InTx(ctx context.Context, fn func(context.Context) error) error { return fn(ctx) }
+
 type fixture struct {
 	svc      *application.Service
 	accounts *memAccounts
 	sessions memSessions
 	google   *fakeProvider
 	clock    *time.Time
+	verifs   memVerifs
+	mailer   *fakeMailer
+	events   *fakeEvents
 }
 
 func newFixture(t *testing.T, cfg application.Config) fixture {
@@ -196,12 +242,16 @@ func newFixture(t *testing.T, cfg application.Config) fixture {
 		sessions: memSessions{},
 		google:   &fakeProvider{},
 		clock:    &clock,
+		verifs:   memVerifs{},
+		mailer:   &fakeMailer{},
+		events:   &fakeEvents{},
 	}
 	svc, err := application.NewService(application.Deps{
 		Accounts: f.accounts, Customers: memCustomers{}, Addresses: memAddresses{}, Sessions: f.sessions,
 		States: memStates{}, Hasher: plainHasher{},
-		Providers: map[domain.Provider]ports.OIDCProvider{domain.ProviderGoogle: f.google},
-		Now:       func() time.Time { return *f.clock },
+		Providers:     map[domain.Provider]ports.OIDCProvider{domain.ProviderGoogle: f.google},
+		Now:           func() time.Time { return *f.clock },
+		Verifications: f.verifs, Mailer: f.mailer, UoW: noTx{}, Events: f.events,
 	}, cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -471,5 +521,52 @@ func TestAdminCannotDemoteThemselves(t *testing.T) {
 	got, _ := f.accounts.ByID(ctx, b.Account.ID)
 	if got.Role != domain.RoleAdmin {
 		t.Fatal("role not saved")
+	}
+}
+
+func TestEmailVerification(t *testing.T) {
+	f := newFixture(t, application.Config{AdminEmails: []string{"jefa@duradent.pe"}})
+	ctx := context.Background()
+	reg, err := f.svc.Register(ctx, application.RegisterInput{Email: "jefa@duradent.pe", Password: "brackets de acero 2026"}, client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(f.events.types) != 1 || f.events.types[0] != "CustomerRegistered" || len(f.mailer.tokens) != 1 {
+		t.Fatalf("events %v, links %d", f.events.types, len(f.mailer.tokens))
+	}
+	if err := f.svc.VerifyEmail(ctx, "not-a-token"); codeOf(err) != "identity.verification_invalid" {
+		t.Fatalf("bad token: %v", err)
+	}
+	// Two resends allowed in the hour, the fourth link is throttled.
+	for i := range 3 {
+		err := f.svc.ResendVerification(ctx, reg.Account.ID)
+		if i < 2 && err != nil || i == 2 && codeOf(err) != "identity.verification_throttled" {
+			t.Fatalf("resend %d: %v", i, err)
+		}
+	}
+	if err := f.svc.VerifyEmail(ctx, f.mailer.tokens[0]); err != nil {
+		t.Fatal(err)
+	}
+	a, _ := f.accounts.ByID(ctx, reg.Account.ID)
+	if !a.EmailVerified || a.Role != domain.RoleAdmin {
+		t.Fatalf("verified %v role %s", a.EmailVerified, a.Role)
+	}
+	if err := f.svc.VerifyEmail(ctx, f.mailer.tokens[0]); codeOf(err) != "identity.verification_invalid" {
+		t.Fatal("a link works once")
+	}
+	if err := f.svc.ResendVerification(ctx, reg.Account.ID); codeOf(err) != "identity.already_verified" {
+		t.Fatal(err)
+	}
+}
+
+func TestVerificationExpires(t *testing.T) {
+	f := newFixture(t, application.Config{})
+	ctx := context.Background()
+	if _, err := f.svc.Register(ctx, application.RegisterInput{Email: "ana@clinica.pe", Password: "brackets de acero 2026"}, client); err != nil {
+		t.Fatal(err)
+	}
+	*f.clock = f.clock.Add(25 * time.Hour)
+	if err := f.svc.VerifyEmail(ctx, f.mailer.tokens[0]); codeOf(err) != "identity.verification_invalid" {
+		t.Fatalf("expired: %v", err)
 	}
 }

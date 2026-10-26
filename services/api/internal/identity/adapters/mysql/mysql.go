@@ -17,32 +17,35 @@ import (
 )
 
 type (
-	Accounts    struct{ db *sql.DB }
-	Customers   struct{ db *sql.DB }
-	Addresses   struct{ db *sql.DB }
-	Sessions    struct{ db *sql.DB }
-	LoginStates struct{ db *sql.DB }
+	Accounts      struct{ db *sql.DB }
+	Customers     struct{ db *sql.DB }
+	Addresses     struct{ db *sql.DB }
+	Sessions      struct{ db *sql.DB }
+	LoginStates   struct{ db *sql.DB }
+	Verifications struct{ db *sql.DB }
 )
 
 // Stores groups every identity repository over one connection pool.
 type Stores struct {
-	Accounts    *Accounts
-	Customers   *Customers
-	Addresses   *Addresses
-	Sessions    *Sessions
-	LoginStates *LoginStates
+	Accounts      *Accounts
+	Customers     *Customers
+	Addresses     *Addresses
+	Sessions      *Sessions
+	LoginStates   *LoginStates
+	Verifications *Verifications
 }
 
 func New(db *sql.DB) Stores {
-	return Stores{&Accounts{db}, &Customers{db}, &Addresses{db}, &Sessions{db}, &LoginStates{db}}
+	return Stores{&Accounts{db}, &Customers{db}, &Addresses{db}, &Sessions{db}, &LoginStates{db}, &Verifications{db}}
 }
 
 var (
-	_ ports.AccountRepository    = (*Accounts)(nil)
-	_ ports.CustomerRepository   = (*Customers)(nil)
-	_ ports.AddressRepository    = (*Addresses)(nil)
-	_ ports.SessionRepository    = (*Sessions)(nil)
-	_ ports.LoginStateRepository = (*LoginStates)(nil)
+	_ ports.AccountRepository      = (*Accounts)(nil)
+	_ ports.CustomerRepository     = (*Customers)(nil)
+	_ ports.AddressRepository      = (*Addresses)(nil)
+	_ ports.SessionRepository      = (*Sessions)(nil)
+	_ ports.LoginStateRepository   = (*LoginStates)(nil)
+	_ ports.VerificationRepository = (*Verifications)(nil)
 )
 
 func notFound(code, msg string, err error) error {
@@ -69,7 +72,10 @@ func scanAccount(s scanner) (*domain.Account, error) {
 }
 
 func (s *Accounts) Create(ctx context.Context, a *domain.Account, ident *domain.Identity) error {
-	err := mysql.InTx(ctx, s.db, func(tx *sql.Tx) error {
+	// Joins the caller's unit of work, so the CustomerRegistered event and
+	// the account commit together.
+	err := mysql.NewUnitOfWork(s.db).InTx(ctx, func(ctx context.Context) error {
+		tx := mysql.Conn(ctx, s.db)
 		if _, err := tx.ExecContext(ctx, "INSERT INTO accounts ("+accountCols+") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 			a.ID, a.Email, a.EmailVerified, a.PasswordHash, a.DisplayName, string(a.Locale), a.Role, a.Status, a.CreatedAt, a.UpdatedAt); err != nil {
 			return err
@@ -114,7 +120,7 @@ func (s *Accounts) LinkIdentity(ctx context.Context, accountID id.ID, ident doma
 	})
 }
 
-func linkIdentity(ctx context.Context, tx *sql.Tx, accountID id.ID, ident domain.Identity, now time.Time) error {
+func linkIdentity(ctx context.Context, tx mysql.Querier, accountID id.ID, ident domain.Identity, now time.Time) error {
 	_, err := tx.ExecContext(ctx, `INSERT INTO oauth_identities (provider, subject, account_id, email, created_at) VALUES (?, ?, ?, ?, ?)
 		ON DUPLICATE KEY UPDATE email = VALUES(email)`, string(ident.Provider), ident.Subject, accountID, ident.Email, now)
 	return err
@@ -294,4 +300,34 @@ func (s *LoginStates) Take(ctx context.Context, state string) (ports.LoginState,
 		return err
 	})
 	return ls, err
+}
+
+// --- email verifications ---------------------------------------------------------------
+
+func (s *Verifications) Create(ctx context.Context, v ports.Verification) error {
+	_, err := mysql.Conn(ctx, s.db).ExecContext(ctx,
+		"INSERT INTO email_verifications (token_hash, account_id, email, expires_at, created_at) VALUES (?, ?, ?, ?, ?)",
+		v.TokenHash, v.AccountID, v.Email, v.ExpiresAt, v.CreatedAt)
+	return err
+}
+
+func (s *Verifications) Take(ctx context.Context, tokenHash string) (ports.Verification, error) {
+	var v ports.Verification
+	err := mysql.InTx(ctx, s.db, func(tx *sql.Tx) error {
+		err := tx.QueryRowContext(ctx, "SELECT token_hash, account_id, email, expires_at, created_at FROM email_verifications WHERE token_hash = ? FOR UPDATE", tokenHash).
+			Scan(&v.TokenHash, &v.AccountID, &v.Email, &v.ExpiresAt, &v.CreatedAt)
+		if err != nil {
+			return notFound("identity.verification_not_found", "verification not found", err)
+		}
+		// One link confirms once; older links of the account die with it.
+		_, err = tx.ExecContext(ctx, "DELETE FROM email_verifications WHERE account_id = ?", v.AccountID)
+		return err
+	})
+	return v, err
+}
+
+func (s *Verifications) Recent(ctx context.Context, accountID id.ID, since time.Time) (int, error) {
+	var n int
+	err := mysql.Conn(ctx, s.db).QueryRowContext(ctx, "SELECT COUNT(*) FROM email_verifications WHERE account_id = ? AND created_at >= ?", accountID, since).Scan(&n)
+	return n, err
 }

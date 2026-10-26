@@ -601,6 +601,34 @@ paths:
       security: [{ session: [] }]
       responses:
         "204": { description: Signed out }
+  /v1/auth/verify-email:
+    post:
+      summary: Confirm an email with the token from the emailed link
+      operationId: verifyEmail
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: { type: string, maxLength: 100 }
+      responses:
+        "204": { description: Email confirmed }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+        "429": { description: Too many attempts }
+  /v1/me/verify-email:
+    post:
+      summary: Email a new confirmation link (at most 3 per hour)
+      operationId: resendVerification
+      tags: [me]
+      security: [{ session: [] }]
+      responses:
+        "202": { description: Link sent }
+        "409": { $ref: "#/components/responses/Problem" }
   /v1/me:
     get:
       operationId: getMe
@@ -1198,6 +1226,85 @@ paths:
       responses:
         "200": { $ref: "#/components/responses/Order" }
         "409": { $ref: "#/components/responses/Problem" }
+  /v1/admin/orders/{id}/refund:
+    parameters: [{ $ref: "#/components/parameters/ID" }]
+    post:
+      summary: Cancel a paid, unshipped order and return the money
+      description: |
+        Culqi payments are refunded through Culqi. Bank transfers are returned by hand;
+        send the operation number of the return transfer as reference. Stock goes back
+        on hand and OrderRefunded triggers the credit note and the customer email.
+      operationId: adminRefundOrder
+      tags: [admin-orders]
+      security: [{ admin: [] }, { session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string, maxLength: 200 }
+                reference: { type: string, maxLength: 60, description: Bank operation number (transfers only) }
+      responses:
+        "200": { $ref: "#/components/responses/Order" }
+        "409": { $ref: "#/components/responses/Problem" }
+        "422": { $ref: "#/components/responses/Problem" }
+  /v1/orders/{number}/invoices:
+    parameters: [{ name: number, in: path, required: true, schema: { type: string } }]
+    get:
+      summary: Accepted electronic documents (factura, boleta, credit note) of one of my orders
+      operationId: myOrderInvoices
+      tags: [invoicing]
+      security: [{ session: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/InvoiceList" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /v1/admin/orders/{id}/invoices:
+    parameters: [{ $ref: "#/components/parameters/ID" }]
+    get:
+      operationId: adminOrderInvoices
+      tags: [invoicing]
+      security: [{ admin: [] }, { session: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/InvoiceList" }
+  /v1/admin/invoices:
+    get:
+      operationId: adminListInvoices
+      tags: [invoicing]
+      security: [{ admin: [] }, { session: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/Page" }
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/InvoiceStatus" } }
+      responses:
+        "200":
+          description: Documents, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total, page, page_size]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/Invoice" } }
+                  total: { type: integer }
+                  page: { type: integer }
+                  page_size: { type: integer }
+  /v1/admin/invoices/{id}/retry:
+    parameters: [{ $ref: "#/components/parameters/ID" }]
+    post:
+      summary: Send a rejected document to the OSE again (same series and number)
+      operationId: adminRetryInvoice
+      tags: [invoicing]
+      security: [{ admin: [] }, { session: [] }]
+      responses:
+        "200":
+          description: The document after the attempt
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Invoice" }
+        "404": { $ref: "#/components/responses/Problem" }
+        "409": { $ref: "#/components/responses/Problem" }
   /v1/admin/orders/{id}/cancel:
     parameters: [{ $ref: "#/components/parameters/ID" }]
     post:
@@ -1325,6 +1432,15 @@ components:
               is_default: { type: boolean }
 
   responses:
+    InvoiceList:
+      description: Electronic documents of an order
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [items]
+            properties:
+              items: { type: array, items: { $ref: "#/components/schemas/Invoice" } }
     Cart:
       description: The cart
       content:
@@ -1450,6 +1566,29 @@ components:
         weight_g: { type: integer }
         ready: { type: boolean, description: Every line can be bought }
     OrderStatus: { type: string, enum: [pending_payment, paid, preparing, shipped, delivered, cancelled] }
+    InvoiceStatus: { type: string, enum: [pending, accepted, rejected] }
+    Invoice:
+      type: object
+      description: SUNAT electronic document issued through the OSE (Nubefact).
+      required: [id, order_id, order_number, type, name, series, number, currency, total, status, sunat_description, pdf_url, xml_url, cdr_url, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        order_id: { type: string, format: uuid }
+        order_number: { type: string }
+        type: { type: string, enum: [factura, boleta, nota_credito] }
+        name: { type: string, examples: ["Factura F001-123"] }
+        series: { type: string, examples: [F001] }
+        number: { type: integer }
+        currency: { $ref: "#/components/schemas/Currency" }
+        total: { $ref: "#/components/schemas/Decimal" }
+        status: { $ref: "#/components/schemas/InvoiceStatus" }
+        sunat_description: { type: string }
+        pdf_url: { type: string }
+        xml_url: { type: string }
+        cdr_url: { type: string }
+        last_error: { type: string, description: Admin only }
+        attempts: { type: integer, description: Admin only }
+        created_at: { type: string, format: date-time }
     OrderBilling:
       type: object
       required: [customer_type, document_type, document_number, business_name, invoice_type]
@@ -1475,7 +1614,8 @@ components:
     Order:
       type: object
       required: [id, number, status, payment_method, currency, email, lines, subtotal, shipping_amount, tax, total, billing, shipping, notes,
-        payment_deadline, payment_in_progress, carrier, tracking, cancel_reason, created_at, paid_at, shipped_at, delivered_at, cancelled_at]
+        payment_deadline, payment_in_progress, carrier, tracking, cancel_reason, created_at, paid_at, shipped_at, delivered_at, cancelled_at,
+        refunded_at, refund_ref]
       properties:
         id: { type: string, format: uuid }
         number: { type: string, examples: [DD-000123] }
@@ -1513,6 +1653,8 @@ components:
         shipped_at: { type: [string, "null"], format: date-time }
         delivered_at: { type: [string, "null"], format: date-time }
         cancelled_at: { type: [string, "null"], format: date-time }
+        refunded_at: { type: [string, "null"], format: date-time }
+        refund_ref: { type: string, description: Culqi refund id or bank operation number }
     OrderPage:
       type: object
       required: [items, total, page, page_size]
@@ -1527,7 +1669,7 @@ components:
       properties:
         id: { type: string, format: uuid }
         method: { type: string, enum: [culqi, bank_transfer] }
-        status: { type: string, enum: [confirmed, failed] }
+        status: { type: string, enum: [confirmed, failed, refunded] }
         amount: { $ref: "#/components/schemas/Decimal" }
         currency: { $ref: "#/components/schemas/Currency" }
         provider_ref: { type: string }

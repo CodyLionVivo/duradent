@@ -81,13 +81,28 @@ Contextos implementados: **catalog** (productos, variantes, categorías, atribut
 **pricing** (listas de precios con tramos por volumen), **identity** (cuentas, OIDC Google/Microsoft,
 contraseña Argon2id, sesiones, perfil de facturación RUC/DNI/CE, direcciones, roles), **inventory**
 (stock, reservas por pedido, movimientos), **shipping** (zonas Lima/Provincias/Recojo y tarifas por
-peso) y **orders** (carrito, pedidos, pagos Culqi y transferencia). Previstos: invoicing,
-notifications.
+peso), **orders** (carrito, pedidos, pagos Culqi y transferencia, reembolsos),
+**notifications** (correos transaccionales es/en/pt-br por SMTP/Mailpit o SES, `email_log`) e
+**invoicing** (facturas, boletas y notas de crédito SUNAT vía Nubefact, series correlativas).
 
 **Composición**: `internal/wiring` construye todos los contextos y monta las rutas; lo usan
 `cmd/duradent` y `internal/apitest`, así los tests ejercitan exactamente el mismo cableado. Los
-*bridges* de `wiring/bridges.go` implementan los ports de `orders` sobre los servicios de los otros
-contextos: es el único lugar donde los contextos se tocan.
+*bridges* de `wiring/bridges.go` y `wiring/event_bridges.go` implementan los ports de `orders`,
+`notifications`, `invoicing` e `identity` sobre los servicios de los otros contextos: es el único lugar
+donde los contextos se tocan.
+
+**Eventos**: `outbox-relay` publica las filas del outbox en SNS (`platform/outbox.Relay`, lotes de 50
+con `FOR UPDATE SKIP LOCKED`, backoff exponencial hasta 10 min por fila fallida). El `worker` consume
+una cola SQS por contexto (`platform/messaging.Consumer`: long polling, idempotencia por
+`processed_messages`, error → reintento y DLQ tras 5 recepciones). Cada contexto declara los tipos que
+consume (`notifications/application.Events`, `invoicing/application.Events`), que deben coincidir con las
+filter policies de `infra/local/localstack/init-aws.sh` (y de Terraform). El worker además corre cada
+minuto la expiración de pedidos impagos y el reintento de comprobantes pendientes.
+
+**Ver correos y eventos en local**: Mailpit http://localhost:8025 recibe todos los correos. Comprobantes
+simulados salvo que exportes `NUBEFACT_URL`/`NUBEFACT_TOKEN` (cuenta demo de Nubefact). Clientes con
+"rechazo" en la razón social simulan un rechazo del OSE. Colas:
+`docker compose exec localstack awslocal sqs get-queue-attributes --queue-url http://localhost:4566/000000000000/duradent-notifications-dlq --attribute-names ApproximateNumberOfMessages`.
 
 **Unidad de trabajo**: `platform/mysql.UnitOfWork.InTx` deja la transacción en el `context`; los
 repositorios usan `mysql.Conn(ctx, db)`, así un pedido, su reserva de stock y su evento en el outbox
@@ -99,7 +114,9 @@ deja un `auth.Principal` (cuenta, rol, lista de precios) en el contexto. `auth.R
 importan identity. La web guarda el token en la cookie httpOnly `dd_session` y lo reenvía desde
 `Astro.locals.api` (cliente por request creado en `middleware.ts`), junto con la IP del cliente.
 
-`internal/apitest` prueba la API completa por HTTP contra MySQL real (solo S3 simulado).
+`internal/apitest` prueba la API completa por HTTP contra MySQL real (S3, Culqi, correo y Nubefact
+simulados); `drain` hace de relay + worker para probar los consumidores. `platform/messaging` tiene un
+test con LocalStack real (outbox → SNS con filtro → SQS → consumidor, reintento y duplicados).
 
 ## Convenciones
 
@@ -193,8 +210,35 @@ importan identity. La web guarda el token en la cookie httpOnly `dd_session` y l
     guardan y muestran sin IGV.
 29. **Idempotency-Key en `POST /v1/orders`**: la web genera una por carga del checkout; reintentos o
     doble clic devuelven el mismo pedido.
-30. **Pedidos pagados no se cancelan en esta fase**: requieren reembolso (fase 5).
+30. **Pedidos pagados se cancelan con reembolso** (admin, `POST /v1/admin/orders/{id}/refund`): pagados o
+    en preparación, nunca enviados. Culqi: `POST /v2/refunds` fuera de la transacción (un segundo intento
+    lo rechaza Culqi). Transferencia: devolución manual y el admin anota el n.º de operación. El stock
+    vuelve al inventario (reservas `returned`, movimiento `return`) y `OrderRefunded` dispara la nota de
+    crédito y el correo. Un pago que llegó tras la expiración del pedido también se puede reembolsar.
 31. **Yape**: solo PEN y hasta S/ 2 000 por pago (límite de Culqi); se valida antes de cobrar.
+32. **Solo consumen eventos `notifications` e `invoicing`**. Inventario y pagos se coordinan de forma
+    síncrona dentro de la transacción del pedido (ports); las colas `orders`, `inventory` y `payments`
+    del plan no se crean hasta que un consumidor las necesite.
+33. **Entrega al menos una vez**: el relay puede publicar dos veces (si muere entre publicar y marcar) y
+    el consumidor registra el mensaje después de su efecto. Por eso cada efecto externo es idempotente
+    por su cuenta: `email_log` único por (evento, tipo, destinatario) y comprobantes únicos por
+    (pedido, tipo).
+34. **Comprobantes: número antes de llamar al OSE.** La serie se incrementa en la misma transacción que
+    crea la fila `pending`; un reintento envía el mismo número. Si Nubefact responde "ya existe"
+    (código 23) se consulta con `consultar_comprobante`. Errores de datos → `rejected` + alerta a
+    `OPS_EMAILS` + botón "Reintentar" en el admin; errores de red → reintento (SQS y job cada minuto,
+    máx. 10 intentos).
+35. **Factura si el cliente pidió factura con RUC; si no, boleta.** Series por defecto F001/B001 y notas
+    de crédito FC01/BC01 (`INVOICE_SERIES_*`). El IGV se calcula por línea y la diferencia de redondeo
+    va a la línea mayor, así las líneas suman exactamente el IGV cobrado. El envío va como línea de
+    servicio (`ZZ`). Pedidos en USD usan `USD_EXCHANGE_RATE` (la SUNAT pide el tipo de cambio SBS del
+    día: operaciones debe actualizarlo; automatizarlo queda pendiente).
+36. **El enlace de verificación de correo no viaja por el bus**: identity lo envía en el momento a través
+    del mailer de notifications (bridge). Token aleatorio de 32 bytes, solo se guarda su SHA-256, vale
+    24 h, un uso, máx. 3 envíos por hora. La página `/…/account/verify` confirma con POST (los escáneres
+    de enlaces del correo no lo consumen). Verificar un correo listado en `ADMIN_EMAILS` da admin.
+37. **`CustomerRegistered` en la misma transacción que la cuenta** (`Accounts.Create` se une a la unidad
+    de trabajo).
 
 ## Estado por fases
 
@@ -202,5 +246,5 @@ importan identity. La web guarda el token en la cookie httpOnly `dd_session` y l
 - [x] Fase 2 — catálogo, pricing, frontend i18n, admin de catálogo
 - [x] Fase 3 — identidad (Google, Microsoft, email)
 - [x] Fase 4 — carrito, envíos, pedidos, pagos Culqi + transferencia
-- [ ] Fase 5 — outbox relay, worker, inventario, emails, facturación
+- [x] Fase 5 — outbox relay, worker, emails, facturación SUNAT, reembolsos, verificación de correo
 - [ ] Fase 6 — Terraform, ALB, ECS, despliegue

@@ -57,6 +57,29 @@ type Config struct {
 	CulqiBaseURL       string // override for tests
 	// BankDetails are the transfer instructions shown to customers.
 	BankDetails string
+
+	// Events (phase 5): the relay publishes to the topic; the worker reads
+	// one queue per consuming context.
+	SNSTopicARN        string
+	NotificationsQueue string
+	InvoicingQueue     string
+
+	// Email. Locally SMTP_ADDR points at Mailpit; in AWS it is empty and SES
+	// is used.
+	MailFrom     string
+	SMTPAddr     string
+	SESConfigSet string
+	OpsEmails    []string // stock and invoicing alerts (defaults to ADMIN_EMAILS)
+
+	// Nubefact (OSE). Without a URL in local development a fake accepts
+	// every document.
+	NubefactURL     string
+	NubefactToken   string
+	SeriesFactura   string
+	SeriesBoleta    string
+	SeriesCreditF   string
+	SeriesCreditB   string
+	USDExchangeRate string
 }
 
 // Load reads configuration from the environment, applying defaults suitable
@@ -91,6 +114,24 @@ func load(getenv func(string) string) (Config, error) {
 		CulqiWebhookSecret:    getenv("CULQI_WEBHOOK_SECRET"),
 		CulqiBaseURL:          getenv("CULQI_BASE_URL"),
 		BankDetails:           getenv("BANK_DETAILS"),
+
+		SNSTopicARN:        getenv("SNS_TOPIC_ARN"),
+		NotificationsQueue: getenv("SQS_NOTIFICATIONS_URL"),
+		InvoicingQueue:     getenv("SQS_INVOICING_URL"),
+		MailFrom:           valueOr(getenv("MAIL_FROM"), "Duradent <no-reply@duradent.local>"),
+		SMTPAddr:           getenv("SMTP_ADDR"),
+		SESConfigSet:       getenv("SES_CONFIGURATION_SET"),
+		OpsEmails:          splitList(getenv("OPS_EMAILS")),
+		NubefactURL:        getenv("NUBEFACT_URL"),
+		NubefactToken:      getenv("NUBEFACT_TOKEN"),
+		SeriesFactura:      valueOr(getenv("INVOICE_SERIES_FACTURA"), "F001"),
+		SeriesBoleta:       valueOr(getenv("INVOICE_SERIES_BOLETA"), "B001"),
+		SeriesCreditF:      valueOr(getenv("INVOICE_SERIES_CREDIT_F"), "FC01"),
+		SeriesCreditB:      valueOr(getenv("INVOICE_SERIES_CREDIT_B"), "BC01"),
+		USDExchangeRate:    getenv("USD_EXCHANGE_RATE"),
+	}
+	if len(cfg.OpsEmails) == 0 {
+		cfg.OpsEmails = cfg.AdminEmails
 	}
 
 	timeout, err := durationOr(getenv("SHUTDOWN_TIMEOUT"), 15*time.Second)
@@ -109,6 +150,9 @@ func load(getenv func(string) string) (Config, error) {
 		if cfg.MediaBaseURL == "" {
 			cfg.MediaBaseURL = "http://localhost:4566/" + cfg.MediaBucket
 		}
+		if cfg.USDExchangeRate == "" {
+			cfg.USDExchangeRate = "3.750"
+		}
 		return cfg, nil
 	}
 
@@ -122,6 +166,8 @@ func load(getenv func(string) string) (Config, error) {
 	for name, v := range map[string]string{
 		"MYSQL_DSN": cfg.MySQLDSN, "S3_MEDIA_BUCKET": cfg.MediaBucket, "MEDIA_BASE_URL": cfg.MediaBaseURL,
 		"CULQI_SECRET_KEY": cfg.CulqiSecretKey, "CULQI_PUBLIC_KEY": cfg.CulqiPublicKey, "CULQI_WEBHOOK_SECRET": cfg.CulqiWebhookSecret,
+		"NUBEFACT_URL": cfg.NubefactURL, "NUBEFACT_TOKEN": cfg.NubefactToken, "USD_EXCHANGE_RATE": cfg.USDExchangeRate,
+		"MAIL_FROM": getenv("MAIL_FROM"),
 	} {
 		if v == "" {
 			missing = append(missing, name)

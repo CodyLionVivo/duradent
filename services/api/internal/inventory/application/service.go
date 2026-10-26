@@ -117,9 +117,22 @@ func (s *Service) Release(ctx context.Context, orderID id.ID) error {
 	return s.settle(ctx, orderID, domain.ReservationReleased)
 }
 
+// Restock puts the units of a sold order back on the shelf (refund). Units of
+// an order that was never paid are released instead.
+func (s *Service) Restock(ctx context.Context, orderID id.ID) error {
+	if err := s.Release(ctx, orderID); err != nil {
+		return err
+	}
+	return s.settle(ctx, orderID, domain.ReservationReturned)
+}
+
 func (s *Service) settle(ctx context.Context, orderID id.ID, to domain.ReservationStatus) error {
+	from := domain.ReservationActive
+	if to == domain.ReservationReturned {
+		from = domain.ReservationConfirmed
+	}
 	return s.uow.InTx(ctx, func(ctx context.Context) error {
-		rs, err := s.stock.ActiveReservations(ctx, orderID)
+		rs, err := s.stock.Reservations(ctx, orderID, from)
 		if err != nil || len(rs) == 0 {
 			return err // nothing reserved (or already settled): idempotent
 		}
@@ -141,10 +154,14 @@ func (s *Service) settle(ctx context.Context, orderID id.ID, to domain.Reservati
 		vals := make([]*domain.StockItem, 0, len(lines))
 		for _, l := range lines {
 			it := items[l.VariantID]
-			if to == domain.ReservationConfirmed {
+			switch to {
+			case domain.ReservationConfirmed:
 				it.Commit(l.Qty, now)
 				moves = append(moves, domain.Movement{ID: id.New(), VariantID: l.VariantID, Delta: -l.Qty, Reason: domain.MovementSale, Reference: orderID.String(), CreatedAt: now})
-			} else {
+			case domain.ReservationReturned:
+				it.Return(l.Qty, now)
+				moves = append(moves, domain.Movement{ID: id.New(), VariantID: l.VariantID, Delta: l.Qty, Reason: domain.MovementReturn, Reference: orderID.String(), CreatedAt: now})
+			default:
 				it.Release(l.Qty, now)
 			}
 			vals = append(vals, it)
@@ -152,7 +169,7 @@ func (s *Service) settle(ctx context.Context, orderID id.ID, to domain.Reservati
 		if err := s.stock.Save(ctx, vals...); err != nil {
 			return err
 		}
-		if err := s.stock.SetReservationStatus(ctx, orderID, domain.ReservationActive, to); err != nil {
+		if err := s.stock.SetReservationStatus(ctx, orderID, from, to); err != nil {
 			return err
 		}
 		if err := s.stock.AddMovements(ctx, moves); err != nil {

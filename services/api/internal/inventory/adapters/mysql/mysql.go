@@ -105,9 +105,9 @@ func (s *Stock) AddReservations(ctx context.Context, rs []domain.Reservation) er
 	return nil
 }
 
-func (s *Stock) ActiveReservations(ctx context.Context, orderID id.ID) ([]domain.Reservation, error) {
+func (s *Stock) Reservations(ctx context.Context, orderID id.ID, status domain.ReservationStatus) ([]domain.Reservation, error) {
 	rows, err := mysql.Conn(ctx, s.db).QueryContext(ctx,
-		"SELECT id, order_id, variant_id, qty, status, created_at FROM stock_reservations WHERE order_id = ? AND status = 'active' FOR UPDATE", orderID)
+		"SELECT id, order_id, variant_id, qty, status, created_at FROM stock_reservations WHERE order_id = ? AND status = ? FOR UPDATE", orderID, status)
 	if err != nil {
 		return nil, err
 	}

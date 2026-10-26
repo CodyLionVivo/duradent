@@ -11,11 +11,18 @@ x-api-env: &api-env
   AWS_SECRET_ACCESS_KEY: test
   AWS_ENDPOINT_URL: http://localstack:4566
   SNS_TOPIC_ARN: arn:aws:sns:us-east-1:000000000000:duradent-domain-events
+  SQS_NOTIFICATIONS_URL: http://localstack:4566/000000000000/duradent-notifications
+  SQS_INVOICING_URL: http://localstack:4566/000000000000/duradent-invoicing
   S3_MEDIA_BUCKET: duradent-media-local
   # Browsers reach LocalStack on localhost, the API on the compose network.
   S3_PRESIGN_ENDPOINT: http://localhost:4566
   MEDIA_BASE_URL: http://localhost:4566/duradent-media-local
+  # Emails land in Mailpit (http://localhost:8025). SUNAT documents are
+  # simulated unless NUBEFACT_URL and NUBEFACT_TOKEN (demo account) are set.
   SMTP_ADDR: mailpit:1025
+  MAIL_FROM: Duradent <no-reply@duradent.local>
+  NUBEFACT_URL: ${NUBEFACT_URL:-}
+  NUBEFACT_TOKEN: ${NUBEFACT_TOKEN:-}
   # Automation token for admin routes (scripts, curl). People use sessions.
   ADMIN_TOKEN: local-dev-admin-token
   # Identity (phase 3). Dev login lets you sign in locally without Google
@@ -65,7 +72,7 @@ services:
     volumes:
       - ./infra/local/localstack/init-aws.sh:/etc/localstack/init/ready.d/init-aws.sh:ro
     healthcheck:
-      test: ["CMD-SHELL", "awslocal sns list-topics | grep -q duradent-domain-events"]
+      test: ["CMD-SHELL", "test -f /tmp/duradent-ready"] # written last by init-aws.sh
       interval: 5s
       timeout: 5s
       retries: 30

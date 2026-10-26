@@ -195,6 +195,17 @@
       "generic": "We could not complete that. Please try again.",
       "stateMismatch": "The sign-in expired or was opened in another window. Please try again.",
       "cancelled": "You cancelled the sign-in."
+    },
+    "verify": {
+      "title": "Email confirmation",
+      "success": "Done! Your email is confirmed.",
+      "invalid": "This link is invalid or has expired. Ask for a new one from your account.",
+      "pending": "Confirm your email: we sent a link to {email}.",
+      "resend": "Resend link",
+      "resent": "We sent you a new link. Check your inbox.",
+      "goAccount": "Go to my account",
+      "confirm": "Confirm my email",
+      "hint": "Press the button to confirm this email is yours."
     }
   },
   "codes": {
@@ -229,7 +240,11 @@
       "too_many_addresses": "You can save up to 10 addresses.",
       "address_not_found": "We could not find that address.",
       "password_current_wrong": "The current password is not correct.",
-      "locale_invalid": "Language not available."
+      "locale_invalid": "Language not available.",
+      "verification_invalid": "This link is invalid or has expired.",
+      "verification_stale": "This link was sent to a different email.",
+      "verification_throttled": "We already sent several links. Check your inbox or try again in an hour.",
+      "already_verified": "Your email is already confirmed."
     },
     "http": {
       "rate_limited": "Too many attempts. Wait a minute and try again."
@@ -350,7 +365,11 @@
     "simulateDeclined": "Declined card",
     "simulateYape": "Yape payment",
     "culqiMissing": "Online payments are not available right now.",
-    "view": "View order"
+    "view": "View order",
+    "refunded": "We refunded {amount} on {date}. Depending on your bank, it may take a few days to show.",
+    "invoices": "Electronic invoices",
+    "invoicesPending": "We are issuing your invoice; it will show here in a few minutes.",
+    "downloadPdf": "Download PDF"
   },
   "status": {
     "pending_payment": "Awaiting payment",

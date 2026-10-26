@@ -7,7 +7,14 @@ set -euo pipefail
 REGION="${AWS_DEFAULT_REGION:-us-east-1}"
 TOPIC_ARN=$(awslocal sns create-topic --name duradent-domain-events --query TopicArn --output text)
 
-for consumer in orders inventory payments invoicing notifications; do
+# consumer → event types it handles (SNS filter policy on the "type" attribute).
+# Keep in sync with notifications/application.Events and invoicing/application.Events.
+declare -A FILTERS=(
+  [notifications]='["CustomerRegistered","OrderPlaced","PaymentConfirmed","OrderShipped","OrderCancelled","OrderRefunded","InvoiceIssued","InvoiceRejected","StockLow"]'
+  [invoicing]='["PaymentConfirmed","OrderRefunded"]'
+)
+
+for consumer in "${!FILTERS[@]}"; do
   dlq_url=$(awslocal sqs create-queue --queue-name "duradent-${consumer}-dlq" --query QueueUrl --output text)
   dlq_arn=$(awslocal sqs get-queue-attributes --queue-url "$dlq_url" --attribute-names QueueArn --query Attributes.QueueArn --output text)
 
@@ -17,8 +24,10 @@ for consumer in orders inventory payments invoicing notifications; do
   queue_arn=$(awslocal sqs get-queue-attributes --queue-url "$queue_url" --attribute-names QueueArn --query Attributes.QueueArn --output text)
 
   # Raw delivery: consumers receive the event envelope, not the SNS wrapper.
-  awslocal sns subscribe --topic-arn "$TOPIC_ARN" --protocol sqs --notification-endpoint "$queue_arn" \
-    --attributes RawMessageDelivery=true >/dev/null
+  sub_arn=$(awslocal sns subscribe --topic-arn "$TOPIC_ARN" --protocol sqs --notification-endpoint "$queue_arn" \
+    --attributes RawMessageDelivery=true --query SubscriptionArn --output text)
+  awslocal sns set-subscription-attributes --subscription-arn "$sub_arn" \
+    --attribute-name FilterPolicy --attribute-value "{\"type\":${FILTERS[$consumer]}}"
 done
 
 BUCKET=duradent-media-local
@@ -33,4 +42,5 @@ awslocal s3api put-bucket-policy --bucket "$BUCKET" --policy "{
   \"Statement\": [{\"Effect\": \"Allow\", \"Principal\": \"*\", \"Action\": \"s3:GetObject\",
                    \"Resource\": \"arn:aws:s3:::${BUCKET}/*\"}]}"
 
+touch /tmp/duradent-ready
 echo "duradent: localstack resources ready in ${REGION}"

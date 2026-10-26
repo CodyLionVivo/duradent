@@ -31,6 +31,12 @@ if (Astro.request.method === 'POST') {
       case 'cancel':
         unwrap(await adminApi.POST('/v1/admin/orders/{id}/cancel', { params: { path }, body: { reason: str(form, 'reason') } }));
         break;
+      case 'refund':
+        unwrap(await adminApi.POST('/v1/admin/orders/{id}/refund', { params: { path }, body: { reason: str(form, 'reason'), reference: str(form, 'reference') } }));
+        break;
+      case 'retry_invoice':
+        unwrap(await adminApi.POST('/v1/admin/invoices/{id}/retry', { params: { path: { id: str(form, 'invoice') } } }));
+        break;
     }
     return Astro.redirect(savedRedirect(new URL(Astro.url.pathname, Astro.url)), 303);
   } catch (err) {
@@ -52,6 +58,9 @@ try {
   error ||= errorMessage(err);
 }
 const o = d?.order;
+const invoices = o ? ((await adminApi.GET('/v1/admin/orders/{id}/invoices', { params: { path: { id } } })).data?.items ?? []) : [];
+const paid = d?.payments.some((p) => p.status === 'confirmed') ?? false;
+const refundable = !!o && paid && !o.refunded_at && ['paid', 'preparing', 'cancelled'].includes(o.status);
 const cur = (o?.currency ?? 'PEN') as Currency;
 const money = (v: string) => formatMoney(v, cur, 'es');
 const statusLabel = (s: string) => (s ? t(`status.${s as 'paid'}`) : '—');
@@ -109,6 +118,23 @@ const statusLabel = (s: string) => (s ? t(`status.${s as 'paid'}`) : '—');
               <button class="btn-danger">{t('admin.orders.cancel')}</button>
             </form>
           )}
+          {refundable && o && (
+            <form method="post" class="flex flex-wrap items-end gap-2" data-confirm={t('admin.orders.refundConfirm', { amount: money(o.total) })}>
+              <input type="hidden" name="intent" value="refund" />
+              <div>
+                <label for="refund-reason" class="label">{t('admin.orders.refundReason')}</label>
+                <input id="refund-reason" name="reason" required maxlength="200" class="input w-56" />
+              </div>
+              {o.payment_method === 'bank_transfer' && (
+                <div>
+                  <label for="refund-reference" class="label">{t('admin.orders.refundReference')}</label>
+                  <input id="refund-reference" name="reference" required maxlength="60" class="input w-44" />
+                </div>
+              )}
+              <button class="btn-danger">{t('admin.orders.refund')}</button>
+            </form>
+          )}
+          {o.refunded_at && <p class="text-sm font-medium text-emerald-800">{t('admin.orders.refundedOn', { date: formatDate(o.refunded_at, 'es'), ref: o.refund_ref })}</p>}
           {o.status === 'pending_payment' && <p class="text-sm text-muted">{t('admin.orders.deadline')}: {formatDate(o.payment_deadline, 'es')}</p>}
         </div>
       </section>
@@ -162,13 +188,37 @@ const statusLabel = (s: string) => (s ? t(`status.${s as 'paid'}`) : '—');
             {d.payments.map((p) => (
               <li class="flex flex-wrap justify-between gap-2 py-2">
                 <span>
-                  <span class:list={['font-semibold', p.status === 'confirmed' ? 'text-emerald-700' : 'text-red-700']}>{p.status === 'confirmed' ? t('admin.orders.paymentConfirmed') : t('admin.orders.paymentFailed')}</span>
+                  <span class:list={['font-semibold', p.status === 'failed' ? 'text-red-700' : p.status === 'refunded' ? 'text-amber-800' : 'text-emerald-700']}>{t(`admin.orders.payment_${p.status}`)}</span>
                   {' · '}{t(`admin.orders.${p.method}`)}{p.source_type && ` (${p.source_type})`}
                   {p.provider_ref && <span class="font-mono text-xs text-muted"> {p.provider_ref}</span>}
                   {p.reference && <span class="text-muted"> · {t('admin.orders.reference')} {p.reference}</span>}
                   {p.failure_message && <span class="block text-xs text-muted">{p.failure_code}: {p.failure_message}</span>}
                 </span>
                 <span class="text-muted">{money(p.amount)} · {formatDate(p.created_at, 'es')}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section class="card p-6" aria-labelledby="invoices-title">
+        <h2 id="invoices-title" class="text-lg font-semibold">{t('admin.invoices.title')}</h2>
+        {invoices.length === 0 ? <p class="mt-2 text-sm text-muted">{t('admin.invoices.none')}</p> : (
+          <ul class="mt-3 divide-y divide-line text-sm" role="list">
+            {invoices.map((inv) => (
+              <li class="flex flex-wrap items-center justify-between gap-2 py-2">
+                <span>
+                  <strong>{inv.name}</strong> · <span class:list={[inv.status === 'accepted' ? 'text-emerald-700' : inv.status === 'rejected' ? 'text-red-700' : 'text-amber-800']}>{t(`admin.invoices.status_${inv.status}`)}</span>
+                  {inv.sunat_description && <span class="block text-xs text-muted">{inv.sunat_description}</span>}
+                  {inv.last_error && <span class="block text-xs text-red-700">{inv.last_error}</span>}
+                </span>
+                <span class="flex items-center gap-3">
+                  {inv.pdf_url && <a href={inv.pdf_url} target="_blank" rel="noopener noreferrer" class="font-medium text-brand-700 hover:underline">PDF</a>}
+                  {inv.xml_url && <a href={inv.xml_url} target="_blank" rel="noopener noreferrer" class="font-medium text-brand-700 hover:underline">XML</a>}
+                  {inv.status === 'rejected' && (
+                    <form method="post"><input type="hidden" name="intent" value="retry_invoice" /><input type="hidden" name="invoice" value={inv.id} /><button class="btn-secondary">{t('admin.invoices.retry')}</button></form>
+                  )}
+                </span>
               </li>
             ))}
           </ul>

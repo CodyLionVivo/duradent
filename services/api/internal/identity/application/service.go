@@ -37,6 +37,10 @@ type Service struct {
 	admins    map[string]bool
 	devLogin  bool
 	now       func() time.Time
+	verifs    ports.VerificationRepository
+	mailer    ports.VerificationMailer
+	uow       ports.UnitOfWork
+	events    ports.Events
 
 	// dummyHash is verified against when an email is unknown, so a failed
 	// login takes the same time whether or not the account exists.
@@ -52,6 +56,11 @@ type Deps struct {
 	Hasher    ports.PasswordHasher
 	Providers map[domain.Provider]ports.OIDCProvider
 	Now       func() time.Time
+
+	Verifications ports.VerificationRepository
+	Mailer        ports.VerificationMailer
+	UoW           ports.UnitOfWork
+	Events        ports.Events
 }
 
 func NewService(d Deps, cfg Config) (*Service, error) {
@@ -72,6 +81,7 @@ func NewService(d Deps, cfg Config) (*Service, error) {
 		accounts: d.Accounts, customers: d.Customers, addresses: d.Addresses, sessions: d.Sessions,
 		states: d.States, hasher: d.Hasher, providers: d.Providers, admins: admins,
 		devLogin: cfg.DevLogin, now: d.Now, dummyHash: dummy,
+		verifs: d.Verifications, mailer: d.Mailer, uow: d.UoW, events: d.Events,
 	}, nil
 }
 
@@ -120,8 +130,8 @@ type RegisterInput struct {
 }
 
 // Register creates a password account. Its email stays unverified until the
-// owner proves it (email confirmation arrives with notifications, phase 5),
-// so it never grants admin and a verified provider sign-in can reclaim it.
+// owner opens the emailed link, so it never grants admin and a verified
+// provider sign-in can reclaim it.
 func (s *Service) Register(ctx context.Context, in RegisterInput, c Client) (SignedIn, error) {
 	a, err := domain.NewAccount(in.Email, in.Name, false, in.Locale, s.now())
 	if err != nil {
@@ -133,9 +143,10 @@ func (s *Service) Register(ctx context.Context, in RegisterInput, c Client) (Sig
 	if a.PasswordHash, err = s.hasher.Hash(in.Password); err != nil {
 		return SignedIn{}, err
 	}
-	if err := s.accounts.Create(ctx, a, nil); err != nil {
+	if err := s.create(ctx, a, nil); err != nil {
 		return SignedIn{}, err
 	}
+	s.sendVerification(ctx, a)
 	return s.startSession(ctx, a, c)
 }
 
@@ -296,8 +307,11 @@ func (s *Service) signInWithClaims(ctx context.Context, p domain.Provider, cl po
 			if a, err = domain.NewAccount(email, cl.Name, cl.EmailVerified, "", now); err != nil {
 				return SignedIn{}, err
 			}
-			if err := s.accounts.Create(ctx, a, &ident); err != nil {
+			if err := s.create(ctx, a, &ident); err != nil {
 				return SignedIn{}, err
+			}
+			if !a.EmailVerified {
+				s.sendVerification(ctx, a)
 			}
 		}
 	}
@@ -545,4 +559,91 @@ func (s *Service) AssignPriceList(ctx context.Context, accountID id.ID, code str
 	}
 	c.AssignPriceList(code, s.now())
 	return s.customers.Save(ctx, c)
+}
+
+// --- Registration events and email verification -----------------------------------------
+
+const (
+	verificationTTL = 24 * time.Hour
+	// maxVerificationsPerHour throttles "resend" so the endpoint cannot be
+	// used to flood a mailbox.
+	maxVerificationsPerHour = 3
+)
+
+// create stores a new account and its CustomerRegistered event atomically.
+func (s *Service) create(ctx context.Context, a *domain.Account, ident *domain.Identity) error {
+	return s.uow.InTx(ctx, func(ctx context.Context) error {
+		if err := s.accounts.Create(ctx, a, ident); err != nil {
+			return err
+		}
+		return s.events.Record(ctx, "account", a.ID, "CustomerRegistered", map[string]any{
+			"account_id": a.ID, "email": a.Email, "locale": a.Locale, "email_verified": a.EmailVerified,
+		}, s.now())
+	})
+}
+
+// sendVerification emails a confirmation link. A failure is logged by the
+// mailer and does not fail the sign-up: the customer can ask for a new link.
+func (s *Service) sendVerification(ctx context.Context, a *domain.Account) {
+	_ = s.issueVerification(ctx, a)
+}
+
+func (s *Service) issueVerification(ctx context.Context, a *domain.Account) error {
+	now := s.now()
+	n, err := s.verifs.Recent(ctx, a.ID, now.Add(-time.Hour))
+	if err != nil {
+		return err
+	}
+	if n >= maxVerificationsPerHour {
+		return apperr.Conflict("identity.verification_throttled", "", "we already sent several links; check your inbox or try again later")
+	}
+	b := make([]byte, 32)
+	_, _ = rand.Read(b)
+	token := base64.RawURLEncoding.EncodeToString(b)
+	if err := s.verifs.Create(ctx, ports.Verification{
+		TokenHash: domain.HashToken(token), AccountID: a.ID, Email: a.Email, ExpiresAt: now.Add(verificationTTL), CreatedAt: now,
+	}); err != nil {
+		return err
+	}
+	return s.mailer.SendVerification(ctx, a.Email, a.DisplayName, a.Locale, token)
+}
+
+// ResendVerification sends a new link to a signed-in customer.
+func (s *Service) ResendVerification(ctx context.Context, accountID id.ID) error {
+	a, err := s.accounts.ByID(ctx, accountID)
+	if err != nil {
+		return err
+	}
+	if a.EmailVerified {
+		return apperr.Conflict("identity.already_verified", "", "your email is already confirmed")
+	}
+	return s.issueVerification(ctx, a)
+}
+
+// VerifyEmail consumes a link token and confirms the account's email.
+func (s *Service) VerifyEmail(ctx context.Context, token string) error {
+	invalid := apperr.Invalid("identity.verification_invalid", "token", "this link is invalid or has expired")
+	if token == "" || len(token) > 100 {
+		return invalid
+	}
+	v, err := s.verifs.Take(ctx, domain.HashToken(token))
+	if apperr.IsKind(err, apperr.KindNotFound) {
+		return invalid
+	}
+	if err != nil {
+		return err
+	}
+	now := s.now()
+	if !now.Before(v.ExpiresAt) {
+		return invalid
+	}
+	a, err := s.accounts.ByID(ctx, v.AccountID)
+	if err != nil {
+		return err
+	}
+	if err := a.ConfirmEmail(v.Email, now); err != nil {
+		return err
+	}
+	a.PromoteIfListed(s.admins, now)
+	return s.accounts.Update(ctx, a)
 }

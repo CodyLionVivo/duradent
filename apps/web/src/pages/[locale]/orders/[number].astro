@@ -47,6 +47,11 @@ let config: { gateway: string; culqi_public_key: string; bank_details: string; y
 if (order?.status === 'pending_payment') {
   config = (await api.GET('/v1/payments/config')).data ?? null;
 }
+// Electronic documents appear once the worker has issued them.
+const invoiced = !!order && (order.paid_at !== null || order.refunded_at !== null);
+const invoices = invoiced
+  ? ((await api.GET('/v1/orders/{number}/invoices', { params: { path: { number } } })).data?.items ?? [])
+  : [];
 const cur = (order?.currency ?? 'PEN') as Currency;
 const money = (v: string) => formatMoney(v, cur, locale);
 const date = (v: string) => formatDate(v, locale);
@@ -121,6 +126,12 @@ const ship = order?.shipping;
               </section>
             )}
 
+            {order.refunded_at && (
+              <p role="status" class="card border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+                {t('orders.refunded', { date: date(order.refunded_at), amount: money(order.total) })}
+              </p>
+            )}
+
             {order.tracking && <p class="card p-4 text-sm">{t('orders.tracking', { carrier: order.carrier, tracking: order.tracking })}</p>}
 
             <section class="card overflow-x-auto" aria-labelledby="items-title">
@@ -174,6 +185,23 @@ const ship = order?.shipping;
               </p>
               {order.notes && <><h2 class="mt-4 font-semibold">{t('orders.notes')}</h2><p class="mt-1 text-muted">{order.notes}</p></>}
             </section>
+            {invoiced && (
+              <section class="card p-6 text-sm" aria-labelledby="invoices-title">
+                <h2 id="invoices-title" class="font-semibold">{t('orders.invoices')}</h2>
+                {invoices.length === 0 ? (
+                  <p class="mt-1 text-muted">{t('orders.invoicesPending')}</p>
+                ) : (
+                  <ul class="mt-2 space-y-2">
+                    {invoices.map((inv) => (
+                      <li class="flex items-center justify-between gap-3">
+                        <span>{inv.name}</span>
+                        {inv.pdf_url && <a href={inv.pdf_url} target="_blank" rel="noopener noreferrer" class="font-medium text-brand-700 hover:underline">{t('orders.downloadPdf')}</a>}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+            )}
             {order.status === 'pending_payment' && !order.payment_in_progress && (
               <form method="post" data-confirm={t('orders.cancelConfirm')}>
                 <input type="hidden" name="intent" value="cancel" />

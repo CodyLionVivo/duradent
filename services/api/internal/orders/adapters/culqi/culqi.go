@@ -191,6 +191,29 @@ func (c *Client) GetCharge(ctx context.Context, chargeID string) (ports.Charge, 
 	return ch.toPort(), nil
 }
 
+// Refund creates a refund (POST /v2/refunds). Culqi needs a reason from a
+// fixed list; ours are always requested by the customer or by Duradent.
+func (c *Client) Refund(ctx context.Context, r ports.RefundRequest) (string, error) {
+	status, raw, err := c.do(ctx, http.MethodPost, "/refunds", map[string]any{
+		"amount": r.AmountMinor, "charge_id": r.ChargeID, "reason": "solicitud_comprador",
+	})
+	if err != nil {
+		return "", err
+	}
+	if status < 200 || status >= 300 {
+		var e culqiError
+		_ = json.Unmarshal(raw, &e)
+		return "", fmt.Errorf("culqi refund %s: status %d %s", r.ChargeID, status, firstNonEmpty(e.MerchantMsg, e.UserMessage, e.Code))
+	}
+	var out struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(raw, &out); err != nil || out.ID == "" {
+		return "", fmt.Errorf("culqi refund response: %w", err)
+	}
+	return out.ID, nil
+}
+
 func truncate(s string, n int) string {
 	if len(s) <= n {
 		return s

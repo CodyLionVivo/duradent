@@ -134,7 +134,7 @@ func (r *Carts) Delete(ctx context.Context, cartID id.ID) error {
 
 const orderCols = `id, number, account_id, email, status, payment_method, currency, subtotal, shipping_amount, tax_amount, total,
 	billing, shipping, notes, payment_deadline, charging_until, carrier, tracking, cancel_reason,
-	created_at, updated_at, paid_at, shipped_at, delivered_at, cancelled_at`
+	created_at, updated_at, paid_at, shipped_at, delivered_at, cancelled_at, refunded_at, refund_ref`
 
 type scanner interface{ Scan(dest ...any) error }
 
@@ -142,10 +142,10 @@ func scanOrder(s scanner) (*domain.Order, error) {
 	o := &domain.Order{}
 	var cur, sub, ship, tax, total string
 	var billing, shipping []byte
-	var charging, paid, shipped, delivered, cancelled sql.NullTime
+	var charging, paid, shipped, delivered, cancelled, refunded sql.NullTime
 	if err := s.Scan(&o.ID, &o.Number, &o.AccountID, &o.Email, &o.Status, &o.Method, &cur, &sub, &ship, &tax, &total,
 		&billing, &shipping, &o.Notes, &o.PaymentDeadline, &charging, &o.Carrier, &o.Tracking, &o.CancelReason,
-		&o.CreatedAt, &o.UpdatedAt, &paid, &shipped, &delivered, &cancelled); err != nil {
+		&o.CreatedAt, &o.UpdatedAt, &paid, &shipped, &delivered, &cancelled, &refunded, &o.RefundRef); err != nil {
 		return nil, err
 	}
 	o.Currency = money.Currency(cur)
@@ -172,6 +172,7 @@ func scanOrder(s scanner) (*domain.Order, error) {
 		return &v
 	}
 	o.ChargingUntil, o.PaidAt, o.ShippedAt, o.DeliveredAt, o.CancelledAt = ptr(charging), ptr(paid), ptr(shipped), ptr(delivered), ptr(cancelled)
+	o.RefundedAt = ptr(refunded)
 	return o, nil
 }
 
@@ -186,11 +187,11 @@ func (r *Orders) Create(ctx context.Context, o *domain.Order) error {
 	q := mysql.Conn(ctx, r.db)
 	billing, _ := json.Marshal(o.Billing)
 	shipping, _ := json.Marshal(o.Shipping)
-	if _, err := q.ExecContext(ctx, "INSERT INTO orders ("+orderCols+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+	if _, err := q.ExecContext(ctx, "INSERT INTO orders ("+orderCols+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		o.ID, o.Number, o.AccountID, o.Email, o.Status, o.Method, string(o.Currency), o.Subtotal.Decimal(), o.ShippingAmount.Decimal(),
 		o.Tax.Decimal(), o.Total.Decimal(), billing, shipping, o.Notes, o.PaymentDeadline, nullTime(o.ChargingUntil),
 		o.Carrier, o.Tracking, o.CancelReason, o.CreatedAt, o.UpdatedAt,
-		nullTime(o.PaidAt), nullTime(o.ShippedAt), nullTime(o.DeliveredAt), nullTime(o.CancelledAt)); err != nil {
+		nullTime(o.PaidAt), nullTime(o.ShippedAt), nullTime(o.DeliveredAt), nullTime(o.CancelledAt), nullTime(o.RefundedAt), o.RefundRef); err != nil {
 		return err
 	}
 	for i, l := range o.Lines {
@@ -223,9 +224,9 @@ func truncate(s string, n int) string {
 func (r *Orders) Update(ctx context.Context, o *domain.Order) error {
 	q := mysql.Conn(ctx, r.db)
 	if _, err := q.ExecContext(ctx, `UPDATE orders SET status = ?, charging_until = ?, carrier = ?, tracking = ?, cancel_reason = ?,
-		updated_at = ?, paid_at = ?, shipped_at = ?, delivered_at = ?, cancelled_at = ? WHERE id = ?`,
+		updated_at = ?, paid_at = ?, shipped_at = ?, delivered_at = ?, cancelled_at = ?, refunded_at = ?, refund_ref = ? WHERE id = ?`,
 		o.Status, nullTime(o.ChargingUntil), o.Carrier, o.Tracking, o.CancelReason, o.UpdatedAt,
-		nullTime(o.PaidAt), nullTime(o.ShippedAt), nullTime(o.DeliveredAt), nullTime(o.CancelledAt), o.ID); err != nil {
+		nullTime(o.PaidAt), nullTime(o.ShippedAt), nullTime(o.DeliveredAt), nullTime(o.CancelledAt), nullTime(o.RefundedAt), o.RefundRef, o.ID); err != nil {
 		return err
 	}
 	return r.appendHistory(ctx, q, o)

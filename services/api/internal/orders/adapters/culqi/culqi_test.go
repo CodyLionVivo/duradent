@@ -126,3 +126,27 @@ func TestWebhookChargeID(t *testing.T) {
 		t.Error("invalid body must fail")
 	}
 }
+
+func TestRefund(t *testing.T) {
+	var sent map[string]any
+	c := fakeCulqi(t, func(w http.ResponseWriter, body map[string]any) {
+		sent = body
+		if body["charge_id"] == "chr_gone" {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"object":"error","type":"invalid_request_error","merchant_message":"cargo ya devuelto"}`))
+			return
+		}
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"object":"refund","id":"ref_live_1","charge_id":"chr_1","amount":21240,"reason":"solicitud_comprador"}`))
+	})
+	ref, err := c.Refund(t.Context(), ports.RefundRequest{ChargeID: "chr_1", AmountMinor: 21240})
+	if err != nil || ref != "ref_live_1" {
+		t.Fatalf("%q %v", ref, err)
+	}
+	if sent["amount"].(float64) != 21240 || sent["reason"] != "solicitud_comprador" {
+		t.Fatalf("body %+v", sent)
+	}
+	if _, err := c.Refund(t.Context(), ports.RefundRequest{ChargeID: "chr_gone", AmountMinor: 1}); err == nil || !strings.Contains(err.Error(), "cargo ya devuelto") {
+		t.Fatalf("error: %v", err)
+	}
+}

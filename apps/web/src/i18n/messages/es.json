@@ -316,11 +316,17 @@
       "cancel": "Cancelar pedido",
       "cancelReason": "Motivo",
       "noPayments": "Sin intentos de pago.",
-      "paymentFailed": "Rechazado",
-      "paymentConfirmed": "Confirmado",
       "deadline": "Plazo de pago",
       "actions": "Acciones",
-      "all": "Todos"
+      "all": "Todos",
+      "payment_confirmed": "Confirmado",
+      "payment_failed": "Rechazado",
+      "payment_refunded": "Reembolsado",
+      "refund": "Reembolsar y cancelar",
+      "refundReason": "Motivo del reembolso",
+      "refundReference": "N.º de operación de la devolución",
+      "refundConfirm": "¿Reembolsar {amount} y cancelar el pedido? El stock vuelve al inventario y se emite una nota de crédito.",
+      "refundedOn": "Reembolsado el {date} · {ref}"
     },
     "inventory": {
       "title": "Inventario",
@@ -339,6 +345,14 @@
       "return": "Devolución",
       "save": "Guardar",
       "variant": "Variante"
+    },
+    "invoices": {
+      "title": "Comprobantes electrónicos",
+      "none": "Aún no hay comprobantes.",
+      "retry": "Reintentar",
+      "status_pending": "Pendiente",
+      "status_accepted": "Emitido",
+      "status_rejected": "Rechazado"
     }
   },
   "account": {
@@ -432,6 +446,17 @@
       "generic": "No pudimos completar la acción. Inténtalo de nuevo.",
       "stateMismatch": "El inicio de sesión expiró o se abrió en otra ventana. Inténtalo de nuevo.",
       "cancelled": "Cancelaste el inicio de sesión."
+    },
+    "verify": {
+      "title": "Confirmación de correo",
+      "success": "¡Listo! Tu correo quedó confirmado.",
+      "invalid": "Este enlace no es válido o ya venció. Pide uno nuevo desde tu cuenta.",
+      "pending": "Confirma tu correo: te enviamos un enlace a {email}.",
+      "resend": "Reenviar enlace",
+      "resent": "Te enviamos un nuevo enlace. Revisa tu bandeja de entrada.",
+      "goAccount": "Ir a mi cuenta",
+      "confirm": "Confirmar mi correo",
+      "hint": "Pulsa el botón para confirmar que este correo es tuyo."
     }
   },
   "codes": {
@@ -466,7 +491,11 @@
       "too_many_addresses": "Puedes guardar hasta 10 direcciones.",
       "address_not_found": "No encontramos esa dirección.",
       "password_current_wrong": "La contraseña actual no es correcta.",
-      "locale_invalid": "Idioma no disponible."
+      "locale_invalid": "Idioma no disponible.",
+      "verification_invalid": "Este enlace no es válido o ya venció.",
+      "verification_stale": "Este enlace se envió a otro correo.",
+      "verification_throttled": "Ya te enviamos varios enlaces. Revisa tu bandeja o inténtalo en una hora.",
+      "already_verified": "Tu correo ya está confirmado."
     },
     "http": {
       "rate_limited": "Demasiados intentos. Espera un minuto e inténtalo de nuevo."
@@ -587,7 +616,11 @@
     "simulateDeclined": "Tarjeta rechazada",
     "simulateYape": "Pago con Yape",
     "culqiMissing": "Los pagos en línea no están disponibles en este momento.",
-    "view": "Ver pedido"
+    "view": "Ver pedido",
+    "refunded": "Reembolsamos {amount} el {date}. Según tu banco, puede tardar unos días en verse reflejado.",
+    "invoices": "Comprobantes electrónicos",
+    "invoicesPending": "Estamos emitiendo tu comprobante; aparecerá aquí en unos minutos.",
+    "downloadPdf": "Descargar PDF"
   },
   "status": {
     "pending_payment": "Pendiente de pago",

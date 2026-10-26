@@ -126,6 +126,8 @@ type Order struct {
 	ShippedAt       *time.Time
 	DeliveredAt     *time.Time
 	CancelledAt     *time.Time
+	RefundedAt      *time.Time
+	RefundRef       string         // Culqi refund id or bank operation number
 	History         []StatusChange // changes made in this unit of work (to persist)
 }
 
@@ -270,7 +272,7 @@ func (o *Order) Deliver(actor string, now time.Time) error {
 	return nil
 }
 
-// Cancel applies to unpaid orders. Refunds of paid orders come with phase 5.
+// Cancel applies to unpaid orders; paid ones are refunded (Refund).
 func (o *Order) Cancel(reason, actor string, now time.Time) error {
 	if o.Status == StatusCancelled {
 		return nil
@@ -304,6 +306,7 @@ type PaymentStatus string
 const (
 	PaymentConfirmed PaymentStatus = "confirmed"
 	PaymentFailed    PaymentStatus = "failed"
+	PaymentRefunded  PaymentStatus = "refunded"
 )
 
 // Payment records every attempt to settle an order.
@@ -320,4 +323,42 @@ type Payment struct {
 	Reference      string // bank transfer operation number
 	ConfirmedBy    id.ID  // admin who confirmed a transfer
 	CreatedAt      time.Time
+}
+
+// CanRefund reports whether money can be returned: the order was paid and not
+// shipped yet, or a payment arrived after the order was cancelled.
+func (o *Order) CanRefund(paid bool) error {
+	if !paid {
+		return apperr.Conflict("orders.not_refundable", "status", "there is no confirmed payment to refund")
+	}
+	if o.RefundedAt != nil {
+		return apperr.Conflict("orders.already_refunded", "status", "this order was already refunded")
+	}
+	switch o.Status {
+	case StatusPaid, StatusPreparing, StatusCancelled:
+		return nil
+	case StatusPendingPayment, StatusShipped, StatusDelivered:
+	}
+	return apperr.Conflict("orders.not_refundable", "status", "only paid orders that have not shipped can be refunded")
+}
+
+// Refund cancels a paid order and records the refund reference. The caller
+// checked CanRefund with the order's payments first.
+func (o *Order) Refund(reason, ref, actor string, now time.Time) error {
+	if err := o.CanRefund(true); err != nil {
+		return err
+	}
+	reason = strings.TrimSpace(reason)
+	if utf8.RuneCountInString(reason) > 200 {
+		reason = string([]rune(reason)[:200])
+	}
+	if o.Status != StatusCancelled {
+		o.CancelReason = reason
+		o.CancelledAt = &now
+		o.transition(StatusCancelled, actor, "refund "+ref, now)
+	}
+	o.RefundedAt = &now
+	o.RefundRef = ref
+	o.UpdatedAt = now
+	return nil
 }

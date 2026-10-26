@@ -571,6 +571,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/auth/verify-email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confirm an email with the token from the emailed link */
+        post: operations["verifyEmail"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/me/verify-email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Email a new confirmation link (at most 3 per hour) */
+        post: operations["resendVerification"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/me": {
         parameters: {
             query?: never;
@@ -1130,6 +1164,102 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/orders/{id}/refund": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel a paid, unshipped order and return the money
+         * @description Culqi payments are refunded through Culqi. Bank transfers are returned by hand;
+         *     send the operation number of the return transfer as reference. Stock goes back
+         *     on hand and OrderRefunded triggers the credit note and the customer email.
+         */
+        post: operations["adminRefundOrder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/orders/{number}/invoices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                number: string;
+            };
+            cookie?: never;
+        };
+        /** Accepted electronic documents (factura, boleta, credit note) of one of my orders */
+        get: operations["myOrderInvoices"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/orders/{id}/invoices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get: operations["adminOrderInvoices"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/invoices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["adminListInvoices"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/invoices/{id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Send a rejected document to the OSE again (same series and number) */
+        post: operations["adminRetryInvoice"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/orders/{id}/cancel": {
         parameters: {
             query?: never;
@@ -1218,6 +1348,36 @@ export interface components {
         };
         /** @enum {string} */
         OrderStatus: "pending_payment" | "paid" | "preparing" | "shipped" | "delivered" | "cancelled";
+        /** @enum {string} */
+        InvoiceStatus: "pending" | "accepted" | "rejected";
+        /** @description SUNAT electronic document issued through the OSE (Nubefact). */
+        Invoice: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            order_id: string;
+            order_number: string;
+            /** @enum {string} */
+            type: "factura" | "boleta" | "nota_credito";
+            /** @example Factura F001-123 */
+            name: string;
+            /** @example F001 */
+            series: string;
+            number: number;
+            currency: components["schemas"]["Currency"];
+            total: components["schemas"]["Decimal"];
+            status: components["schemas"]["InvoiceStatus"];
+            sunat_description: string;
+            pdf_url: string;
+            xml_url: string;
+            cdr_url: string;
+            /** @description Admin only */
+            last_error?: string;
+            /** @description Admin only */
+            attempts?: number;
+            /** Format: date-time */
+            created_at: string;
+        };
         OrderBilling: {
             customer_type: string;
             document_type: string;
@@ -1281,6 +1441,10 @@ export interface components {
             delivered_at: string | null;
             /** Format: date-time */
             cancelled_at: string | null;
+            /** Format: date-time */
+            refunded_at: string | null;
+            /** @description Culqi refund id or bank operation number */
+            refund_ref: string;
         };
         OrderPage: {
             items: components["schemas"]["Order"][];
@@ -1294,7 +1458,7 @@ export interface components {
             /** @enum {string} */
             method: "culqi" | "bank_transfer";
             /** @enum {string} */
-            status: "confirmed" | "failed";
+            status: "confirmed" | "failed" | "refunded";
             amount: components["schemas"]["Decimal"];
             currency: components["schemas"]["Currency"];
             provider_ref: string;
@@ -1550,6 +1714,17 @@ export interface components {
         };
     };
     responses: {
+        /** @description Electronic documents of an order */
+        InvoiceList: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": {
+                    items: components["schemas"]["Invoice"][];
+                };
+            };
+        };
         /** @description The cart */
         Cart: {
             headers: {
@@ -2510,6 +2685,58 @@ export interface operations {
             };
         };
     };
+    verifyEmail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    token: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Email confirmed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            /** @description Too many attempts */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    resendVerification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Link sent */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            409: components["responses"]["Problem"];
+        };
+    };
     getMe: {
         parameters: {
             query?: never;
@@ -3340,6 +3567,111 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["Order"];
+            409: components["responses"]["Problem"];
+        };
+    };
+    adminRefundOrder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    reason: string;
+                    /** @description Bank operation number (transfers only) */
+                    reference?: string;
+                };
+            };
+        };
+        responses: {
+            200: components["responses"]["Order"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+        };
+    };
+    myOrderInvoices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                number: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["InvoiceList"];
+            404: components["responses"]["Problem"];
+        };
+    };
+    adminOrderInvoices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["InvoiceList"];
+        };
+    };
+    adminListInvoices: {
+        parameters: {
+            query?: {
+                page?: components["parameters"]["Page"];
+                status?: components["schemas"]["InvoiceStatus"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Documents, newest first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["Invoice"][];
+                        total: number;
+                        page: number;
+                        page_size: number;
+                    };
+                };
+            };
+        };
+    };
+    adminRetryInvoice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The document after the attempt */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Invoice"];
+                };
+            };
+            404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
         };
     };

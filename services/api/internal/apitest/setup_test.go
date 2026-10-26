@@ -1,6 +1,6 @@
 // Package apitest drives the real HTTP API (handlers, services, MySQL) end to
 // end, wired by internal/wiring exactly as cmd/duradent does. Only object
-// storage and Culqi are faked, and Google is an in-process OIDC provider.
+// storage, Culqi, email and Nubefact are faked, and Google is an in-process OIDC provider.
 package apitest
 
 import (
@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -20,6 +21,9 @@ import (
 	"github.com/CodyLionVivo/duradent/services/api/internal/identity/adapters/oidc/oidctest"
 	identitydomain "github.com/CodyLionVivo/duradent/services/api/internal/identity/domain"
 	identityports "github.com/CodyLionVivo/duradent/services/api/internal/identity/ports"
+	"github.com/CodyLionVivo/duradent/services/api/internal/invoicing/adapters/nubefact"
+	invoicingdomain "github.com/CodyLionVivo/duradent/services/api/internal/invoicing/domain"
+	notifdomain "github.com/CodyLionVivo/duradent/services/api/internal/notifications/domain"
 	"github.com/CodyLionVivo/duradent/services/api/internal/orders/adapters/fakegateway"
 	"github.com/CodyLionVivo/duradent/services/api/internal/platform/httpserver"
 	"github.com/CodyLionVivo/duradent/services/api/internal/platform/mysql"
@@ -35,6 +39,25 @@ const (
 	webhookSecret = "test-webhook-secret-0123456789"
 )
 
+// inbox keeps every email the API sends.
+type inbox struct {
+	mu   sync.Mutex
+	msgs []notifdomain.Message
+}
+
+func (b *inbox) Send(_ context.Context, m notifdomain.Message) (string, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.msgs = append(b.msgs, m)
+	return "test-" + m.To, nil
+}
+
+func (b *inbox) all() []notifdomain.Message {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return append([]notifdomain.Message(nil), b.msgs...)
+}
+
 type fakeMedia struct{}
 
 func (fakeMedia) PresignUpload(_ context.Context, key, _ string, _ time.Duration) (ports.Upload, error) {
@@ -46,6 +69,8 @@ type server struct {
 	client
 	google  *oidctest.Server
 	gateway *fakegateway.Gateway
+	mail    *inbox
+	ose     *nubefact.Fake
 	app     *wiring.App
 	db      *sql.DB
 }
@@ -89,9 +114,13 @@ func newServer(t *testing.T) server {
 		t.Fatal(err)
 	}
 	gateway := fakegateway.New()
+	mail, ose := &inbox{}, nubefact.NewFake()
 	app, err := wiring.Build(wiring.Options{
 		DB: db, Log: log, Media: fakeMedia{}, Gateway: gateway, AdminEmails: []string{adminEmail},
-		Providers: map[identitydomain.Provider]identityports.OIDCProvider{identitydomain.ProviderGoogle: gp},
+		Mailer: mail, OSE: ose, WebBaseURL: webBaseURL, BankDetails: "BCP 191-0000000-0-00", OpsEmails: []string{adminEmail},
+		InvoiceSeries:   invoicingdomain.Series{Factura: "F001", Boleta: "B001", CreditNoteF: "FC01", CreditNoteB: "BC01"},
+		USDExchangeRate: "3.750",
+		Providers:       map[identitydomain.Provider]identityports.OIDCProvider{identitydomain.ProviderGoogle: gp},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -101,7 +130,7 @@ func newServer(t *testing.T) server {
 	})
 	srv := httptest.NewServer(httpserver.Observe(log, h))
 	t.Cleanup(srv.Close)
-	return server{client: client{t: t, srv: srv}, google: google, gateway: gateway, app: app, db: db}
+	return server{client: client{t: t, srv: srv}, google: google, gateway: gateway, mail: mail, ose: ose, app: app, db: db}
 }
 
 // do sends a request and decodes the JSON response into out (if not nil).

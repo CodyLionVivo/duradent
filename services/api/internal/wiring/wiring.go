@@ -23,7 +23,15 @@ import (
 	inventoryhttp "github.com/CodyLionVivo/duradent/services/api/internal/inventory/adapters/http"
 	inventorymysql "github.com/CodyLionVivo/duradent/services/api/internal/inventory/adapters/mysql"
 	inventoryapp "github.com/CodyLionVivo/duradent/services/api/internal/inventory/application"
+	invoicinghttp "github.com/CodyLionVivo/duradent/services/api/internal/invoicing/adapters/http"
+	invoicingmysql "github.com/CodyLionVivo/duradent/services/api/internal/invoicing/adapters/mysql"
+	invoicingapp "github.com/CodyLionVivo/duradent/services/api/internal/invoicing/application"
+	invoicingdomain "github.com/CodyLionVivo/duradent/services/api/internal/invoicing/domain"
+	invoicingports "github.com/CodyLionVivo/duradent/services/api/internal/invoicing/ports"
 	"github.com/CodyLionVivo/duradent/services/api/internal/kernel/apperr"
+	notifmysql "github.com/CodyLionVivo/duradent/services/api/internal/notifications/adapters/mysql"
+	notifapp "github.com/CodyLionVivo/duradent/services/api/internal/notifications/application"
+	notifports "github.com/CodyLionVivo/duradent/services/api/internal/notifications/ports"
 	ordershttp "github.com/CodyLionVivo/duradent/services/api/internal/orders/adapters/http"
 	ordersmysql "github.com/CodyLionVivo/duradent/services/api/internal/orders/adapters/mysql"
 	ordersapp "github.com/CodyLionVivo/duradent/services/api/internal/orders/application"
@@ -46,10 +54,18 @@ type Options struct {
 	Media     catalogports.MediaStorage
 	Providers map[identitydomain.Provider]identityports.OIDCProvider
 	Gateway   ordersports.PaymentGateway
+	Mailer    notifports.Mailer
+	OSE       invoicingports.Provider
 	Now       func() time.Time
 
 	AdminEmails []string
 	DevLogin    bool
+
+	WebBaseURL      string
+	BankDetails     string
+	OpsEmails       []string // receive stock and invoicing alerts
+	InvoiceSeries   invoicingdomain.Series
+	USDExchangeRate string
 }
 
 type App struct {
@@ -59,6 +75,8 @@ type App struct {
 	Inventory *inventoryapp.Service
 	Shipping  *shippingapp.Service
 	Orders    *ordersapp.Service
+	Notify    *notifapp.Service
+	Invoicing *invoicingapp.Service
 }
 
 func Build(o Options) (*App, error) {
@@ -75,12 +93,19 @@ func Build(o Options) (*App, error) {
 		Inventory: inventoryapp.NewService(inventorymysql.New(db), uow, events, o.Now),
 		Shipping:  shippingapp.NewService(shippingmysql.New(db)),
 	}
+	// Notifications reads orders and accounts lazily through bridges, so it
+	// can be built first and lend its mailer to identity.
+	a.Notify = notifapp.NewService(notifapp.Deps{
+		Orders: notifOrders{a}, Accounts: notifAccounts{a}, Mailer: o.Mailer, Log: notifmysql.New(db), Logger: o.Log, Now: o.Now,
+	}, notifapp.Config{WebBaseURL: o.WebBaseURL, BankDetails: o.BankDetails, OpsEmails: o.OpsEmails})
+
 	stores := identitymysql.New(db)
 	var err error
 	a.Identity, err = identityapp.NewService(identityapp.Deps{
 		Accounts: stores.Accounts, Customers: stores.Customers, Addresses: stores.Addresses,
 		Sessions: stores.Sessions, States: stores.LoginStates, Hasher: identityargon2.Hasher{},
 		Providers: o.Providers, Now: o.Now,
+		Verifications: stores.Verifications, Mailer: verificationMailer{a.Notify, o.Log}, UoW: uow, Events: events,
 	}, identityapp.Config{AdminEmails: o.AdminEmails, DevLogin: o.DevLogin})
 	if err != nil {
 		return nil, err
@@ -93,6 +118,13 @@ func Build(o Options) (*App, error) {
 		Shipping: shippingBridge{a.Shipping}, Customers: customersBridge{a.Identity},
 		Gateway: o.Gateway, Log: o.Log, Now: o.Now,
 	})
+	a.Invoicing, err = invoicingapp.NewService(invoicingapp.Deps{
+		Orders: invoicingOrders{a}, Invoices: invoicingmysql.New(db), Provider: o.OSE,
+		UoW: uow, Events: events, Log: o.Log, Now: o.Now,
+	}, invoicingapp.Config{Series: o.InvoiceSeries, USDExchangeRate: o.USDExchangeRate})
+	if err != nil {
+		return nil, err
+	}
 	return a, nil
 }
 
@@ -120,6 +152,7 @@ func (a *App) Handler(db *sql.DB, log *slog.Logger, o HTTPOptions) http.Handler 
 	ordershttp.Register(mux, a.Orders, log, ordershttp.Options{
 		Admin: admin, TrustProxy: o.TrustProxy, PublicKey: o.PublicKey, WebhookSecret: o.WebhookSecret, BankDetails: o.BankDetails,
 	})
+	invoicinghttp.Register(mux, a.Invoicing, log, admin)
 	return auth.Middleware(a.sessionResolver(), log, mux)
 }
 

@@ -29,6 +29,7 @@ const (
 	ReservationActive    ReservationStatus = "active"
 	ReservationConfirmed ReservationStatus = "confirmed"
 	ReservationReleased  ReservationStatus = "released"
+	ReservationReturned  ReservationStatus = "returned" // sold, then refunded and put back on the shelf
 )
 
 type Reservation struct {
@@ -89,6 +90,12 @@ func (s *StockItem) Reserve(qty int, now time.Time) error {
 func (s *StockItem) Commit(qty int, now time.Time) {
 	s.OnHand -= qty
 	s.Reserved -= qty
+	s.UpdatedAt = now
+}
+
+// Return puts sold units back on hand (refunded order).
+func (s *StockItem) Return(qty int, now time.Time) {
+	s.OnHand += qty
 	s.UpdatedAt = now
 }
 

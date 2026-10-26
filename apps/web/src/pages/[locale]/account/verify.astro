@@ -1,0 +1,43 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import { isLocale, localePath, useTranslations } from '../../../i18n';
+import { unwrap } from '../../../lib/api/client';
+
+if (!isLocale(Astro.params.locale)) return new Response(null, { status: 404 });
+
+const { locale, api } = Astro.locals;
+const t = useTranslations(locale);
+
+// The emailed link only opens this page; confirming takes a POST so mail
+// scanners that prefetch links do not consume the token.
+let token = Astro.url.searchParams.get('token') ?? '';
+let result: 'ok' | 'invalid' | null = null;
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  token = String(form.get('token') ?? '');
+  try {
+    unwrap(await api.POST('/v1/auth/verify-email', { body: { token } }));
+    result = 'ok';
+  } catch {
+    result = 'invalid';
+    Astro.response.status = 422;
+  }
+}
+if (!token && result === null) result = 'invalid';
+---
+
+<Layout title={t('account.verify.title')}>
+  <div class="container-page max-w-lg py-16">
+    <h1 class="text-3xl font-bold tracking-tight">{t('account.verify.title')}</h1>
+    {result === 'ok' && <p role="status" class="mt-6 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-900">{t('account.verify.success')}</p>}
+    {result === 'invalid' && <p role="alert" class="mt-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-800">{t('account.verify.invalid')}</p>}
+    {result === null && (
+      <form method="post" class="mt-6 space-y-4">
+        <p class="text-muted">{t('account.verify.hint')}</p>
+        <input type="hidden" name="token" value={token} />
+        <button class="btn-primary">{t('account.verify.confirm')}</button>
+      </form>
+    )}
+    {result !== null && <a href={localePath(locale, '/account')} class="btn-secondary mt-6 inline-flex">{t('account.verify.goAccount')}</a>}
+  </div>
+</Layout>

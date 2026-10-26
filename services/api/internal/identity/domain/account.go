@@ -179,3 +179,14 @@ func CheckPassword(password, email string) error {
 	}
 	return nil
 }
+
+// ConfirmEmail marks the email as proven. The link only counts for the email
+// it was sent to.
+func (a *Account) ConfirmEmail(email string, now time.Time) error {
+	if email != a.Email {
+		return apperr.Conflict("identity.verification_stale", "token", "this link was sent to a different email")
+	}
+	a.EmailVerified = true
+	a.UpdatedAt = now
+	return nil
+}

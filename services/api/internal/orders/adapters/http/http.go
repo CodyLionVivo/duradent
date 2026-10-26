@@ -68,6 +68,7 @@ func Register(mux *http.ServeMux, svc *application.Service, log *slog.Logger, op
 	a("POST /v1/admin/orders/{id}/ship", h.adminShip)
 	a("POST /v1/admin/orders/{id}/deliver", h.adminDeliver)
 	a("POST /v1/admin/orders/{id}/cancel", h.adminCancel)
+	a("POST /v1/admin/orders/{id}/refund", h.adminRefund)
 }
 
 func (h *Handler) fail(w http.ResponseWriter, r *http.Request, err error) {
@@ -178,6 +179,8 @@ type orderDTO struct {
 	ShippedAt       *time.Time           `json:"shipped_at"`
 	DeliveredAt     *time.Time           `json:"delivered_at"`
 	CancelledAt     *time.Time           `json:"cancelled_at"`
+	RefundedAt      *time.Time           `json:"refunded_at"`
+	RefundRef       string               `json:"refund_ref"`
 }
 
 func toOrder(o *domain.Order) orderDTO {
@@ -188,6 +191,7 @@ func toOrder(o *domain.Order) orderDTO {
 		PaymentDeadline: o.PaymentDeadline, PaymentPending: o.ChargingUntil != nil && time.Now().Before(*o.ChargingUntil),
 		Carrier: o.Carrier, Tracking: o.Tracking, CancelReason: o.CancelReason, CreatedAt: o.CreatedAt,
 		PaidAt: o.PaidAt, ShippedAt: o.ShippedAt, DeliveredAt: o.DeliveredAt, CancelledAt: o.CancelledAt,
+		RefundedAt: o.RefundedAt, RefundRef: o.RefundRef,
 	}
 	for _, l := range o.Lines {
 		out.Lines = append(out.Lines, orderLineDTO{VariantID: l.VariantID, SKU: l.SKU, Name: l.Name, Options: l.Options,
@@ -608,5 +612,19 @@ func (h *Handler) adminCancel(w http.ResponseWriter, r *http.Request) {
 	}
 	h.adminAction(w, r, func(oid id.ID) (*domain.Order, error) {
 		return h.svc.CancelByAdmin(r.Context(), adminID(r), oid, in.Reason)
+	})
+}
+
+func (h *Handler) adminRefund(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Reason    string `json:"reason"`
+		Reference string `json:"reference"`
+	}
+	if err := httpserver.Decode(w, r, &in); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	h.adminAction(w, r, func(oid id.ID) (*domain.Order, error) {
+		return h.svc.Refund(r.Context(), adminID(r), oid, in.Reason, in.Reference)
 	})
 }
