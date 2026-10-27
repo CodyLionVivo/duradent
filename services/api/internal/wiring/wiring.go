@@ -14,6 +14,10 @@ import (
 	catalogmysql "github.com/CodyLionVivo/duradent/services/api/internal/catalog/adapters/mysql"
 	catalogapp "github.com/CodyLionVivo/duradent/services/api/internal/catalog/application"
 	catalogports "github.com/CodyLionVivo/duradent/services/api/internal/catalog/ports"
+	complaintshttp "github.com/CodyLionVivo/duradent/services/api/internal/complaints/adapters/http"
+	complaintsmysql "github.com/CodyLionVivo/duradent/services/api/internal/complaints/adapters/mysql"
+	complaintsapp "github.com/CodyLionVivo/duradent/services/api/internal/complaints/application"
+	complaintsdomain "github.com/CodyLionVivo/duradent/services/api/internal/complaints/domain"
 	identityargon2 "github.com/CodyLionVivo/duradent/services/api/internal/identity/adapters/argon2"
 	identityhttp "github.com/CodyLionVivo/duradent/services/api/internal/identity/adapters/http"
 	identitymysql "github.com/CodyLionVivo/duradent/services/api/internal/identity/adapters/mysql"
@@ -61,22 +65,23 @@ type Options struct {
 	AdminEmails []string
 	DevLogin    bool
 
-	WebBaseURL      string
-	BankDetails     string
-	OpsEmails       []string // receive stock and invoicing alerts
-	InvoiceSeries   invoicingdomain.Series
-	USDExchangeRate string
+	WebBaseURL    string
+	BankDetails   string
+	OpsEmails     []string // receive stock, invoicing and complaints alerts
+	InvoiceSeries invoicingdomain.Series
+	Company       complaintsdomain.Provider // printed on every complaint sheet
 }
 
 type App struct {
-	Catalog   *catalogapp.Service
-	Pricing   *pricingapp.Service
-	Identity  *identityapp.Service
-	Inventory *inventoryapp.Service
-	Shipping  *shippingapp.Service
-	Orders    *ordersapp.Service
-	Notify    *notifapp.Service
-	Invoicing *invoicingapp.Service
+	Catalog    *catalogapp.Service
+	Pricing    *pricingapp.Service
+	Identity   *identityapp.Service
+	Inventory  *inventoryapp.Service
+	Shipping   *shippingapp.Service
+	Orders     *ordersapp.Service
+	Notify     *notifapp.Service
+	Invoicing  *invoicingapp.Service
+	Complaints *complaintsapp.Service
 }
 
 func Build(o Options) (*App, error) {
@@ -105,7 +110,8 @@ func Build(o Options) (*App, error) {
 		Accounts: stores.Accounts, Customers: stores.Customers, Addresses: stores.Addresses,
 		Sessions: stores.Sessions, States: stores.LoginStates, Hasher: identityargon2.Hasher{},
 		Providers: o.Providers, Now: o.Now,
-		Verifications: stores.Verifications, Mailer: verificationMailer{a.Notify, o.Log}, UoW: uow, Events: events,
+		Verifications: stores.Verifications, PasswordResets: stores.PasswordResets,
+		Mailer: accountMailer{a.Notify, o.Log}, UoW: uow, Events: events,
 	}, identityapp.Config{AdminEmails: o.AdminEmails, DevLogin: o.DevLogin})
 	if err != nil {
 		return nil, err
@@ -121,10 +127,13 @@ func Build(o Options) (*App, error) {
 	a.Invoicing, err = invoicingapp.NewService(invoicingapp.Deps{
 		Orders: invoicingOrders{a}, Invoices: invoicingmysql.New(db), Provider: o.OSE,
 		UoW: uow, Events: events, Log: o.Log, Now: o.Now,
-	}, invoicingapp.Config{Series: o.InvoiceSeries, USDExchangeRate: o.USDExchangeRate})
+	}, invoicingapp.Config{Series: o.InvoiceSeries})
 	if err != nil {
 		return nil, err
 	}
+	a.Complaints = complaintsapp.NewService(complaintsapp.Deps{
+		Complaints: complaintsmysql.New(db), UoW: uow, Events: events, Now: o.Now,
+	}, complaintsapp.Config{Provider: o.Company})
 	return a, nil
 }
 
@@ -153,6 +162,7 @@ func (a *App) Handler(db *sql.DB, log *slog.Logger, o HTTPOptions) http.Handler 
 		Admin: admin, TrustProxy: o.TrustProxy, PublicKey: o.PublicKey, WebhookSecret: o.WebhookSecret, BankDetails: o.BankDetails,
 	})
 	invoicinghttp.Register(mux, a.Invoicing, log, admin)
+	complaintshttp.Register(mux, a.Complaints, log, complaintshttp.Options{Admin: admin, TrustProxy: o.TrustProxy})
 	return auth.Middleware(a.sessionResolver(), log, mux)
 }
 

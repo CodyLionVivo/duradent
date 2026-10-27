@@ -33,9 +33,6 @@ type Deps struct {
 
 type Config struct {
 	Series domain.Series
-	// USDExchangeRate is the PEN/USD rate for USD documents (e.g. "3.750").
-	// SUNAT expects the SBS rate of the issue date; operations updates it.
-	USDExchangeRate string
 }
 
 type Service struct {
@@ -147,7 +144,7 @@ func (s *Service) ensure(ctx context.Context, sale domain.Sale, t domain.DocType
 }
 
 func (s *Service) submit(ctx context.Context, inv *domain.Invoice, sale domain.Sale, ref *domain.Invoice, reason string) error {
-	doc, err := domain.BuildDocument(inv, sale, ref, reason, s.cfg.USDExchangeRate, s.d.Now())
+	doc, err := domain.BuildDocument(inv, sale, ref, reason, s.d.Now())
 	if err != nil {
 		return s.finish(ctx, inv, domain.Result{}, err)
 	}

@@ -1,0 +1,250 @@
+---
+// Hero visual: the photo of the Duradent store (src/assets, enhanced from the
+// original) in a white frame that settles with a short zoom, three floating chips with what
+// the store offers, and an archwire accent that draws itself once.
+//
+// Performance: every looping animation moves only transform/opacity of HTML
+// elements (composited, no repaint), nothing uses blur filters, and the page
+// pauses them while the hero is off screen.
+import { Picture } from 'astro:assets';
+import store from '../assets/tienda-duradent.jpg';
+
+interface Props {
+  alt: string;
+  caption: string;
+  address: string;
+  chips: { label: string; icon: string }[];
+}
+
+const { alt, caption, address, chips } = Astro.props;
+
+// Brackets on the accent wire M10 20 Q100 80 190 20 (x = 10 + 180t, y = 20 + 120t(1 − t)).
+const brackets = [0.16, 0.38, 0.62, 0.84].map((t, i) => ({
+  x: 10 + 180 * t,
+  y: 20 + 120 * t * (1 - t),
+  angle: (Math.atan((120 * (1 - 2 * t)) / 180) * 180) / Math.PI,
+  i,
+}));
+---
+
+<div class="hero-visual">
+  <figure class="frame">
+    <Picture
+      src={store}
+      alt={alt}
+      formats={['avif', 'webp']}
+      widths={[420, 640, 900, 1200, 1530]}
+      sizes="(min-width: 1024px) 34rem, 92vw"
+      loading="eager"
+      fetchpriority="high"
+      decoding="async"
+      class="photo"
+    />
+    <figcaption class="caption">
+      <span class="caption-title">{caption}</span>
+      <span class="caption-sub">{address}</span>
+    </figcaption>
+  </figure>
+
+  <div class="accent" aria-hidden="true">
+    <svg viewBox="0 0 200 92" fill="none" stroke-linecap="round">
+      <defs>
+        <linearGradient id="accent-wire" x1="0" x2="1">
+          <stop offset="0" stop-color="#13a3a0" />
+          <stop offset="1" stop-color="#046880" />
+        </linearGradient>
+      </defs>
+      <path class="wire" d="M10 20 Q100 80 190 20" stroke="url(#accent-wire)" stroke-width="4" pathLength="1" />
+      {brackets.map((b) => (
+        <g
+          class="bracket"
+          style={`--i:${b.i}`}
+          transform={`translate(${b.x.toFixed(1)} ${b.y.toFixed(1)}) rotate(${b.angle.toFixed(1)}) scale(0.42) translate(-27 -38)`}
+        >
+          <rect x="5" y="0" width="44" height="12" rx="5" fill="#aeeae7" stroke="#0c6a6b" stroke-width="3" />
+          <rect x="5" y="64" width="44" height="12" rx="5" fill="#aeeae7" stroke="#0c6a6b" stroke-width="3" />
+          <rect x="0" y="9" width="54" height="58" rx="16" fill="#ffffff" stroke="#0c6a6b" stroke-width="3.5" />
+          <rect x="9" y="31" width="36" height="12" rx="4" fill="#046880" />
+        </g>
+      ))}
+    </svg>
+  </div>
+
+  <ul class="chips" aria-hidden="true">
+    {chips.map((c, i) => (
+      <li class={`chip chip-${i}`}>
+        <span class="chip-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"><path d={c.icon} /></svg>
+        </span>
+        {c.label}
+      </li>
+    ))}
+  </ul>
+</div>
+
+<style>
+  .hero-visual {
+    position: relative;
+    margin-inline: auto;
+    width: 100%;
+    max-width: 34rem;
+    padding: 1.5rem 0.5rem 2.5rem;
+  }
+
+  /* --- Photo -------------------------------------------------------------- */
+  .frame {
+    position: relative;
+    margin: 0;
+    aspect-ratio: 4 / 3;
+    overflow: hidden;
+    border-radius: 1.75rem;
+    border: 6px solid #ffffff;
+    background: #d5f5f3;
+    box-shadow:
+      0 30px 60px -28px rgb(4 104 128 / 0.55),
+      0 10px 24px -12px rgb(29 39 51 / 0.25);
+    animation: frame-in 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) 0.1s both;
+  }
+  @media (width >= 64rem) {
+    .hero-visual {
+      max-width: 30rem;
+    }
+    .frame {
+      aspect-ratio: 5 / 6;
+      border-width: 8px;
+      rotate: 1.5deg;
+      transition: rotate 0.6s ease;
+    }
+    .hero-visual:hover .frame {
+      rotate: 0deg;
+    }
+  }
+  .frame :global(img) {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: 50% 22%; /* the banner and the counter */
+    animation: settle-zoom 1.6s cubic-bezier(0.2, 0.8, 0.2, 1) 0.1s both;
+  }
+  .caption {
+    position: absolute;
+    inset: auto 0 0 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    padding: 3rem 1.25rem 1.1rem;
+    background: linear-gradient(180deg, transparent, rgb(4 48 60 / 0.82));
+    color: #ffffff;
+  }
+  .caption-title {
+    font-weight: 700;
+    font-size: 1rem;
+  }
+  .caption-sub {
+    font-size: 0.85rem;
+    color: #d5f5f3;
+  }
+
+  /* --- Archwire accent ---------------------------------------------------- */
+  .accent {
+    position: absolute;
+    left: -1.5rem;
+    top: 0;
+    width: 11rem;
+    padding: 0.6rem 0.7rem 0.3rem;
+    border-radius: 1.25rem;
+    background: #ffffff;
+    box-shadow: 0 14px 30px -16px rgb(4 104 128 / 0.5);
+    animation:
+      pop-in 0.6s cubic-bezier(0.2, 0.9, 0.3, 1.2) 0.5s both,
+      float 7s ease-in-out 1.2s infinite;
+  }
+  .wire {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    animation: draw 1.4s cubic-bezier(0.6, 0, 0.2, 1) 0.8s forwards;
+  }
+  .bracket {
+    opacity: 0;
+    animation: settle 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.3) calc(1.3s + var(--i) * 0.1s) forwards;
+  }
+
+  /* --- Chips -------------------------------------------------------------- */
+  .chips {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .chip {
+    position: absolute;
+    display: none;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.9rem 0.5rem 0.5rem;
+    border-radius: 9999px;
+    background: #ffffff;
+    border: 1px solid #e3e8ee;
+    box-shadow: 0 12px 28px -14px rgb(4 104 128 / 0.45);
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #1d2733;
+    white-space: nowrap;
+    animation:
+      pop-in 0.6s cubic-bezier(0.2, 0.9, 0.3, 1.2) both,
+      float 7s ease-in-out infinite;
+  }
+  @media (width >= 40rem) {
+    .chip {
+      display: inline-flex;
+    }
+  }
+  .chip-icon {
+    display: inline-flex;
+    width: 1.9rem;
+    height: 1.9rem;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9999px;
+    background: linear-gradient(135deg, #13a3a0, #046880);
+    color: #ffffff;
+  }
+  .chip-icon svg {
+    width: 1.05rem;
+    height: 1.05rem;
+  }
+  .chip-0 { right: -1.25rem; top: 18%; animation-delay: 0.9s, 0.9s; }
+  .chip-1 { left: -2rem; bottom: 30%; animation-delay: 1.1s, 2.4s; }
+  .chip-2 { right: 0.5rem; bottom: 0.25rem; animation-delay: 1.3s, 4s; }
+
+  @keyframes frame-in {
+    from { opacity: 0; transform: translateY(16px) scale(0.98); }
+  }
+  /* One zoom-out on load, then still: a large image zooming forever kept the
+     compositor busy and made the first scroll stutter. */
+  @keyframes settle-zoom {
+    from { transform: scale(1.08); }
+    to { transform: scale(1); }
+  }
+  @keyframes pop-in {
+    from { opacity: 0; scale: 0.9; }
+  }
+  @keyframes float {
+    0%, 100% { translate: 0 0; }
+    50% { translate: 0 -6px; }
+  }
+  @keyframes draw {
+    to { stroke-dashoffset: 0; }
+  }
+  /* `translate`, not `transform`: the SVG transform attribute places each bracket. */
+  @keyframes settle {
+    from { opacity: 0; translate: 0 -8px; }
+    to { opacity: 1; translate: 0 0; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .frame, .frame :global(img), .accent, .wire, .bracket, .chip { animation: none; }
+    .wire { stroke-dashoffset: 0; }
+    .bracket { opacity: 1; }
+  }
+</style>

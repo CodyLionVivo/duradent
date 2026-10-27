@@ -265,7 +265,7 @@ func (s *Service) QuoteCheckout(ctx context.Context, in CheckoutInput) (Quote, e
 	if err != nil {
 		return Quote{}, err
 	}
-	zone, cost, err := s.d.Shipping.Quote(ctx, ship.Department, ship.Pickup, cart.WeightG, in.Currency)
+	zone, cost, err := s.d.Shipping.Quote(ctx, ship.Department, ship.Pickup, cart.WeightG)
 	if err != nil {
 		return Quote{}, err
 	}

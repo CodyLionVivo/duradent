@@ -1,36 +1,48 @@
 ---
-// Product grid shared by /[locale]/catalog and /[locale]/catalog/[category].
+// Product listing shared by /[locale]/catalog and /[locale]/catalog/[category]:
+// filters on the left (CatalogFilters), results on the right.
 import Layout from '../layouts/Layout.astro';
 import ProductCard from './ProductCard.astro';
 import Pagination from './Pagination.astro';
 import ErrorState from './ErrorState.astro';
+import CatalogFilters from './CatalogFilters.astro';
 import { localePath, useTranslations } from '../i18n';
 import { ApiError } from '../lib/api/client';
-import { browseProducts, childrenOf, getCategories, getQuotes, type Category, type Quote } from '../lib/catalog';
+import { browseProducts, getCategories, getQuotes, type Category, type ProductFacets, type Quote } from '../lib/catalog';
+import { activeCount, clearedUrl, readFilters, withoutValue } from '../lib/filters';
+import { breadcrumbJsonLd } from '../lib/seo';
+import { SITE_URL } from 'astro:env/server';
 
 interface Props {
   categorySlug?: string;
 }
 
 const PAGE_SIZE = 24;
+const FORM_ID = 'catalog-filter-form';
 const { categorySlug } = Astro.props;
-const { locale, currency } = Astro.locals;
+const { locale } = Astro.locals;
 const t = useTranslations(locale);
 
-const q = (Astro.url.searchParams.get('q') ?? '').trim().slice(0, 100);
+const filters = readFilters(Astro.url);
 const page = Math.max(1, Number.parseInt(Astro.url.searchParams.get('page') ?? '1', 10) || 1);
 
 let state: 'ok' | 'notFound' | 'unavailable' = 'ok';
 let categories: Category[] = [];
 let result = { items: [] as Awaited<ReturnType<typeof browseProducts>>['items'], total: 0 };
+let facets: ProductFacets = { brands: [], categories: [], attributes: [] };
 let quotes = new Map<string, Quote>();
 try {
   categories = await getCategories(Astro.locals.api, locale);
   if (categorySlug && !categories.some((c) => c.slug === categorySlug)) {
     state = 'notFound';
   } else {
-    result = await browseProducts(Astro.locals.api, { locale, category: categorySlug, q, page, pageSize: PAGE_SIZE });
-    quotes = await getQuotes(Astro.locals.api, result.items.map((p) => p.default_variant_id ?? ''), currency);
+    const res = await browseProducts(Astro.locals.api, {
+      locale, category: categorySlug, q: filters.q, brands: filters.brands, attrs: filters.attrs,
+      sort: filters.sort, page, pageSize: PAGE_SIZE,
+    });
+    result = res;
+    facets = res.facets;
+    quotes = await getQuotes(Astro.locals.api, res.items.map((p) => p.default_variant_id ?? ''));
   }
 } catch (err) {
   state = err instanceof ApiError && err.status === 404 ? 'notFound' : 'unavailable';
@@ -39,16 +51,30 @@ if (state !== 'ok') Astro.response.status = state === 'notFound' ? 404 : 503;
 
 const category = categories.find((c) => c.slug === categorySlug);
 const parent = category?.parent_id ? categories.find((c) => c.id === category.parent_id) : undefined;
-const subcategories = category ? childrenOf(categories, category.id) : [];
-const heading = q ? t('catalog.searchResults', { query: q }) : (category?.name ?? t('catalog.allProducts'));
+const heading = filters.q ? t('catalog.searchResults', { query: filters.q }) : (category?.name ?? t('catalog.allProducts'));
 const countLabel = result.total === 1 ? t('catalog.resultCountOne') : t('catalog.resultCount', { count: result.total });
+const active = activeCount(filters);
+
+// Chips for every selected value, labelled as the filters show them.
+const chips = [
+  ...facets.brands.filter((v) => v.selected).map((v) => ({ label: v.label, href: withoutValue(Astro.url, 'brand', v.value) })),
+  ...facets.attributes.flatMap((a) =>
+    a.values.filter((v) => v.selected).map((v) => ({ label: `${a.name}: ${v.label}`, href: withoutValue(Astro.url, 'attr', `${a.code}:${v.value}`) })),
+  ),
+];
+const crumbs = breadcrumbJsonLd(SITE_URL, [
+  { name: t('nav.home'), path: localePath(locale) },
+  { name: t('nav.catalog'), path: localePath(locale, '/catalog') },
+  ...(parent ? [{ name: parent.name, path: localePath(locale, `/catalog/${parent.slug}`) }] : []),
+  ...(category ? [{ name: category.name, path: localePath(locale, `/catalog/${category.slug}`) }] : []),
+]);
 ---
 
-<Layout title={category?.name ?? t('catalog.title')} description={category?.description || undefined}>
+<Layout title={category?.name ?? t('catalog.title')} description={category?.description || undefined} jsonLd={state === 'ok' ? [crumbs] : []}>
   {state !== 'ok' ? (
     <ErrorState kind={state} />
   ) : (
-    <div class="container-page py-10">
+    <div class="container-page py-8 lg:py-10">
       <nav aria-label={t('product.breadcrumb')} class="text-sm text-muted">
         <ol class="flex flex-wrap items-center gap-1.5" role="list">
           <li><a class="hover:text-brand-700" href={localePath(locale)}>{t('nav.home')}</a></li>
@@ -71,39 +97,64 @@ const countLabel = result.total === 1 ? t('catalog.resultCountOne') : t('catalog
         </ol>
       </nav>
 
-      <div class="mt-4 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 class="text-3xl font-bold tracking-tight">{heading}</h1>
-          {category?.description && !q && <p class="mt-2 max-w-2xl text-muted">{category.description}</p>}
-        </div>
-        <p class="text-sm text-muted" aria-live="polite">{countLabel}</p>
+      <div class="mt-4">
+        <h1 class="text-3xl font-bold tracking-tight">{heading}</h1>
+        {category?.description && !filters.q && <p class="mt-2 max-w-2xl text-muted">{category.description}</p>}
       </div>
 
-      {subcategories.length > 0 && (
-        <ul class="mt-6 flex flex-wrap gap-2" role="list">
-          {subcategories.map((c) => (
-            <li>
-              <a href={localePath(locale, `/catalog/${c.slug}`)} class="inline-block rounded-full border border-line px-4 py-1.5 text-sm hover:border-brand-500 hover:text-brand-700">{c.name}</a>
-            </li>
-          ))}
-        </ul>
-      )}
+      <div class="mt-8 grid gap-8 lg:grid-cols-[15.5rem_minmax(0,1fr)] xl:gap-10">
+        <CatalogFilters formId={FORM_ID} facets={facets} categories={categories} current={category} filters={filters} />
 
-      {result.items.length === 0 ? (
-        <div class="card mt-10 p-10 text-center">
-          <p class="font-semibold">{t('catalog.empty')}</p>
-          <p class="mt-1 text-sm text-muted">{t('catalog.emptyHint')}</p>
-          <a href={localePath(locale, '/catalog')} class="btn-secondary mt-6">{t('catalog.clearSearch')}</a>
-        </div>
-      ) : (
-        <ul class="mt-8 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4" role="list">
-          {result.items.map((p, i) => (
-            <li><ProductCard product={p} quote={quotes.get(p.default_variant_id ?? '')} eager={i < 4} /></li>
-          ))}
-        </ul>
-      )}
+        <section aria-labelledby="results-title" class="min-w-0">
+          <h2 id="results-title" class="sr-only">{heading}</h2>
+          <div class="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-4">
+            <p class="text-sm text-muted" aria-live="polite">{countLabel}</p>
+            <div class="flex items-center gap-2">
+              <button type="button" popovertarget="catalog-filters" class="btn-secondary px-3 py-2 lg:hidden">
+                <svg aria-hidden="true" viewBox="0 0 20 20" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 5h14M6 10h8M8.5 15h3" /></svg>
+                {t('catalog.filters')}
+                {active > 0 && <span class="rounded-full bg-brand-700 px-1.5 text-xs font-semibold text-white">{active}</span>}
+              </button>
+              <label for="catalog-sort" class="hidden text-sm text-muted sm:inline">{t('catalog.sortBy')}</label>
+              <select id="catalog-sort" name="sort" form={FORM_ID} class="input w-auto py-2">
+                <option value="name" selected={filters.sort === 'name'}>{t('catalog.sortName')}</option>
+                <option value="newest" selected={filters.sort === 'newest'}>{t('catalog.sortNewest')}</option>
+              </select>
+              <noscript><button type="submit" form={FORM_ID} class="btn-secondary py-2">{t('catalog.apply')}</button></noscript>
+            </div>
+          </div>
 
-      <Pagination page={page} pageSize={PAGE_SIZE} total={result.total} />
+          {chips.length > 0 && (
+            <div class="mt-4 flex flex-wrap items-center gap-2" aria-label={t('catalog.activeFilters')}>
+              {chips.map((c) => (
+                <a href={c.href} class="filter-chip" aria-label={t('catalog.remove', { label: c.label })}>
+                  {c.label}
+                  <svg aria-hidden="true" viewBox="0 0 20 20" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l8 8M14 6l-8 8" /></svg>
+                </a>
+              ))}
+              <a href={clearedUrl(Astro.url)} class="text-sm font-semibold text-brand-700 hover:underline">{t('catalog.clearAll')}</a>
+            </div>
+          )}
+
+          {result.items.length === 0 ? (
+            <div class="card mt-8 p-10 text-center">
+              <p class="font-semibold">{t('catalog.empty')}</p>
+              <p class="mt-1 text-sm text-muted">{t('catalog.emptyHint')}</p>
+              <a href={active > 0 ? clearedUrl(Astro.url) : localePath(locale, '/catalog')} class="btn-secondary mt-6">
+                {active > 0 ? t('catalog.clearAll') : t('catalog.clearSearch')}
+              </a>
+            </div>
+          ) : (
+            <ul class="mt-6 grid grid-cols-2 gap-4 md:grid-cols-3" role="list">
+              {result.items.map((p, i) => (
+                <li><ProductCard product={p} quote={quotes.get(p.default_variant_id ?? '')} eager={i < 3} /></li>
+              ))}
+            </ul>
+          )}
+
+          <Pagination page={page} pageSize={PAGE_SIZE} total={result.total} />
+        </section>
+      </div>
     </div>
   )}
 </Layout>

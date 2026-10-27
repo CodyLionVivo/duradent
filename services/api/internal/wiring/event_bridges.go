@@ -42,17 +42,25 @@ func (b notifAccounts) Recipient(ctx context.Context, accountID id.ID) (notifpor
 	return notifports.Recipient{Email: p.Account.Email, Name: p.Account.DisplayName, Locale: p.Account.Locale}, nil
 }
 
-// verificationMailer lets identity send its confirmation link through the
-// notifications context's templates and transport.
-type verificationMailer struct {
+// accountMailer lets identity send its links (email confirmation, password
+// reset) through the notifications context's templates and transport.
+type accountMailer struct {
 	svc *notifapp.Service
 	log *slog.Logger
 }
 
-func (b verificationMailer) SendVerification(ctx context.Context, email, name string, l locale.Locale, token string) error {
+func (b accountMailer) SendVerification(ctx context.Context, email, name string, l locale.Locale, token string) error {
 	err := b.svc.SendVerification(ctx, notifports.Recipient{Email: email, Name: name, Locale: l}, token)
 	if err != nil {
 		b.log.ErrorContext(ctx, "send verification email", "error", err)
+	}
+	return err
+}
+
+func (b accountMailer) SendPasswordReset(ctx context.Context, email, name string, l locale.Locale, token string) error {
+	err := b.svc.SendPasswordReset(ctx, notifports.Recipient{Email: email, Name: name, Locale: l}, token)
+	if err != nil {
+		b.log.ErrorContext(ctx, "send password reset email", "error", err)
 	}
 	return err
 }

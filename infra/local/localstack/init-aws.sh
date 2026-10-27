@@ -10,7 +10,7 @@ TOPIC_ARN=$(awslocal sns create-topic --name duradent-domain-events --query Topi
 # consumer → event types it handles (SNS filter policy on the "type" attribute).
 # Keep in sync with notifications/application.Events and invoicing/application.Events.
 declare -A FILTERS=(
-  [notifications]='["CustomerRegistered","OrderPlaced","PaymentConfirmed","OrderShipped","OrderCancelled","OrderRefunded","InvoiceIssued","InvoiceRejected","StockLow"]'
+  [notifications]='["CustomerRegistered","OrderPlaced","PaymentConfirmed","OrderShipped","OrderCancelled","OrderRefunded","InvoiceIssued","InvoiceRejected","StockLow","ComplaintFiled","ComplaintAnswered"]'
   [invoicing]='["PaymentConfirmed","OrderRefunded"]'
 )
 

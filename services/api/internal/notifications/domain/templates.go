@@ -16,6 +16,7 @@ type Kind string
 const (
 	KindWelcome           Kind = "welcome"
 	KindVerifyEmail       Kind = "verify_email"
+	KindPasswordReset     Kind = "password_reset"
 	KindOrderPlaced       Kind = "order_placed"
 	KindPaymentConfirmed  Kind = "payment_confirmed"
 	KindOrderShipped      Kind = "order_shipped"
@@ -24,6 +25,11 @@ const (
 	KindInvoiceIssued     Kind = "invoice_issued"
 	KindAdminStockLow     Kind = "admin_stock_low"
 	KindAdminInvoiceError Kind = "admin_invoice_error"
+	// Libro de Reclamaciones: the consumer's copy of the sheet, the store's
+	// answer, and the alert to operations.
+	KindComplaintFiled      Kind = "complaint_filed"
+	KindComplaintAnswered   Kind = "complaint_answered"
+	KindAdminComplaintFiled Kind = "admin_complaint_filed"
 )
 
 // Message is a rendered email.
@@ -48,8 +54,15 @@ type Data struct {
 	DocumentName string // "Factura F001-123"
 	PDFURL       string
 	Link         string // order page or verification link
+	LogoURL      string // absolute URL of the PNG logo (email clients do not show SVG)
 	SKU          string
 	Available    int
+	// Complaints: sheet number, "reclamo"/"queja" in the reader's language,
+	// the store's answer and the whole sheet.
+	Code          string
+	ComplaintKind string
+	Response      string
+	Sheet         []Row
 }
 
 type copyText struct {
@@ -70,6 +83,11 @@ var texts = map[Kind]map[locale.Locale]copyText{
 		locale.ES:   {"Confirma tu correo", "Confirma tu correo", []string{"Hola, {{.Name}}. Confirma que este correo es tuyo para proteger tu cuenta. El enlace vence en 24 horas.", "Si no creaste una cuenta en Duradent, ignora este mensaje."}, "Confirmar correo"},
 		locale.EN:   {"Confirm your email", "Confirm your email", []string{"Hello, {{.Name}}. Confirm this email is yours to protect your account. The link expires in 24 hours.", "If you did not create a Duradent account, ignore this message."}, "Confirm email"},
 		locale.PTBR: {"Confirme seu e-mail", "Confirme seu e-mail", []string{"Olá, {{.Name}}. Confirme que este e-mail é seu para proteger sua conta. O link vence em 24 horas.", "Se você não criou uma conta na Duradent, ignore esta mensagem."}, "Confirmar e-mail"},
+	},
+	KindPasswordReset: {
+		locale.ES:   {"Crea una nueva contraseña", "Crea una nueva contraseña", []string{"Hola, {{.Name}}. Recibimos un pedido para crear una nueva contraseña para tu cuenta de Duradent. El enlace vence en 1 hora y solo sirve una vez.", "Si no lo pediste, ignora este mensaje: tu contraseña no cambia."}, "Crear contraseña"},
+		locale.EN:   {"Create a new password", "Create a new password", []string{"Hello, {{.Name}}. We received a request to create a new password for your Duradent account. The link expires in 1 hour and works only once.", "If you did not ask for it, ignore this message: your password does not change."}, "Create password"},
+		locale.PTBR: {"Crie uma nova senha", "Crie uma nova senha", []string{"Olá, {{.Name}}. Recebemos um pedido para criar uma nova senha para sua conta na Duradent. O link vence em 1 hora e funciona uma única vez.", "Se você não pediu, ignore esta mensagem: sua senha não muda."}, "Criar senha"},
 	},
 	KindOrderPlaced: {
 		locale.ES:   {"Recibimos tu pedido {{.OrderNumber}}", "Pedido {{.OrderNumber}} recibido", []string{"Gracias por tu compra, {{.Name}}. Total: {{.Total}}.", "{{if eq .Method \"bank_transfer\"}}Transfiere el total indicando el número de pedido antes del {{.Deadline}}:<br>{{.BankDetails}}{{else}}Si aún no completaste el pago, hazlo antes del {{.Deadline}}.{{end}}"}, "Ver pedido"},
@@ -107,6 +125,39 @@ var texts = map[Kind]map[locale.Locale]copyText{
 	KindAdminInvoiceError: {
 		locale.ES: {"Error al emitir comprobante · {{.OrderNumber}}", "Comprobante rechazado", []string{"No se pudo emitir el comprobante del pedido {{.OrderNumber}}: {{.Reason}}"}, "Ver pedido"},
 	},
+	KindComplaintFiled: {
+		locale.ES: {"Hoja de reclamación N.° {{.Code}}", "Recibimos tu {{.ComplaintKind}}", []string{
+			"Hola, {{.Name}}. Registramos tu {{.ComplaintKind}} en nuestro Libro de Reclamaciones con el número {{.Code}}. Abajo está la copia de tu hoja de reclamación.",
+			"Te responderemos a más tardar el {{.Deadline}}, dentro del plazo de 15 días hábiles.",
+			"La formulación del reclamo no impide acudir a otras vías de solución de controversias ni es requisito previo para interponer una denuncia ante el INDECOPI.",
+		}, ""},
+		locale.EN: {"Complaint sheet No. {{.Code}}", "We received your {{.ComplaintKind}}", []string{
+			"Hello, {{.Name}}. We registered your {{.ComplaintKind}} in our Complaints Book (Libro de Reclamaciones) with number {{.Code}}. Your copy of the sheet is below.",
+			"We will answer by {{.Deadline}}, within 15 business days.",
+			"Filing a claim does not prevent you from using other ways to settle the dispute, nor is it required before filing a complaint with INDECOPI.",
+		}, ""},
+		locale.PTBR: {"Folha de reclamação n.º {{.Code}}", "Recebemos sua {{.ComplaintKind}}", []string{
+			"Olá, {{.Name}}. Registramos sua {{.ComplaintKind}} no nosso Livro de Reclamações (Libro de Reclamaciones) com o número {{.Code}}. Abaixo está a cópia da sua folha.",
+			"Responderemos até {{.Deadline}}, dentro do prazo de 15 dias úteis.",
+			"Apresentar uma reclamação não impede recorrer a outras vias de solução de controvérsias nem é requisito prévio para denunciar perante o INDECOPI.",
+		}, ""},
+	},
+	KindComplaintAnswered: {
+		locale.ES: {"Respuesta a tu hoja de reclamación N.° {{.Code}}", "Respuesta a tu {{.ComplaintKind}}", []string{
+			"Hola, {{.Name}}. Esta es nuestra respuesta a tu hoja de reclamación N.° {{.Code}}:", "{{.Response}}",
+		}, ""},
+		locale.EN: {"Answer to your complaint sheet No. {{.Code}}", "Answer to your {{.ComplaintKind}}", []string{
+			"Hello, {{.Name}}. This is our answer to your complaint sheet No. {{.Code}}:", "{{.Response}}",
+		}, ""},
+		locale.PTBR: {"Resposta à sua folha de reclamação n.º {{.Code}}", "Resposta à sua {{.ComplaintKind}}", []string{
+			"Olá, {{.Name}}. Esta é a nossa resposta à sua folha de reclamação n.º {{.Code}}:", "{{.Response}}",
+		}, ""},
+	},
+	KindAdminComplaintFiled: {
+		locale.ES: {"Nuevo {{.ComplaintKind}} N.° {{.Code}} · responder antes del {{.Deadline}}", "Libro de Reclamaciones", []string{
+			"{{.Name}} registró un {{.ComplaintKind}} (hoja N.° {{.Code}}). La respuesta debe enviarse a más tardar el {{.Deadline}}: el plazo de 15 días hábiles no se puede ampliar.",
+		}, "Responder"},
+	},
 }
 
 const layout = `<!doctype html>
@@ -114,11 +165,14 @@ const layout = `<!doctype html>
 <body style="margin:0;background:#f7f9fb;font-family:Arial,Helvetica,sans-serif;color:#1d2733">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="padding:24px 12px"><tr><td align="center">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border:1px solid #e3e8ee;border-radius:12px">
-<tr><td style="padding:24px 28px 8px"><span style="font-size:20px;font-weight:bold;color:#0c6a6b">Duradent</span></td></tr>
+<tr><td style="padding:24px 28px 8px">{{if .Logo}}<img src="{{.Logo}}" width="40" height="40" alt="" style="vertical-align:middle;border:0;margin-right:8px">{{end}}<span style="font-size:20px;font-weight:bold;color:#046880;vertical-align:middle">Duradent</span></td></tr>
 <tr><td style="padding:8px 28px 24px">
 <h1 style="font-size:20px;margin:0 0 12px">{{.Title}}</h1>
 {{range .Body}}<p style="font-size:15px;line-height:1.55;margin:0 0 12px">{{.}}</p>{{end}}
-{{if .Link}}<p style="margin:20px 0 4px"><a href="{{.Link}}" style="display:inline-block;background:#0c6a6b;color:#ffffff;text-decoration:none;font-weight:bold;padding:12px 20px;border-radius:8px">{{.Button}}</a></p>{{end}}
+{{if .Sheet}}<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0 4px;border:1px solid #e3e8ee;border-radius:8px;font-size:13px;line-height:1.45">
+{{range .Sheet}}{{if .Section}}<tr><td colspan="2" style="padding:10px 12px 6px;background:#f7f9fb;font-weight:bold;color:#046880">{{.Label}}</td></tr>{{else}}<tr><td style="padding:6px 12px;color:#52606d;vertical-align:top;width:38%">{{.Label}}</td><td style="padding:6px 12px;white-space:pre-line;vertical-align:top">{{.Value}}</td></tr>{{end}}{{end}}
+</table>{{end}}
+{{if .Link}}<p style="margin:20px 0 4px"><a href="{{.Link}}" style="display:inline-block;background:#046880;color:#ffffff;text-decoration:none;font-weight:bold;padding:12px 20px;border-radius:8px">{{.Button}}</a></p>{{end}}
 </td></tr>
 <tr><td style="padding:16px 28px;border-top:1px solid #e3e8ee;font-size:12px;color:#52606d">Duradent SAC · Insumos de ortodoncia · Perú</td></tr>
 </table></td></tr></table></body></html>`
@@ -144,7 +198,8 @@ func Render(kind Kind, l locale.Locale, to string, d Data) (Message, error) {
 		if err := t.Execute(&b, d); err != nil {
 			return "", err
 		}
-		return template.HTML(b.String()), nil //nolint:gosec // html/template escaped every field
+		// Line breaks of escaped values (an answer, bank details) survive in HTML.
+		return template.HTML(strings.ReplaceAll(b.String(), "\n", "<br>")), nil //nolint:gosec // html/template escaped every field
 	}
 	subject, err := exec(c.Subject)
 	if err != nil {
@@ -165,12 +220,20 @@ func Render(kind Kind, l locale.Locale, to string, d Data) (Message, error) {
 		body = append(body, h)
 		text.WriteString(plain(string(h)) + "\n\n")
 	}
+	for _, r := range d.Sheet {
+		if r.Section {
+			text.WriteString("\n" + r.Label + "\n")
+		} else {
+			text.WriteString(r.Label + ": " + r.Value + "\n")
+		}
+	}
 	if d.Link != "" {
 		text.WriteString(c.Button + ": " + d.Link + "\n")
 	}
 	var out bytes.Buffer
 	err = layoutTmpl.Execute(&out, map[string]any{
 		"Lang": string(l), "Subject": plain(string(subject)), "Title": title, "Body": body, "Link": d.Link, "Button": c.Button,
+		"Logo": d.LogoURL, "Sheet": d.Sheet,
 	})
 	if err != nil {
 		return Message{}, err

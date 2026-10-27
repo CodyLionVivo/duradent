@@ -1,0 +1,229 @@
+---
+// Libro de Reclamaciones virtual (Ley 29571): anyone, signed in or not, can
+// file a claim (reclamo) or a complaint (queja). The API numbers the sheet and
+// emails a copy; this page shows the filed sheet right away, ready to print.
+//
+// The form carries an idempotency key per page load, so a double click or a
+// reload of the POST shows the same sheet instead of filing it twice.
+import Layout from '../../layouts/Layout.astro';
+import ComplaintSheet from '../../components/ComplaintSheet.astro';
+import { formatDate, formatDay, isLocale, localePath, useTranslations } from '../../i18n';
+import { ApiError, unwrap, type Schemas } from '../../lib/api/client';
+import { apiErrorText } from '../../lib/account';
+import { PHONE } from '../../lib/legal';
+
+if (!isLocale(Astro.params.locale)) return new Response(null, { status: 404 });
+
+const { locale, api, user, customer } = Astro.locals;
+const t = useTranslations(locale);
+const RESPONSE_DAYS = 15;
+
+const fields = [
+  'kind', 'name', 'document_type', 'document_number', 'address', 'phone', 'email', 'guardian', 'item_type',
+  'order_number', 'amount', 'item_description', 'detail', 'request', 'response_channel',
+] as const;
+type Field = (typeof fields)[number];
+
+// Signed-in customers start with what we already know about them.
+const values: Record<Field, string> = {
+  kind: 'reclamo', name: user?.display_name ?? '', document_type: customer?.document_type ?? 'DNI',
+  document_number: customer?.document_number ?? '', address: '', phone: customer?.phone ?? '', email: user?.email ?? '',
+  guardian: '', item_type: 'producto', order_number: Astro.url.searchParams.get('order')?.slice(0, 20) ?? '', amount: '',
+  item_description: '', detail: '', request: '', response_channel: 'email',
+};
+let key: string = crypto.randomUUID();
+let error = '';
+let filed: Schemas['Complaint'] | null = null;
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  for (const f of fields) values[f] = String(form.get(f) ?? '').trim();
+  key = String(form.get('key') ?? '').slice(0, 64) || key;
+  try {
+    filed = unwrap(
+      await api.POST('/v1/complaints', {
+        params: { header: { 'Idempotency-Key': key } },
+        body: { ...values, locale } as Schemas['ComplaintInput'],
+      }),
+    );
+  } catch (err) {
+    error = apiErrorText(t, err);
+    Astro.response.status = err instanceof ApiError ? err.status : 500;
+  }
+}
+
+let provider: Schemas['ComplaintProvider'] | null = null;
+try {
+  provider = unwrap(await api.GET('/v1/complaints/provider')).provider;
+} catch {
+  // The form still works; the sheet shows the provider once filed.
+}
+
+const docTypes = [
+  ['DNI', t('complaints.docDNI')], ['CE', t('complaints.docCE')], ['RUC', t('complaints.docRUC')], ['PAS', t('complaints.docPAS')],
+] as const;
+const optional = `(${t('complaints.optional')})`;
+---
+
+<Layout title={t('complaints.title')} description={t('complaints.metaDescription')}>
+  <section class="container-page max-w-4xl py-10">
+    {filed ? (
+      <div class="space-y-6">
+        <div role="status" class="rounded-xl border border-emerald-200 bg-emerald-50 p-5 text-emerald-900 print:hidden">
+          <h1 class="text-xl font-bold">{t('complaints.sentTitle')}</h1>
+          <p class="mt-2">{t('complaints.sentText', { code: filed.code, date: formatDate(filed.filed_at, locale), email: filed.consumer.email })}</p>
+          <p class="mt-1">{t('complaints.sentDeadline', { date: formatDay(filed.due_at, locale) })}</p>
+          <button type="button" class="btn-secondary mt-4" data-print>{t('complaints.print')}</button>
+        </div>
+        <ComplaintSheet complaint={filed} locale={locale} />
+      </div>
+    ) : (
+      <>
+        <div class="flex items-center gap-3">
+          <svg aria-hidden="true" viewBox="0 0 48 48" class="h-12 w-12 shrink-0 text-brand-700" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><path d="M24 12c-4-3-10-4-17-3v27c7-1 13 0 17 3 4-3 10-4 17-3V9c-7-1-13 0-17 3Z" /><path d="M24 12v27" /><path d="M11 17c3 0 6 .6 9 2M11 23c3 0 6 .6 9 2M28 19c3-1.4 6-2 9-2M28 25c3-1.4 6-2 9-2" stroke-linecap="round" /></svg>
+          <h1 class="text-3xl font-bold tracking-tight">{t('complaints.title')}</h1>
+        </div>
+        <p class="mt-4 max-w-3xl text-muted">{t('complaints.intro', { days: RESPONSE_DAYS })}</p>
+        <p class="mt-2 text-sm text-muted">
+          {t('complaints.contactFirst')} <a class="whitespace-nowrap font-semibold text-brand-700 hover:underline" href={PHONE.href}>{PHONE.display}</a>.
+        </p>
+
+        <dl class="card mt-6 grid gap-4 p-5 text-sm sm:grid-cols-3">
+          <div>
+            <dt class="text-muted">{t('complaints.provider')}</dt>
+            <dd class="mt-1 font-semibold">{provider?.name ?? 'Duradent S.A.C.'}</dd>
+            {provider && <dd class="text-muted">RUC {provider.ruc}</dd>}
+            {provider && <dd class="text-muted">{provider.address}</dd>}
+          </div>
+          <div>
+            <dt class="text-muted">{t('complaints.date')}</dt>
+            <dd class="mt-1 font-semibold">{formatDay(new Date().toISOString(), locale)}</dd>
+          </div>
+          <div>
+            <dt class="text-muted">{t('complaints.number')}</dt>
+            <dd class="mt-1 font-semibold">{t('complaints.numberPending')}</dd>
+          </div>
+        </dl>
+
+        {error && <p role="alert" class="mt-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</p>}
+
+        <form method="post" class="mt-6 space-y-6">
+          <input type="hidden" name="key" value={key} />
+
+          <fieldset class="card space-y-4 p-6">
+            <legend class="px-1 text-base font-semibold">{t('complaints.consumerSection')}</legend>
+            <div>
+              <label for="c-name" class="label">{t('complaints.name')}</label>
+              <input id="c-name" name="name" required maxlength={120} autocomplete="name" value={values.name} class="input" />
+            </div>
+            <div class="grid gap-4 sm:grid-cols-[14rem_minmax(0,1fr)]">
+              <div>
+                <label for="c-doctype" class="label">{t('complaints.documentType')}</label>
+                <select id="c-doctype" name="document_type" class="input">
+                  {docTypes.map(([v, label]) => <option value={v} selected={values.document_type === v}>{label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label for="c-docnumber" class="label">{t('complaints.documentNumber')}</label>
+                <input id="c-docnumber" name="document_number" required maxlength={15} value={values.document_number} class="input" />
+              </div>
+            </div>
+            <div>
+              <label for="c-address" class="label">{t('complaints.address')}</label>
+              <input id="c-address" name="address" required maxlength={200} autocomplete="street-address" value={values.address} class="input" />
+            </div>
+            <div class="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label for="c-email" class="label">{t('complaints.email')}</label>
+                <input id="c-email" name="email" type="email" required maxlength={254} autocomplete="email" value={values.email} class="input" />
+              </div>
+              <div>
+                <label for="c-phone" class="label">{t('complaints.phone')} <span class="font-normal text-muted">{optional}</span></label>
+                <input id="c-phone" name="phone" type="tel" maxlength={30} autocomplete="tel" value={values.phone} class="input" />
+              </div>
+            </div>
+            <div>
+              <label for="c-guardian" class="label">{t('complaints.guardian')} <span class="font-normal text-muted">{optional}</span></label>
+              <input id="c-guardian" name="guardian" maxlength={120} value={values.guardian} class="input" aria-describedby="c-guardian-hint" />
+              <p id="c-guardian-hint" class="mt-1 text-xs text-muted">{t('complaints.guardianHint')}</p>
+            </div>
+          </fieldset>
+
+          <fieldset class="card space-y-4 p-6">
+            <legend class="px-1 text-base font-semibold">{t('complaints.itemSection')}</legend>
+            <fieldset>
+              <legend class="label">{t('complaints.itemType')}</legend>
+              <div class="mt-1 flex flex-wrap gap-4 text-sm">
+                <label class="inline-flex items-center gap-2"><input type="radio" name="item_type" value="producto" checked={values.item_type !== 'servicio'} /> {t('complaints.product')}</label>
+                <label class="inline-flex items-center gap-2"><input type="radio" name="item_type" value="servicio" checked={values.item_type === 'servicio'} /> {t('complaints.service')}</label>
+              </div>
+            </fieldset>
+            <div class="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label for="c-order" class="label">{t('complaints.orderNumber')} <span class="font-normal text-muted">{optional}</span></label>
+                <input id="c-order" name="order_number" maxlength={20} placeholder="DD-000123" value={values.order_number} class="input" />
+              </div>
+              <div>
+                <label for="c-amount" class="label">{t('complaints.amount')} <span class="font-normal text-muted">{optional}</span></label>
+                <input id="c-amount" name="amount" inputmode="decimal" maxlength={14} pattern="[0-9]+([.,][0-9]{1,2})?" placeholder="0.00" value={values.amount} class="input" />
+              </div>
+            </div>
+            <div>
+              <label for="c-description" class="label">{t('complaints.description')}</label>
+              <textarea id="c-description" name="item_description" required maxlength={500} rows={2} class="input">{values.item_description}</textarea>
+            </div>
+          </fieldset>
+
+          <fieldset class="card space-y-4 p-6">
+            <legend class="px-1 text-base font-semibold">{t('complaints.detailSection')}</legend>
+            <fieldset>
+              <legend class="label">{t('complaints.kind')}</legend>
+              <div class="mt-1 grid gap-3 sm:grid-cols-2">
+                <label class="flex gap-3 rounded-lg border border-line p-3 text-sm has-[:checked]:border-brand-600 has-[:checked]:bg-brand-50">
+                  <input type="radio" name="kind" value="reclamo" checked={values.kind !== 'queja'} class="mt-0.5" />
+                  <span><strong>{t('complaints.claim')}</strong><span class="block text-muted">{t('complaints.claimHint')}</span></span>
+                </label>
+                <label class="flex gap-3 rounded-lg border border-line p-3 text-sm has-[:checked]:border-brand-600 has-[:checked]:bg-brand-50">
+                  <input type="radio" name="kind" value="queja" checked={values.kind === 'queja'} class="mt-0.5" />
+                  <span><strong>{t('complaints.complaint')}</strong><span class="block text-muted">{t('complaints.complaintHint')}</span></span>
+                </label>
+              </div>
+            </fieldset>
+            <div>
+              <label for="c-detail" class="label">{t('complaints.detail')}</label>
+              <textarea id="c-detail" name="detail" required maxlength={3000} rows={6} class="input">{values.detail}</textarea>
+            </div>
+            <div>
+              <label for="c-request" class="label">{t('complaints.request')}</label>
+              <textarea id="c-request" name="request" required maxlength={1000} rows={3} class="input" aria-describedby="c-request-hint">{values.request}</textarea>
+              <p id="c-request-hint" class="mt-1 text-xs text-muted">{t('complaints.requestHint')}</p>
+            </div>
+            <fieldset>
+              <legend class="label">{t('complaints.channel')}</legend>
+              <div class="mt-1 flex flex-wrap gap-4 text-sm">
+                <label class="inline-flex items-center gap-2"><input type="radio" name="response_channel" value="email" checked={values.response_channel !== 'address'} /> {t('complaints.byEmail')}</label>
+                <label class="inline-flex items-center gap-2"><input type="radio" name="response_channel" value="address" checked={values.response_channel === 'address'} /> {t('complaints.byLetter')}</label>
+              </div>
+            </fieldset>
+          </fieldset>
+
+          <div class="space-y-3 text-sm">
+            <label class="flex items-start gap-2">
+              <input type="checkbox" name="truth" required class="mt-0.5" />
+              <span>{t('complaints.truth')}</span>
+            </label>
+            <p class="text-muted">
+              {t('complaints.privacy')} <a class="font-medium text-brand-700 underline" href={localePath(locale, '/legal/privacy')}>{t('legal.privacy')}</a>.
+            </p>
+            <p class="text-xs text-muted">{t('complaints.noteDeadline', { days: RESPONSE_DAYS })} {t('complaints.noteIndecopi')}</p>
+          </div>
+          <button class="btn-primary w-full py-3 sm:w-auto sm:px-8">{t('complaints.submit')}</button>
+        </form>
+      </>
+    )}
+  </section>
+</Layout>
+
+<script>
+  document.querySelector('[data-print]')?.addEventListener('click', () => window.print());
+</script>

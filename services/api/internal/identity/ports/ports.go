@@ -101,9 +101,32 @@ type VerificationRepository interface {
 	Recent(ctx context.Context, accountID id.ID, since time.Time) (int, error)
 }
 
-// VerificationMailer emails the confirmation link.
-type VerificationMailer interface {
+// PasswordReset is a pending "forgot your password" link; only the token's
+// hash is stored.
+type PasswordReset struct {
+	TokenHash string
+	AccountID id.ID
+	Email     string // the address the link was sent to
+	ExpiresAt time.Time
+	CreatedAt time.Time
+}
+
+type PasswordResetRepository interface {
+	Create(ctx context.Context, r PasswordReset) error
+	// Get returns a reset without using it up; NotFound if unknown.
+	Get(ctx context.Context, tokenHash string) (PasswordReset, error)
+	// Take returns and deletes the reset and every other pending link of its
+	// account; NotFound if it was already used.
+	Take(ctx context.Context, tokenHash string) (PasswordReset, error)
+	// Recent counts resets created for the account since t (throttling).
+	Recent(ctx context.Context, accountID id.ID, since time.Time) (int, error)
+}
+
+// AccountMailer emails the links identity hands out: email confirmation and
+// password reset. Tokens never travel through the event bus.
+type AccountMailer interface {
 	SendVerification(ctx context.Context, email, name string, l locale.Locale, token string) error
+	SendPasswordReset(ctx context.Context, email, name string, l locale.Locale, token string) error
 }
 
 type UnitOfWork interface {

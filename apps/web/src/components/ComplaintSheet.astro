@@ -1,0 +1,90 @@
+---
+// A filed sheet of the Libro de Reclamaciones, laid out like the official
+// form (sections 1 to 4). Used for the consumer's receipt and in the admin.
+import { formatDate, formatMoney, useTranslations, type Locale } from '../i18n';
+import type { Schemas } from '../lib/api/client';
+
+interface Props {
+  complaint: Schemas['Complaint'];
+  locale: Locale;
+}
+
+const { complaint: c, locale } = Astro.props;
+const t = useTranslations(locale);
+const docLabel: Record<string, string> = {
+  DNI: t('complaints.docDNI'), CE: t('complaints.docCE'), RUC: t('complaints.docRUC'), PAS: t('complaints.docPAS'),
+};
+
+type Row = [label: string, value: string | null | undefined];
+const sections: { title: string; rows: Row[] }[] = [
+  {
+    title: t('complaints.consumerSection'),
+    rows: [
+      [t('complaints.name'), c.consumer.name],
+      [t('complaints.documentNumber'), `${docLabel[c.consumer.document_type] ?? c.consumer.document_type} ${c.consumer.document_number}`],
+      [t('complaints.address'), c.consumer.address],
+      [t('complaints.phone'), c.consumer.phone],
+      [t('complaints.email'), c.consumer.email],
+      [t('complaints.guardian'), c.consumer.guardian],
+    ],
+  },
+  {
+    title: t('complaints.itemSection'),
+    rows: [
+      [t('complaints.itemType'), c.item_type === 'servicio' ? t('complaints.service') : t('complaints.product')],
+      [t('complaints.orderNumber'), c.order_number],
+      [t('complaints.amount'), c.amount ? formatMoney(c.amount, locale) : ''],
+      [t('complaints.description'), c.item_description],
+    ],
+  },
+  {
+    title: t('complaints.detailSection'),
+    rows: [
+      [t('complaints.kind'), c.kind === 'queja' ? `${t('complaints.complaint')}: ${t('complaints.complaintHint')}` : `${t('complaints.claim')}: ${t('complaints.claimHint')}`],
+      [t('complaints.detail'), c.detail],
+      [t('complaints.request'), c.request],
+      [t('complaints.channelLabel'), c.response_channel === 'address' ? t('complaints.byLetter') : t('complaints.byEmail')],
+    ],
+  },
+];
+if (c.answered_at) {
+  sections.push({
+    title: t('complaints.answerSection'),
+    rows: [
+      [t('complaints.response'), c.response],
+      [t('complaints.answeredAt'), formatDate(c.answered_at, locale)],
+    ],
+  });
+}
+---
+
+<article class="card complaint-sheet overflow-hidden" aria-labelledby={`sheet-${c.id}`}>
+  <header class="flex flex-wrap items-start justify-between gap-4 border-b border-line bg-surface px-5 py-4">
+    <div>
+      <h2 id={`sheet-${c.id}`} class="text-lg font-bold">{t('complaints.number')} {c.code}</h2>
+      <p class="mt-1 text-sm text-muted">{t('complaints.date')}: {formatDate(c.filed_at, locale)}</p>
+    </div>
+    <div class="text-right text-sm">
+      <p class="font-semibold">{c.provider.name}</p>
+      <p class="text-muted">RUC {c.provider.ruc}</p>
+      <p class="max-w-xs text-muted">{c.provider.address}</p>
+    </div>
+  </header>
+  {sections.map((s) => (
+    <section class="border-b border-line px-5 py-4 last:border-b-0">
+      <h3 class="text-sm font-semibold text-brand-800">{s.title}</h3>
+      <dl class="mt-2 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-[12rem_minmax(0,1fr)]">
+        {s.rows.filter(([, v]) => v).map(([label, value]) => (
+          <>
+            <dt class="text-muted">{label}</dt>
+            <dd class="whitespace-pre-line break-words">{value}</dd>
+          </>
+        ))}
+      </dl>
+    </section>
+  ))}
+  <footer class="space-y-1 bg-surface px-5 py-3 text-xs text-muted">
+    <p>{t('complaints.noteDeadline', { days: 15 })}</p>
+    <p>{t('complaints.noteIndecopi')}</p>
+  </footer>
+</article>

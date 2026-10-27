@@ -11,7 +11,6 @@ import (
 
 	"github.com/CodyLionVivo/duradent/services/api/internal/invoicing/domain"
 	"github.com/CodyLionVivo/duradent/services/api/internal/invoicing/ports"
-	"github.com/CodyLionVivo/duradent/services/api/internal/kernel/money"
 )
 
 func server(t *testing.T, status int, reply string, got *map[string]any) *Client {
@@ -33,7 +32,6 @@ func server(t *testing.T, status int, reply string, got *map[string]any) *Client
 func doc() domain.Document {
 	return domain.Document{
 		Type: domain.CreditNote, Series: "FC01", Number: 3, IssueDate: time.Date(2026, 10, 26, 10, 0, 0, 0, time.UTC),
-		Currency: money.USD, ExchangeRate: "3.750",
 		Customer:   domain.Customer{DocType: "RUC", DocNumber: "20123456789", Name: "Clínica Sonrisa SAC", Address: "Av. Arequipa 123"},
 		Lines:      []domain.DocLine{{Unit: "NIU", Code: "BRK", Description: "Bracket", Qty: 2, UnitValue: 5000, Subtotal: 10000, IGV: 1800, Total: 11800}},
 		TaxedTotal: 10000, IGV: 1800, Total: 11800,
@@ -54,7 +52,7 @@ func TestIssueSendsSunatFields(t *testing.T) {
 	}
 	want := map[string]any{
 		"operacion": "generar_comprobante", "tipo_de_comprobante": 3.0, "serie": "FC01", "numero": 3.0,
-		"cliente_tipo_de_documento": "6", "fecha_de_emision": "26-10-2026", "moneda": 2.0, "tipo_de_cambio": 3.75,
+		"cliente_tipo_de_documento": "6", "fecha_de_emision": "26-10-2026", "moneda": 1.0,
 		"total_gravada": 100.0, "total_igv": 18.0, "total": 118.0, "documento_que_se_modifica_tipo": 1.0,
 		"documento_que_se_modifica_serie": "F001", "tipo_de_nota_de_credito": 1.0,
 	}

@@ -20,6 +20,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 
 	catalogs3 "github.com/CodyLionVivo/duradent/services/api/internal/catalog/adapters/s3"
+	complaintsdomain "github.com/CodyLionVivo/duradent/services/api/internal/complaints/domain"
 	identityoidc "github.com/CodyLionVivo/duradent/services/api/internal/identity/adapters/oidc"
 	identitydomain "github.com/CodyLionVivo/duradent/services/api/internal/identity/domain"
 	identityports "github.com/CodyLionVivo/duradent/services/api/internal/identity/ports"
@@ -84,6 +85,11 @@ func run(ctx context.Context, mode string, cfg config.Config, log *slog.Logger) 
 		return fmt.Errorf("unknown command %q\n%s", mode, usage)
 	}
 
+	if cfg.MySQLCAFile != "" {
+		if err := mysql.RegisterCA(cfg.MySQLCAFile); err != nil {
+			return err
+		}
+	}
 	db, err := mysql.Open(ctx, cfg.MySQLDSN)
 	if err != nil {
 		return err
@@ -208,7 +214,7 @@ func build(ctx context.Context, cfg config.Config, awsCfg aws.Config, db *sql.DB
 		InvoiceSeries: invoicingdomain.Series{
 			Factura: cfg.SeriesFactura, Boleta: cfg.SeriesBoleta, CreditNoteF: cfg.SeriesCreditF, CreditNoteB: cfg.SeriesCreditB,
 		},
-		USDExchangeRate: cfg.USDExchangeRate,
+		Company: complaintsdomain.Provider{Name: cfg.CompanyName, RUC: cfg.CompanyRUC, Address: cfg.CompanyAddress},
 	})
 }
 

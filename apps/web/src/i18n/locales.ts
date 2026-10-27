@@ -29,13 +29,12 @@ export const LOCALE_NAMES: Record<Locale, string> = {
   'pt-br': 'Português (Brasil)',
 };
 
-export const CURRENCIES = ['PEN', 'USD'] as const;
-export type Currency = (typeof CURRENCIES)[number];
-export const DEFAULT_CURRENCY: Currency = 'PEN';
+/** The store sells only in soles. */
+export const CURRENCY = 'PEN' as const;
+export type Currency = typeof CURRENCY;
 
-export function isCurrency(value: string | undefined): value is Currency {
-  return value !== undefined && (CURRENCIES as readonly string[]).includes(value);
-}
+/** Dates are shown in Lima time, whatever the server's time zone. */
+export const TIME_ZONE = 'America/Lima';
 
 /** Picks the best supported locale from an Accept-Language header. */
 export function negotiateLocale(header: string | null): Locale {

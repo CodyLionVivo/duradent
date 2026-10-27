@@ -1,0 +1,6 @@
+# Copy to backend.hcl (not committed) after creating the state bucket and lock
+# table once by hand (see the runbook in CLAUDE.md).
+bucket         = "duradent-terraform-state-<account-id>"
+region         = "us-east-1"
+dynamodb_table = "duradent-terraform-locks"
+encrypt        = true

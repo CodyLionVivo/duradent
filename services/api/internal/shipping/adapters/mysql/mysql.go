@@ -15,7 +15,7 @@ type Rates struct{ db *sql.DB }
 func New(db *sql.DB) *Rates { return &Rates{db: db} }
 
 func (r *Rates) All(ctx context.Context) ([]domain.Rate, error) {
-	rows, err := mysql.Conn(ctx, r.db).QueryContext(ctx, "SELECT zone, max_weight_g, amount_pen, amount_usd FROM shipping_rates ORDER BY zone, max_weight_g")
+	rows, err := mysql.Conn(ctx, r.db).QueryContext(ctx, "SELECT zone, max_weight_g, amount_pen FROM shipping_rates ORDER BY zone, max_weight_g")
 	if err != nil {
 		return nil, err
 	}
@@ -23,14 +23,11 @@ func (r *Rates) All(ctx context.Context) ([]domain.Rate, error) {
 	var out []domain.Rate
 	for rows.Next() {
 		var rt domain.Rate
-		var pen, usd string
-		if err := rows.Scan(&rt.Zone, &rt.MaxWeightG, &pen, &usd); err != nil {
+		var pen string
+		if err := rows.Scan(&rt.Zone, &rt.MaxWeightG, &pen); err != nil {
 			return nil, err
 		}
-		if rt.PEN, err = money.Parse(pen, money.PEN); err != nil {
-			return nil, err
-		}
-		if rt.USD, err = money.Parse(usd, money.USD); err != nil {
+		if rt.Amount, err = money.Parse(pen, money.PEN); err != nil {
 			return nil, err
 		}
 		out = append(out, rt)

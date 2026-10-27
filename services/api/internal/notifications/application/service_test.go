@@ -98,6 +98,9 @@ func TestOrderPlacedEmailsTheCustomerInTheirLanguageOnce(t *testing.T) {
 			t.Errorf("text lacks %q:\n%s", want, m.Text)
 		}
 	}
+	if !strings.Contains(m.HTML, `src="https://duradent.pe/brand/logo-email.png"`) {
+		t.Error("the email header shows the logo")
+	}
 }
 
 func TestFailedSendIsRetried(t *testing.T) {
@@ -131,8 +134,5 @@ func TestFormatMoney(t *testing.T) {
 		if got := domain.FormatMoney(money.New(in, money.PEN)); got != want {
 			t.Errorf("%d: %s", in, got)
 		}
-	}
-	if got := domain.FormatMoney(money.New(100000, money.USD)); got != "US$ 1,000.00" {
-		t.Error(got)
 	}
 }

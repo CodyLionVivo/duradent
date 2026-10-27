@@ -12,13 +12,12 @@ import (
 
 type Currency string
 
-const (
-	PEN Currency = "PEN"
-	USD Currency = "USD"
-)
+// PEN is the only currency: Duradent prices, charges and invoices in soles.
+// The type stays so amounts keep saying which currency they are in.
+const PEN Currency = "PEN"
 
 // Supported lists the currencies the store prices and charges in.
-var Supported = []Currency{PEN, USD}
+var Supported = []Currency{PEN}
 
 var (
 	ErrCurrency = errors.New("unsupported currency")
@@ -35,7 +34,7 @@ func ParseCurrency(s string) (Currency, error) {
 	return "", fmt.Errorf("%w: %q", ErrCurrency, s)
 }
 
-// Money is an amount in minor units (2 decimals for PEN and USD).
+// Money is an amount in minor units (céntimos: 2 decimals).
 type Money struct {
 	Minor    int64
 	Currency Currency

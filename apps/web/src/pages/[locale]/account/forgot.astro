@@ -1,0 +1,54 @@
+---
+// "Forgot your password?": asks the API to email a reset link. The answer is
+// the same whether or not the email has an account.
+import Layout from '../../../layouts/Layout.astro';
+import { isLocale, localePath, useTranslations } from '../../../i18n';
+import { ApiError, unwrap } from '../../../lib/api/client';
+import { apiErrorText } from '../../../lib/account';
+
+if (!isLocale(Astro.params.locale)) return new Response(null, { status: 404 });
+
+const { locale, api } = Astro.locals;
+const t = useTranslations(locale);
+
+let email = '';
+let sent = false;
+let error = '';
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  email = String(form.get('email') ?? '').trim();
+  try {
+    unwrap(await api.POST('/v1/auth/password/forgot', { body: { email, locale } }));
+    sent = true;
+  } catch (err) {
+    error = apiErrorText(t, err);
+    Astro.response.status = err instanceof ApiError ? err.status : 500;
+  }
+}
+---
+
+<Layout title={t('account.forgot.title')}>
+  <section class="container-page flex justify-center py-14">
+    <div class="w-full max-w-md">
+      <h1 class="text-2xl font-bold tracking-tight">{t('account.forgot.title')}</h1>
+      <p class="mt-2 text-sm text-muted">{t('account.forgot.subtitle')}</p>
+
+      {error && <p role="alert" class="mt-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</p>}
+
+      {sent ? (
+        <p role="status" class="mt-6 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">{t('account.forgot.sent', { email })}</p>
+      ) : (
+        <form method="post" class="card mt-6 space-y-4 p-6">
+          <div>
+            <label for="email" class="label">{t('account.login.email')}</label>
+            <input id="email" name="email" type="email" autocomplete="email" required value={email} class="input" />
+          </div>
+          <button class="btn-primary w-full py-3">{t('account.forgot.submit')}</button>
+        </form>
+      )}
+      <p class="mt-6 text-center text-sm">
+        <a class="font-semibold text-brand-700 hover:underline" href={localePath(locale, '/account/login')}>{t('account.forgot.back')}</a>
+      </p>
+    </div>
+  </section>
+</Layout>

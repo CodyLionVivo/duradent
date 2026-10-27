@@ -2,7 +2,7 @@
 import Layout from '../../../layouts/Layout.astro';
 import OrderStatus from '../../../components/OrderStatus.astro';
 import CulqiPay from '../../../components/islands/CulqiPay';
-import { formatDate, formatMoney, isLocale, localePath, useTranslations, type Currency } from '../../../i18n';
+import { formatDate, formatMoney, isLocale, localePath, useTranslations } from '../../../i18n';
 import { ApiError, unwrap, type Schemas } from '../../../lib/api/client';
 import { apiErrorText, departmentName } from '../../../lib/account';
 
@@ -52,11 +52,10 @@ const invoiced = !!order && (order.paid_at !== null || order.refunded_at !== nul
 const invoices = invoiced
   ? ((await api.GET('/v1/orders/{number}/invoices', { params: { path: { number } } })).data?.items ?? [])
   : [];
-const cur = (order?.currency ?? 'PEN') as Currency;
-const money = (v: string) => formatMoney(v, cur, locale);
+const money = (v: string) => formatMoney(v, locale);
 const date = (v: string) => formatDate(v, locale);
 const payable = order?.status === 'pending_payment' && order.payment_method === 'culqi' && !order.payment_in_progress;
-const yapeAllowed = !!order && order.currency === 'PEN' && config !== null && Number(order.total) <= Number(config.yape_max_pen);
+const yapeAllowed = !!order && config !== null && Number(order.total) <= Number(config.yape_max_pen);
 const ship = order?.shipping;
 ---
 

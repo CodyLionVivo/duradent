@@ -70,7 +70,6 @@ func newShop(t *testing.T) shop {
 	for _, v := range []string{v1, v2} {
 		s.must(200, "PUT", "/v1/admin/pricing/price-lists/"+list.ID+"/variants/"+v, map[string]any{"prices": []map[string]any{
 			{"currency": "PEN", "min_qty": 1, "unit_price": "100.00"},
-			{"currency": "USD", "min_qty": 1, "unit_price": "27.00"},
 		}}, nil)
 	}
 	s.must(200, "POST", "/v1/admin/inventory/"+v1+"/adjust", map[string]any{"delta": 5, "reason": "purchase"}, nil)
@@ -152,8 +151,11 @@ func TestCheckoutAndCulqiPayment(t *testing.T) {
 	if o.Number == "" || again.Number != o.Number || o.Total != "247.80" || o.Status != "pending_payment" || o.Billing.InvoiceType != "01" || o.Lines[0].Name != "Kit Roth" {
 		t.Fatalf("order: %+v / %+v", o, again)
 	}
-	if got := idem.do("POST", "/v1/orders", false, map[string]any{"currency": "USD", "address_id": sh.addressID, "payment_method": "culqi"}, &problem); got != 409 || problem.Code != "orders.idempotency_mismatch" {
+	if got := idem.do("POST", "/v1/orders", false, map[string]any{"currency": "PEN", "address_id": sh.addressID, "payment_method": "bank_transfer"}, &problem); got != 409 || problem.Code != "orders.idempotency_mismatch" {
 		t.Fatalf("reused key with another body: %d %+v", got, problem)
+	}
+	if got := sh.customer.do("POST", "/v1/checkout/quote", false, map[string]any{"currency": "USD", "address_id": sh.addressID}, &problem); got != 422 || problem.Code != "orders.currency_invalid" {
+		t.Fatalf("only soles: %d %+v", got, problem)
 	}
 	var emptied cartResp
 	sh.customer.must(200, "GET", "/v1/cart", nil, &emptied)

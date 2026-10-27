@@ -51,10 +51,16 @@ func TestDevLoginOnlyLocal(t *testing.T) {
 	}
 	prod := map[string]string{"APP_ENV": "prod", "MYSQL_DSN": "x", "S3_MEDIA_BUCKET": "b", "MEDIA_BASE_URL": "https://cdn", "WEB_BASE_URL": "https://duradent.pe",
 		"CULQI_SECRET_KEY": "sk_live_x", "CULQI_PUBLIC_KEY": "pk_live_x", "CULQI_WEBHOOK_SECRET": "a-long-random-webhook-secret-123",
-		"NUBEFACT_URL": "https://api.nubefact.com/api/v1/x", "NUBEFACT_TOKEN": "t", "USD_EXCHANGE_RATE": "3.75", "MAIL_FROM": "Duradent <ventas@duradent.pe>"}
+		"NUBEFACT_URL": "https://api.nubefact.com/api/v1/x", "NUBEFACT_TOKEN": "t", "MAIL_FROM": "Duradent <ventas@duradent.pe>",
+		"COMPANY_RUC": "20123456789"}
 	if _, err := load(env(prod)); err != nil {
 		t.Fatalf("valid prod config: %v", err)
 	}
+	prod["COMPANY_RUC"] = "2012345678"
+	if _, err := load(env(prod)); err == nil {
+		t.Fatal("the complaints book needs the company's 11-digit RUC outside local")
+	}
+	prod["COMPANY_RUC"] = "20123456789"
 	prod["DEV_LOGIN"] = "true"
 	if _, err := load(env(prod)); err == nil {
 		t.Fatal("DEV_LOGIN must be rejected outside local")
@@ -82,7 +88,7 @@ func TestEventsAndInvoicingSettings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.SeriesFactura != "F001" || cfg.SeriesCreditB != "BC01" || cfg.USDExchangeRate != "3.750" || cfg.OpsEmails[0] != "jefa@duradent.pe" {
+	if cfg.SeriesFactura != "F001" || cfg.SeriesCreditB != "BC01" || cfg.OpsEmails[0] != "jefa@duradent.pe" {
 		t.Fatalf("%+v", cfg)
 	}
 }

@@ -13,18 +13,12 @@
     "searchLabel": "Buscar produtos",
     "searchPlaceholder": "Buscar por nome ou SKU…",
     "language": "Idioma",
-    "currency": "Moeda",
     "openMenu": "Abrir menu",
     "closeMenu": "Fechar menu",
     "mainNav": "Navegação principal",
     "account": "Minha conta",
     "cart": "Carrinho",
     "orders": "Meus pedidos"
-  },
-  "currency": {
-    "PEN": "Soles peruanos (S/)",
-    "USD": "Dólares (US$)",
-    "change": "Alterar moeda"
   },
   "home": {
     "eyebrow": "Distribuidor de ortodontia no Peru",
@@ -41,7 +35,10 @@
     "valueInvoiceTitle": "Nota fiscal eletrônica",
     "valueInvoiceText": "Comprovantes SUNAT com o seu RUC em cada pedido.",
     "valuePricesTitle": "Preços para profissionais",
-    "valuePricesText": "Tabelas de preços para clínicas, consultórios e distribuidores."
+    "valuePricesText": "Tabelas de preços para clínicas, consultórios e distribuidores.",
+    "storeCaption": "Nossa loja em Lima",
+    "storeAddress": "Av. Emancipación 271, lojas 108 e 126 · Centro de Lima",
+    "storeAlt": "Interior da loja Duradent: a placa da empresa, vitrines com produtos ortodônticos e uma cadeira odontológica em exposição."
   },
   "catalog": {
     "title": "Catálogo",
@@ -54,7 +51,20 @@
     "clearSearch": "Ver todos os produtos",
     "variantCount": "{count} opções",
     "priceOnRequest": "Preço sob consulta",
-    "from": "a partir de"
+    "from": "a partir de",
+    "filters": "Filtros",
+    "categories": "Categorias",
+    "brand": "Marca",
+    "apply": "Aplicar filtros",
+    "showResults": "Ver resultados",
+    "clearAll": "Limpar filtros",
+    "showMore": "Ver mais",
+    "sortBy": "Ordenar por",
+    "sortName": "Nome (A–Z)",
+    "sortNewest": "Mais recentes",
+    "activeFilters": "Filtros aplicados",
+    "remove": "Remover filtro: {label}",
+    "close": "Fechar filtros"
   },
   "product": {
     "breadcrumb": "Trilha de navegação",
@@ -94,8 +104,13 @@
     "shop": "Loja",
     "help": "Ajuda",
     "contact": "Contato",
-    "shipping": "Entregas",
-    "invoicing": "Faturamento"
+    "follow": "Siga-nos",
+    "facebook": "Duradent no Facebook",
+    "instagram": "Duradent no Instagram",
+    "phone": "Telefone",
+    "visit": "Visite-nos",
+    "complaintsBook": "Libro de Reclamaciones",
+    "complaintsBookHint": "Registre uma reclamação ou queixa"
   },
   "errors": {
     "notFoundTitle": "Página não encontrada",
@@ -131,7 +146,8 @@
       "devTitle": "Acesso de desenvolvimento",
       "devHint": "Somente em desenvolvimento local: entre com qualquer e-mail, sem senha.",
       "devSubmit": "Entrar como desenvolvedor",
-      "name": "Nome (opcional)"
+      "name": "Nome (opcional)",
+      "forgot": "Esqueceu sua senha?"
     },
     "profile": {
       "greeting": "Olá, {name}",
@@ -206,6 +222,22 @@
       "goAccount": "Ir para minha conta",
       "confirm": "Confirmar meu e-mail",
       "hint": "Clique no botão para confirmar que este e-mail é seu."
+    },
+    "forgot": {
+      "title": "Recupere seu acesso",
+      "subtitle": "Digite o e-mail da sua conta e enviaremos um link para criar uma nova senha.",
+      "submit": "Enviar link",
+      "sent": "Se {email} tiver uma conta na Duradent, enviamos um link para criar uma nova senha. Ele vence em 1 hora; confira também a pasta de spam.",
+      "back": "Voltar para entrar"
+    },
+    "reset": {
+      "title": "Crie uma nova senha",
+      "subtitle": "Escolha a nova senha da sua conta. Ao salvá-la, encerraremos as sessões abertas em outros dispositivos.",
+      "submit": "Salvar e entrar",
+      "done": "Pronto: salvamos sua nova senha e você já entrou.",
+      "invalid": "Este link não é válido ou já venceu. Os links duram 1 hora e funcionam uma única vez.",
+      "requestNew": "Pedir um novo link",
+      "goAccount": "Ir para minha conta"
     }
   },
   "codes": {
@@ -244,7 +276,8 @@
       "verification_invalid": "Este link é inválido ou expirou.",
       "verification_stale": "Este link foi enviado para outro e-mail.",
       "verification_throttled": "Já enviamos vários links. Verifique sua caixa ou tente em uma hora.",
-      "already_verified": "Seu e-mail já está confirmado."
+      "already_verified": "Seu e-mail já está confirmado.",
+      "reset_invalid": "Este link não é válido ou já venceu. Peça um novo."
     },
     "http": {
       "rate_limited": "Muitas tentativas. Aguarde um minuto e tente novamente."
@@ -270,8 +303,25 @@
       "cannot_cancel_paid": "Pedidos pagos são cancelados com reembolso: fale conosco.",
       "idempotency_mismatch": "Recarregue a página e tente novamente.",
       "token_invalid": "Falta o token de pagamento.",
-      "currency_invalid": "Moeda indisponível.",
+      "currency_invalid": "Vendemos apenas em soles peruanos (S/).",
       "invalid_transition": "Este pedido não permite essa ação."
+    },
+    "complaints": {
+      "kind_invalid": "Escolha se é uma reclamação ou uma queixa.",
+      "name_required": "Escreva seu nome completo.",
+      "document_invalid": "Confira seu documento: o DNI tem 8 dígitos e o RUC 11.",
+      "address_required": "Escreva seu endereço.",
+      "email_invalid": "Esse e-mail não parece válido.",
+      "phone_invalid": "Esse telefone não parece válido.",
+      "guardian_invalid": "O nome do pai, mãe ou responsável é muito longo.",
+      "item_type_invalid": "Escolha se é um produto ou um serviço.",
+      "order_number_invalid": "O número do pedido é muito longo.",
+      "amount_invalid": "Escreva o valor em soles, por exemplo 120.50.",
+      "item_description_required": "Descreva o produto ou serviço (até 500 caracteres).",
+      "detail_required": "Conte o que aconteceu (até 3000 caracteres).",
+      "request_required": "Indique a solução que você espera (até 1000 caracteres).",
+      "channel_invalid": "Escolha como você quer receber a resposta.",
+      "idempotency_key_invalid": "Recarregue a página e tente de novo."
     }
   },
   "cart": {
@@ -323,7 +373,6 @@
     "free": "Grátis",
     "refresh": "Atualizar total",
     "place": "Confirmar pedido",
-    "terms": "Ao confirmar, você aceita os termos de venda.",
     "zone_lima": "Lima e Callao",
     "zone_provincias": "Demais províncias",
     "zone_pickup": "Retirada na loja"
@@ -378,5 +427,72 @@
     "shipped": "Enviado",
     "delivered": "Entregue",
     "cancelled": "Cancelado"
+  },
+  "legal": {
+    "title": "Informações legais",
+    "terms": "Termos e condições",
+    "privacy": "Política de privacidade",
+    "returns": "Trocas e devoluções",
+    "updated": "Última atualização: {date}",
+    "spanishPrevails": "Esta é uma tradução para sua conveniência; a versão em espanhol prevalece.",
+    "acceptOrder": "Ao confirmar seu pedido você aceita os",
+    "acceptAccount": "Ao criar sua conta você aceita os",
+    "and": "e a"
+  },
+  "complaints": {
+    "title": "Livro de Reclamações (Libro de Reclamaciones)",
+    "metaDescription": "Registre uma reclamação ou queixa no Livro de Reclamações virtual da Duradent S.A.C.",
+    "intro": "Conforme o Código de Proteção e Defesa do Consumidor do Peru, a Duradent tem um Livro de Reclamações virtual (Libro de Reclamaciones). Registre aqui sua reclamação ou queixa: enviaremos uma cópia da folha para o seu e-mail e responderemos em até {days} dias úteis.",
+    "contactFirst": "Prefere resolver agora mesmo? Ligue para",
+    "provider": "Fornecedor",
+    "date": "Data",
+    "number": "Folha de reclamação n.º",
+    "numberPending": "Atribuído ao enviar",
+    "consumerSection": "1. Identificação do consumidor reclamante",
+    "name": "Nome completo",
+    "documentType": "Tipo de documento",
+    "documentNumber": "Número do documento",
+    "docDNI": "DNI (identidade peruana)",
+    "docCE": "Carteira de estrangeiro (CE)",
+    "docRUC": "RUC (cadastro fiscal)",
+    "docPAS": "Passaporte",
+    "address": "Endereço",
+    "phone": "Telefone",
+    "email": "E-mail",
+    "guardian": "Pai, mãe ou responsável",
+    "guardianHint": "Somente se você for menor de idade.",
+    "itemSection": "2. Identificação do bem contratado",
+    "itemType": "Bem contratado",
+    "product": "Produto",
+    "service": "Serviço",
+    "orderNumber": "N.º do pedido",
+    "amount": "Valor reclamado (S/)",
+    "description": "Descrição do produto ou serviço",
+    "detailSection": "3. Detalhe da reclamação e pedido do consumidor",
+    "kind": "Tipo",
+    "claim": "Reclamação (reclamo)",
+    "claimHint": "Desacordo relacionado aos produtos ou serviços.",
+    "complaint": "Queixa (queja)",
+    "complaintHint": "Desacordo não relacionado aos produtos ou serviços, ou insatisfação com o atendimento ao público.",
+    "detail": "Detalhe",
+    "request": "Pedido",
+    "requestHint": "Que solução você espera de nós?",
+    "channel": "Como você quer receber a resposta?",
+    "channelLabel": "Resposta por",
+    "byEmail": "Por e-mail",
+    "byLetter": "Por carta para o meu endereço",
+    "truth": "Declaro que os dados informados nesta folha são verdadeiros.",
+    "privacy": "Usaremos seus dados apenas para atender sua reclamação ou queixa, conforme nossa",
+    "submit": "Enviar folha de reclamação",
+    "optional": "opcional",
+    "noteIndecopi": "Apresentar uma reclamação não impede recorrer a outras vias de solução de controvérsias nem é requisito prévio para denunciar perante o INDECOPI.",
+    "noteDeadline": "O fornecedor deve responder à reclamação ou queixa em até {days} dias úteis, prazo improrrogável.",
+    "sentTitle": "Registramos sua folha de reclamação",
+    "sentText": "Registramos sua folha n.º {code} ({date}) e enviamos uma cópia para {email}.",
+    "sentDeadline": "Responderemos até {date}.",
+    "print": "Imprimir ou salvar em PDF",
+    "answerSection": "4. Observações e ações adotadas pelo fornecedor",
+    "response": "Resposta",
+    "answeredAt": "Data da resposta"
   }
 }

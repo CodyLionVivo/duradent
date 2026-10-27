@@ -12,7 +12,8 @@ apps/web/          Astro 7 SSR (adapter node standalone): tienda + /admin
 services/api/      Go: un binario `duradent` con modos api | worker | outbox-relay | migrate | seed
                    (internal/wiring arma la app; internal/apitest la prueba end-to-end)
 infra/local/       Init de LocalStack (SNS, SQS+DLQ, S3) para docker compose
-infra/terraform/   AWS (Fase 6)
+infra/terraform/   AWS: shared (ECR, roles de GitHub), envs/{staging,prod}, modules/*
+infra/scripts/     deploy.sh (migración + rollout de una imagen)
 Taskfile.yml       Todos los comandos
 ```
 
@@ -36,6 +37,9 @@ Requisitos: Go 1.27, Node 24, Docker Desktop, `task` y `golangci-lint`
 | Recargar demo desde cero | `task reset && task up` |
 | Tests web (Vitest) | `task web:test` |
 | Regenerar tipos TS del API | `task web:gen-api` (después de editar `services/api/openapi.yaml`) |
+| Validar Terraform (sin AWS) | `task tf:validate` · formatear: `task tf:fmt` |
+| Plan de un entorno | `task tf:plan -- staging` (necesita credenciales y `backend.hcl`) |
+| Desplegar una imagen | `task deploy -- staging <sha>` (normalmente lo hace GitHub Actions) |
 
 URLs locales: web http://localhost:4321 · API http://localhost:8080 (`/healthz`, `/readyz`, `/metrics`) ·
 Mailpit http://localhost:8025 · LocalStack http://localhost:4566 · MySQL `localhost:3307` (duradent/duradent; cambia con `MYSQL_HOST_PORT`).
@@ -43,8 +47,9 @@ Mailpit http://localhost:8025 · LocalStack http://localhost:4566 · MySQL `loca
 El servidor de desarrollo de Astro fuera de Docker: `astro dev --background` (ver AGENTS.md).
 
 **Tienda**: `/{es|en|pt-br}`, `/…/catalog`, `/…/catalog/{categoría}`, `/…/product/{slug}`,
-`/…/cart`, `/…/checkout`, `/…/orders`, `/…/account` (login, registro, perfil). `/` redirige según
-`Accept-Language`.
+`/…/cart`, `/…/checkout`, `/…/orders`, `/…/account` (login, registro, perfil, `forgot` y `reset` de contraseña), `/…/complaints-book`
+(Libro de Reclamaciones; aviso en el pie de todas las páginas). `/` redirige según `Accept-Language`.
+Admin del libro: `/admin/complaints`.
 
 **Pagos en local**: sin `CULQI_SECRET_KEY` el API usa una pasarela simulada y la página del pedido
 muestra botones "Pago aprobado / Tarjeta rechazada / Yape". Con llaves sandbox de Culqi
@@ -82,8 +87,9 @@ Contextos implementados: **catalog** (productos, variantes, categorías, atribut
 contraseña Argon2id, sesiones, perfil de facturación RUC/DNI/CE, direcciones, roles), **inventory**
 (stock, reservas por pedido, movimientos), **shipping** (zonas Lima/Provincias/Recojo y tarifas por
 peso), **orders** (carrito, pedidos, pagos Culqi y transferencia, reembolsos),
-**notifications** (correos transaccionales es/en/pt-br por SMTP/Mailpit o SES, `email_log`) e
-**invoicing** (facturas, boletas y notas de crédito SUNAT vía Nubefact, series correlativas).
+**notifications** (correos transaccionales es/en/pt-br por SMTP/Mailpit o SES, `email_log`),
+**invoicing** (facturas, boletas y notas de crédito SUNAT vía Nubefact, series correlativas) y
+**complaints** (Libro de Reclamaciones virtual: hojas numeradas por año, respuesta en 15 días hábiles).
 
 **Composición**: `internal/wiring` construye todos los contextos y monta las rutas; lo usan
 `cmd/duradent` y `internal/apitest`, así los tests ejercitan exactamente el mismo cableado. Los
@@ -96,7 +102,9 @@ con `FOR UPDATE SKIP LOCKED`, backoff exponencial hasta 10 min por fila fallida)
 una cola SQS por contexto (`platform/messaging.Consumer`: long polling, idempotencia por
 `processed_messages`, error → reintento y DLQ tras 5 recepciones). Cada contexto declara los tipos que
 consume (`notifications/application.Events`, `invoicing/application.Events`), que deben coincidir con las
-filter policies de `infra/local/localstack/init-aws.sh` (y de Terraform). El worker además corre cada
+filter policies de `infra/local/localstack/init-aws.sh` (y de Terraform; `wiring/events_test.go` lo
+comprueba). En una LocalStack ya creada, una policy nueva no se aplica sola: `task reset && task up`
+o vuelve a correr el script dentro del contenedor. El worker además corre cada
 minuto la expiración de pedidos impagos y el reintento de comprobantes pendientes.
 
 **Ver correos y eventos en local**: Mailpit http://localhost:8025 recibe todos los correos. Comprobantes
@@ -141,6 +149,14 @@ test con LocalStack real (outbox → SNS con filtro → SQS → consumidor, rein
   el navegador nunca ve el token de admin. Variables del servidor vía `astro:env/server`.
 - **Formularios del admin**: HTML normal con Post/Redirect/Get (`intent` para varias acciones en una
   página); funcionan sin JS. Astro rechaza POST de formularios de otro origen (checkOrigin).
+- **Textos legales**: Markdown por idioma en `apps/web/src/content/legal/<locale>/{terms,privacy,returns}.md` (colección `legal`, ruta `/{locale}/legal/{slug}`). El español es la versión que prevalece; al cambiar uno, actualiza los tres idiomas y la fecha `updated`. Teléfono de la tienda en `src/lib/legal.ts`.
+- **Fechas**: la web las muestra en hora de Lima (`TIME_ZONE` en `i18n/locales.ts`) aunque el servidor
+  esté en UTC; usa `formatDate`/`formatDay`, nunca `Intl.DateTimeFormat` sin `timeZone`.
+- **SEO** (`src/lib/seo.ts`): las URLs absolutas salen de `SITE_URL`, nunca de `Astro.url` (detrás del
+  ALB es http). Una página pública nueva va en `sitemapPaths`; si tiene datos de alguien, en
+  `isPrivatePath` (noindex). Datos estructurados con la prop `jsonLd` del `Layout`.
+- **Imágenes propias**: en `apps/web/src/assets/` (las optimiza `astro:assets`, p. ej. la foto de la tienda del hero). El logotipo y los iconos están en `public/brand/`.
+- **Efectos visuales**: solo animar `transform`/`opacity`; nada de `filter: blur` ni `backdrop-filter` sobre elementos animados (hacían lento el scroll del inicio). Las animaciones del hero se pausan fuera de pantalla y durante el scroll.
 - **Accesibilidad**: contraste AA en los tokens de `global.css`, foco visible, `label` en cada
   campo, `aria-live` en resultados y precios, `fieldset/legend` por idioma.
 - **Config**: solo variables de entorno (`internal/platform/config`). En AWS los secretos llegan
@@ -150,7 +166,7 @@ test con LocalStack real (outbox → SNS con filtro → SQS → consumidor, rein
 ## Decisiones de arquitectura (ADR)
 
 1. **Pagos con Culqi, no Stripe.** Stripe no acepta comercios constituidos en Perú. Culqi cubre
-   tarjetas y Yape en PEN/USD. El puerto `PaymentGateway` permite añadir Stripe si existe una
+   tarjetas y Yape en soles (ver ADR 46). El puerto `PaymentGateway` permite añadir Stripe si existe una
    entidad extranjera. Además, transferencia bancaria con confirmación manual en el admin.
 2. **B2B con listas de precios por cliente.** Se pide RUC/COP en la cuenta, no bloquea la compra.
    Factura (01) con RUC, boleta (03) sin él.
@@ -231,14 +247,79 @@ test con LocalStack real (outbox → SNS con filtro → SQS → consumidor, rein
 35. **Factura si el cliente pidió factura con RUC; si no, boleta.** Series por defecto F001/B001 y notas
     de crédito FC01/BC01 (`INVOICE_SERIES_*`). El IGV se calcula por línea y la diferencia de redondeo
     va a la línea mayor, así las líneas suman exactamente el IGV cobrado. El envío va como línea de
-    servicio (`ZZ`). Pedidos en USD usan `USD_EXCHANGE_RATE` (la SUNAT pide el tipo de cambio SBS del
-    día: operaciones debe actualizarlo; automatizarlo queda pendiente).
+    servicio (`ZZ`). Todos los comprobantes van en soles (`moneda` 1), sin tipo de cambio.
 36. **El enlace de verificación de correo no viaja por el bus**: identity lo envía en el momento a través
     del mailer de notifications (bridge). Token aleatorio de 32 bytes, solo se guarda su SHA-256, vale
     24 h, un uso, máx. 3 envíos por hora. La página `/…/account/verify` confirma con POST (los escáneres
     de enlaces del correo no lo consumen). Verificar un correo listado en `ADMIN_EMAILS` da admin.
 37. **`CustomerRegistered` en la misma transacción que la cuenta** (`Accounts.Create` se une a la unidad
     de trabajo).
+38. **Terraform para la infraestructura, `deploy.sh` para las versiones.** Los servicios ECS ignoran
+    cambios de `task_definition`; el script copia la última revisión de cada familia con la imagen
+    nueva, corre `migrate` como tarea única y solo si sale bien actualiza api → worker → relay → web.
+    El circuit breaker de ECS revierte un rollout que no arranca. Imágenes con tag inmutable (SHA).
+39. **Solo el webhook de Culqi entra por el ALB al API** (`POST /v1/webhooks/*`); todo lo demás va a la
+    web, que llama al API dentro de la VPC por ECS Service Connect (`http://api:8080`). El navegador
+    nunca habla con el API.
+40. **IP del visitante detrás del ALB**: la web toma la **última** entrada de `X-Forwarded-For` (la que
+    añade el ALB) con `TRUST_PROXY=true` y se la pasa al API, que confía en ella
+    (`TRUST_PROXY_HEADERS`) porque solo la web y el webhook llegan a él.
+41. **TLS a RDS verificado**: `require_secure_transport=1`, la imagen incluye el bundle de CA de RDS y el
+    DSN usa `tls=rds` (`MYSQL_CA_FILE`). La contraseña la genera Terraform y el DSN completo vive en
+    Secrets Manager (`duradent-<env>/mysql-dsn`).
+42. **Un secreto JSON por entorno para terceros** (`duradent-<env>/app`): Terraform crea el contenedor y
+    operaciones carga los valores; ECS los inyecta por clave. Nada sensible en tfvars ni en el estado.
+43. **GitHub Actions entra a AWS por OIDC**: `duradent-github-deploy` (solo `main` y los entornos
+    `staging`/`prod`) y `duradent-github-plan` (solo lectura, PRs). Sin llaves de AWS guardadas.
+44. **Modo económico para empezar (~USD 120/mes en prod)**: sin NAT gateways (las tareas corren en
+    las subredes públicas con IP pública; su security group solo deja entrar al ALB y a las otras
+    tareas; RDS sigue en las privadas), RDS single-AZ `db.t4g.micro` con respaldos diarios, protección
+    de borrado y snapshot final, y una tarea de web y otra de API con autoescalado por CPU (60 %, hasta
+    4). Antes eran ~USD 380/mes (NAT por AZ, Multi-AZ, dos tareas mínimo y staging fijo). Para subir
+    disponibilidad cuando las ventas lo justifiquen, en `envs/prod/main.tf`: `nat_gateways = 2`,
+    `db_multi_az = true`, `db_instance_class = "db.t4g.small"`, `min = 2`; sin migrar datos.
+45. **Imágenes por CloudFront con OAC** (bucket privado). La web sube con PUT prefirmado; el CORS del
+    bucket solo acepta el origen de la tienda.
+46. **Solo soles (PEN).** Duradent vende solo en soles: sin selector de moneda en la tienda, precios y
+    tarifas de envío en PEN, comprobantes sin tipo de cambio. La moneda sigue en el modelo (`currency`
+    en tablas, `money.Currency`, campo `currency` del API) pero `money.Supported` solo acepta PEN y el
+    API rechaza cualquier otra con `*.currency_invalid`. La migración 0009 borra los precios en USD y la
+    columna `shipping_rates.amount_usd`. Volver a vender en dólares exige reintroducirlos en el dominio,
+    el admin de precios, las tarifas y la facturación (tipo de cambio SBS).
+47. **Filtros del catálogo con facetas disyuntivas** (`GET /v1/catalog/products?brand=…&attr=código:valor&sort=name|newest`): cada grupo se cuenta ignorando su propia selección; los valores de un atributo son alternativas y atributos distintos deben cumplirse en la **misma variante**. La web es un formulario GET (filtros en la URL, sin JS) con barra lateral sticky en escritorio y `popover` en móvil. Precio y stock no son filtros todavía: viven en otros contextos (pricing por lista de cliente, inventory).
+48. **Libro de Reclamaciones virtual** (Ley 29571 y su reglamento; contexto `complaints`). Cualquiera,
+    con o sin sesión, registra un reclamo o una queja en `/…/complaints-book`; el aviso (libro abierto y la
+    frase "Libro de Reclamaciones") está en el pie de todas las páginas, también en la de inicio. Cada hoja:
+    número correlativo por año en hora de Lima (`000001-2026`, tabla `complaint_sequences` como las series
+    de comprobantes), datos del proveedor congelados (`COMPANY_NAME/RUC/ADDRESS`; RUC 20268534866, fijado
+    en `envs/*/main.tf` y obligatorio fuera de local), `Idempotency-Key` por carga del formulario y 10 envíos por hora por IP. El consumidor
+    recibe al momento la hoja en pantalla (imprimible) y una copia por correo (`ComplaintFiled`);
+    operaciones recibe una alerta. La respuesta se registra una sola vez en `/admin/complaints` y viaja por
+    correo con la hoja completa (`ComplaintAnswered`); si pidió carta, el admin además la imprime y la envía.
+    Plazo: fin del día 15 hábil (solo se saltan fines de semana, así el plazo calculado nunca es más tarde
+    que el legal). Las hojas no se borran.
+49. **Recuperar contraseña por enlace de un solo uso.** `POST /v1/auth/password/forgot` responde 202 exista
+    o no la cuenta (máx. 3 enlaces por cuenta y hora, más los límites por IP y por correo); el enlace vale
+    1 h y solo se guarda su SHA-256 (`password_resets`, como la verificación de correo, ADR 36). La página
+    `/…/account/reset` cambia la contraseña con POST (los escáneres de correo no consumen el enlace) y una
+    contraseña rechazada no gasta el enlace. Al usarlo: se borran los demás enlaces de la cuenta, se
+    cierran todas sus sesiones, el correo queda verificado (abrir el enlace prueba el buzón; si está en
+    `ADMIN_EMAILS` pasa a admin) y la persona entra con una sesión nueva. Las cuentas de Google o
+    Microsoft también pueden usarlo para crear una contraseña.
+50. **SEO básico sin integraciones**: `robots.txt` y `sitemap.xml` son endpoints SSR (el sitemap lee el
+    catálogo del API, 3 idiomas con alternates `hreflang`; `@astrojs/sitemap` solo ve rutas estáticas).
+    Solo producción se indexa (`ALLOW_INDEXING`, lo pone Terraform): en staging y local `robots.txt`
+    dice `Disallow: /` y cada página `noindex`. Canonical sin filtros, orden, búsqueda ni `?variant=`
+    (sí `?page=N`); `x-default` en español. JSON-LD: `Store` en el inicio (con RUC), `Product` con una
+    `Offer` por variante con precio (soles, `valueAddedTaxIncluded: false`, stock solo si se conoce) y
+    `BreadcrumbList` en producto y catálogo. Cuenta, carrito, checkout y pedidos llevan `noindex`.
+51. **Staging bajo demanda**: no está siempre encendido (le costaría ~USD 135/mes). `task staging:up`
+    lo crea con Terraform, carga sus secretos desde el archivo de `STAGING_SECRETS` y despliega `main`;
+    `task staging:down` lo destruye con su base de datos (~USD 4 por día encendido, 0 apagado). Es
+    `disposable`: sin snapshot final, secretos borrados al momento (el mismo nombre se puede volver a
+    crear) y bucket de imágenes vaciado. El merge a `main` construye las imágenes siempre y despliega
+    en staging solo si existe. Con el dominio en Route 53 (`route53_zone_id`) Terraform apunta
+    `staging.duradent.pe` al ALB nuevo en cada `up`; si no, hay que actualizar el registro a mano.
 
 ## Estado por fases
 
@@ -247,4 +328,85 @@ test con LocalStack real (outbox → SNS con filtro → SQS → consumidor, rein
 - [x] Fase 3 — identidad (Google, Microsoft, email)
 - [x] Fase 4 — carrito, envíos, pedidos, pagos Culqi + transferencia
 - [x] Fase 5 — outbox relay, worker, emails, facturación SUNAT, reembolsos, verificación de correo
-- [ ] Fase 6 — Terraform, ALB, ECS, despliegue
+- [x] Fase 6 — Terraform, ALB, ECS, despliegue (sin aplicar: falta la cuenta AWS de Duradent)
+
+## Runbook (AWS)
+
+Región `us-east-1` (Duradent no necesita datos en Perú y ahí están todos los servicios). Dominio
+supuesto `duradent.pe` / `staging.duradent.pe`: cámbialo en `envs/*/main.tf` si es otro.
+
+### Primera vez (una sola vez por cuenta)
+
+1. Bucket de estado y tabla de locks (fuera de Terraform):
+   `aws s3api create-bucket --bucket duradent-terraform-state-<cuenta>` (con versionado y cifrado) y
+   `aws dynamodb create-table --table-name duradent-terraform-locks --attribute-definitions AttributeName=LockID,AttributeType=S --key-schema AttributeName=LockID,KeyType=HASH --billing-mode PAY_PER_REQUEST`.
+   Copia `infra/terraform/backend.hcl.example` a `backend.hcl`.
+2. `cd infra/terraform/shared && terraform init -backend-config=../backend.hcl -backend-config="key=shared.tfstate"` y
+   `terraform apply -var github_repository=<owner/repo> -var state_bucket=… -var lock_table=…`: crea ECR y
+   los roles de GitHub. En GitHub: variables `AWS_REGION`, `AWS_DEPLOY_ROLE_ARN`, `AWS_PLAN_ROLE_ARN`,
+   `TF_STATE_BUCKET`, `TF_LOCK_TABLE`; entornos `staging` y `prod` (este con revisor obligatorio).
+3. Certificados ACM (validación DNS) para `staging.duradent.pe` y `duradent.pe` en us-east-1.
+4. Sube una imagen: un push a `main` corre el job *build* (el deploy fallará hasta el paso 6, es normal).
+5. Por entorno, **prod primero** (crea la identidad SES del dominio): copia `terraform.tfvars.example` a
+   `terraform.tfvars` y rellénalo (`image_tag` = el SHA subido);
+   `terraform init -backend-config=../../backend.hcl -backend-config="key=<env>.tfstate"`; `terraform apply`;
+   guarda la copia aplicada con `aws s3 cp terraform.tfvars s3://<bucket>/tfvars/<env>.tfvars` (la usa
+   el plan de los PRs).
+6. Carga los secretos de terceros (todas las claves, vacías si no aplican):
+   `aws secretsmanager put-secret-value --secret-id duradent-<env>/app --secret-string file://app.json`
+   con `CULQI_SECRET_KEY`, `CULQI_WEBHOOK_SECRET` (24 caracteres aleatorios o más), `NUBEFACT_URL`,
+   `NUBEFACT_TOKEN`, `GOOGLE_CLIENT_SECRET`, `MICROSOFT_CLIENT_SECRET`, `ADMIN_TOKEN` (32 o más, o vacío).
+   Borra `app.json` después.
+7. DNS: con el dominio en Route 53 pon `route53_zone_id` en los tfvars y Terraform crea el alias al
+   ALB (recomendado: el dominio raíz `duradent.pe` no admite CNAME en la mayoría de proveedores); si
+   no, CNAME/ALIAS del dominio al `alb_dns_name`. Registros de `ses_dns_records` (DKIM, MAIL FROM,
+   DMARC). Pide a AWS sacar SES del sandbox. Confirma el correo de suscripción a las alarmas (SNS).
+8. Webhook en CulqiPanel: `culqi_webhook_url_prefix` + `CULQI_WEBHOOK_SECRET`. Redirect URIs de
+   Google/Microsoft: `https://<dominio>/auth/<google|microsoft>/callback`.
+9. Despliega con `task deploy -- <env> <sha>` o re-ejecutando el workflow. Prueba: pedido con tarjeta de
+   prueba de Culqi en staging, correo recibido, comprobante en la demo de Nubefact.
+
+### Despliegue normal
+
+Merge a `main` → imágenes `duradent/{api,web}:<sha>` → staging (migración + rollout) si está encendido.
+Prod: Actions → *Deploy* → *Run workflow* con `environment=prod` y el mismo SHA → aprobación del
+revisor. Cambios de infraestructura: PR (el plan sale en el job *Terraform plan*) y `terraform apply`
+local tras el merge; actualiza la copia de tfvars en S3 si cambió.
+
+### Staging bajo demanda (ADR 51)
+
+- Encender: `STAGING_SECRETS=<ruta>/app.json task staging:up` (despliega `origin/main`; otro SHA con
+  `-- <sha>`). Guarda ese `app.json` de staging fuera del repo (gestor de contraseñas): son llaves de
+  prueba (Culqi sandbox, Nubefact demo) y se recargan en cada encendido. Cada `up` reenvía el correo de
+  suscripción a las alarmas.
+- Apagar al terminar las pruebas: `task staging:down` (pide confirmación; borra la base de staging).
+
+### Rollback
+
+`task deploy -- prod <sha-anterior>` (o el workflow con ese SHA). Las migraciones no se revierten:
+escríbelas compatibles hacia atrás (añadir columnas; renombrar o borrar en dos versiones). Si un
+rollout no arranca, el circuit breaker de ECS vuelve solo a la revisión anterior.
+
+### Rotar secretos
+
+- Terceros (Culqi, Nubefact, OIDC, `ADMIN_TOKEN`): `put-secret-value` con el JSON nuevo y
+  `aws ecs update-service --cluster duradent-<env> --service <servicio> --force-new-deployment` para api,
+  worker y outbox-relay (los contenedores leen los secretos al arrancar). Si cambia
+  `CULQI_WEBHOOK_SECRET`, actualiza también la URL en CulqiPanel.
+- Base de datos: `terraform apply -replace=module.stack.module.db.random_password.db` (cambia la
+  contraseña en RDS y el secreto del DSN) y fuerza el redeploy de los cuatro servicios Go.
+
+### Mensajes en la DLQ
+
+La alarma `duradent-<env>-<consumidor>-dlq-not-empty` avisa por correo. Busca el error en
+`/ecs/duradent-<env>-worker` (mensaje `handle message (will retry)`), corrige la causa y devuelve los
+mensajes a la cola: consola SQS → la DLQ → *Start DLQ redrive* (o
+`aws sqs start-message-move-task --source-arn <arn-de-la-dlq>`). Los consumidores son idempotentes:
+reintentar no duplica correos ni comprobantes. Comprobantes rechazados: admin → pedido →
+*Comprobantes electrónicos* → *Reintentar*.
+
+### Otros
+
+- Shell en un contenedor: `aws ecs execute-command --cluster duradent-<env> --task <id> --container app --interactive --command sh`
+  (solo la web tiene shell; las imágenes Go son distroless).
+- Logs: CloudWatch `/ecs/duradent-<env>-<servicio>`; los errores (`level=ERROR`) tienen alarma propia.

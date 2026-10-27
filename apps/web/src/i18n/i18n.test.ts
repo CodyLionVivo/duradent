@@ -48,12 +48,12 @@ describe('useTranslations', () => {
 
 describe('formatMoney', () => {
   it('formats soles with Peruvian conventions', () => {
-    expect(formatMoney('1234.5', 'PEN', 'es')).toMatch(/S\/\s?1,234\.50/);
+    expect(formatMoney('1234.5', 'es')).toMatch(/S\/\s?1,234\.50/);
   });
 
-  it('formats dollars per locale', () => {
-    expect(formatMoney('10.1', 'USD', 'en')).toBe('$10.10');
-    expect(formatMoney('10.1', 'USD', 'pt-br')).toMatch(/US\$\s?10,10/);
+  it('formats soles with each locale’s separators', () => {
+    expect(formatMoney('1234.5', 'en')).toMatch(/PEN\s?1,234\.50/);
+    expect(formatMoney('1234.5', 'pt-br')).toMatch(/PEN\s?1\.234,50/);
   });
 });
 

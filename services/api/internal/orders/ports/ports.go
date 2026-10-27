@@ -107,7 +107,7 @@ type Stock interface {
 }
 
 type Shipping interface {
-	Quote(ctx context.Context, department string, pickup bool, weightG int, c money.Currency) (zone string, amount money.Money, err error)
+	Quote(ctx context.Context, department string, pickup bool, weightG int) (zone string, amount money.Money, err error)
 }
 
 type Address struct {

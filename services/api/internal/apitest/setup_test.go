@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/CodyLionVivo/duradent/services/api/internal/catalog/ports"
+	complaintsdomain "github.com/CodyLionVivo/duradent/services/api/internal/complaints/domain"
 	identityoidc "github.com/CodyLionVivo/duradent/services/api/internal/identity/adapters/oidc"
 	"github.com/CodyLionVivo/duradent/services/api/internal/identity/adapters/oidc/oidctest"
 	identitydomain "github.com/CodyLionVivo/duradent/services/api/internal/identity/domain"
@@ -118,9 +119,9 @@ func newServer(t *testing.T) server {
 	app, err := wiring.Build(wiring.Options{
 		DB: db, Log: log, Media: fakeMedia{}, Gateway: gateway, AdminEmails: []string{adminEmail},
 		Mailer: mail, OSE: ose, WebBaseURL: webBaseURL, BankDetails: "BCP 191-0000000-0-00", OpsEmails: []string{adminEmail},
-		InvoiceSeries:   invoicingdomain.Series{Factura: "F001", Boleta: "B001", CreditNoteF: "FC01", CreditNoteB: "BC01"},
-		USDExchangeRate: "3.750",
-		Providers:       map[identitydomain.Provider]identityports.OIDCProvider{identitydomain.ProviderGoogle: gp},
+		InvoiceSeries: invoicingdomain.Series{Factura: "F001", Boleta: "B001", CreditNoteF: "FC01", CreditNoteB: "BC01"},
+		Providers:     map[identitydomain.Provider]identityports.OIDCProvider{identitydomain.ProviderGoogle: gp},
+		Company:       complaintsdomain.Provider{Name: "Duradent S.A.C.", RUC: "20123456789", Address: "Av. Emancipación 271, Lima"},
 	})
 	if err != nil {
 		t.Fatal(err)

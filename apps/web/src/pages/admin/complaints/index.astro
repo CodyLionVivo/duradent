@@ -1,0 +1,104 @@
+---
+// Libro de Reclamaciones: unanswered sheets first, the most urgent on top.
+import AdminLayout from '../../../layouts/AdminLayout.astro';
+import Pagination from '../../../components/Pagination.astro';
+import { unwrap, type Schemas } from '../../../lib/api/client';
+import { errorMessage } from '../../../lib/admin';
+import { formatDate, formatDay, useTranslations } from '../../../i18n';
+import { daysLeft } from '../../../lib/complaints';
+
+const adminApi = Astro.locals.api;
+const t = useTranslations('es');
+const q = Astro.url.searchParams.get('q') ?? '';
+const statusParam = Astro.url.searchParams.get('status') ?? '';
+const statuses = ['open', 'answered'] as const;
+const status = statuses.find((s) => s === statusParam);
+const page = Math.max(1, Number.parseInt(Astro.url.searchParams.get('page') ?? '1', 10) || 1);
+
+let error = '';
+let data: Schemas['ComplaintPage'] = { items: [], total: 0, page, page_size: 50, open: 0, overdue: 0 };
+try {
+  data = unwrap(await adminApi.GET('/v1/admin/complaints', { params: { query: { q: q || undefined, status, page } } }));
+} catch (err) {
+  error = errorMessage(err);
+}
+const tab = (s: string) => {
+  const u = new URL(Astro.url);
+  if (s) u.searchParams.set('status', s);
+  else u.searchParams.delete('status');
+  u.searchParams.delete('page');
+  return u.pathname + u.search;
+};
+const now = new Date();
+---
+
+<AdminLayout title={t('admin.complaints.title')} error={error}>
+  <p class="text-sm" aria-live="polite">
+    <span class="font-semibold">{t('admin.complaints.summary', { open: data.open })}</span>
+    {data.overdue > 0 && <span class="ml-2 rounded-full bg-red-100 px-2 py-0.5 font-semibold text-red-800">{t('admin.complaints.summaryOverdue', { overdue: data.overdue })}</span>}
+  </p>
+  <nav aria-label={t('admin.complaints.status')} class="mt-4 flex flex-wrap gap-2">
+    {[['', t('admin.complaints.all')], ['open', t('admin.complaints.open')], ['answered', t('admin.complaints.answered')]].map(([s, label]) => (
+      <a href={tab(s)} aria-current={statusParam === s ? 'page' : undefined}
+        class:list={['rounded-full border px-3 py-1 text-sm', statusParam === s ? 'border-brand-700 bg-brand-700 text-white' : 'border-line bg-white hover:border-brand-500']}>{label}</a>
+    ))}
+  </nav>
+  <form method="get" class="mt-4 flex flex-wrap items-end gap-2">
+    {status && <input type="hidden" name="status" value={status} />}
+    <div>
+      <label for="q" class="label">{t('admin.common.search')}</label>
+      <input id="q" name="q" type="search" value={q} placeholder={t('admin.complaints.search')} class="input w-96 max-w-full" />
+    </div>
+    <button class="btn-secondary">{t('admin.common.search')}</button>
+  </form>
+  <p class="mt-4 text-sm text-muted">{data.total === 1 ? t('admin.complaints.countOne') : t('admin.complaints.count', { count: data.total })}</p>
+
+  {data.items.length === 0 ? (
+    <p class="card mt-4 p-8 text-center text-muted">{t('admin.complaints.empty')}</p>
+  ) : (
+    <div class="card mt-4 overflow-x-auto">
+      <table class="w-full min-w-[52rem] text-sm">
+        <thead class="bg-surface text-left text-xs uppercase tracking-wide text-muted">
+          <tr>
+            <th scope="col" class="px-4 py-3">{t('admin.complaints.number')}</th>
+            <th scope="col" class="px-4 py-3">{t('admin.complaints.kind')}</th>
+            <th scope="col" class="px-4 py-3">{t('admin.complaints.consumer')}</th>
+            <th scope="col" class="px-4 py-3">{t('admin.complaints.filed')}</th>
+            <th scope="col" class="px-4 py-3">{t('admin.complaints.status')}</th>
+            <th scope="col" class="px-4 py-3">{t('admin.complaints.due')}</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-line">
+          {data.items.map((c) => {
+            const left = daysLeft(c.due_at, now);
+            const late = c.status === 'open' && left < 0;
+            return (
+              <tr class="hover:bg-surface/60">
+                <td class="px-4 py-3"><a href={`/admin/complaints/${c.id}`} class="font-semibold text-brand-800 hover:underline">{c.code}</a></td>
+                <td class="px-4 py-3">{c.kind === 'queja' ? t('complaints.complaint') : t('complaints.claim')}</td>
+                <td class="px-4 py-3"><p>{c.consumer.name}</p><p class="text-xs text-muted">{c.consumer.email} · {c.consumer.document_type} {c.consumer.document_number}</p></td>
+                <td class="px-4 py-3 text-muted">{formatDate(c.filed_at, 'es')}</td>
+                <td class="px-4 py-3">
+                  {c.status === 'answered'
+                    ? <span class="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800">{t('admin.complaints.answeredBadge')}</span>
+                    : late
+                      ? <span class="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-800">{t('admin.complaints.overdueBadge')}</span>
+                      : <span class="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900">{t('admin.complaints.open')}</span>}
+                </td>
+                <td class="px-4 py-3">
+                  <p>{formatDay(c.due_at, 'es')}</p>
+                  {c.status === 'open' && (
+                    <p class:list={['text-xs', late ? 'font-semibold text-red-700' : 'text-muted']}>
+                      {late ? t('admin.complaints.late', { days: -left }) : left === 0 ? t('admin.complaints.dueToday') : t('admin.complaints.dueIn', { days: left })}
+                    </p>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  )}
+  <Pagination page={page} pageSize={50} total={data.total} />
+</AdminLayout>

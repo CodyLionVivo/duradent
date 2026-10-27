@@ -6,7 +6,7 @@ import { apiErrorText, departmentName } from '../../lib/account';
 
 if (!isLocale(Astro.params.locale)) return new Response(null, { status: 404 });
 
-const { locale, currency, api, user } = Astro.locals;
+const { locale, api, user } = Astro.locals;
 const t = useTranslations(locale);
 const here = localePath(locale, '/checkout');
 if (!user) return Astro.redirect(`${localePath(locale, '/account/login')}?next=${encodeURIComponent(here)}`, 302);
@@ -36,7 +36,7 @@ if (form) {
     const order = unwrap(
       await api.POST('/v1/orders', {
         params: { header: { 'Idempotency-Key': String(form.get('idempotency_key') ?? '') } },
-        body: { currency, pickup, address_id: addressId, payment_method: method as 'culqi', notes },
+        body: { pickup, address_id: addressId, payment_method: method as 'culqi', notes },
       }),
     );
     return Astro.redirect(localePath(locale, `/orders/${order.number}`), 303);
@@ -57,7 +57,7 @@ type Quote = {
 };
 let quote: Quote | null = null;
 try {
-  quote = unwrap(await api.POST('/v1/checkout/quote', { body: { currency, pickup, address_id: addressId } }));
+  quote = unwrap(await api.POST('/v1/checkout/quote', { body: { pickup, address_id: addressId } }));
 } catch (err) {
   error ||= apiErrorText(t, err);
 }
@@ -145,18 +145,18 @@ const zoneKey = `checkout.zone_${quote?.shipping.zone || 'pickup'}` as 'checkout
               {quote.cart.lines.map((l) => (
                 <li class="flex justify-between gap-3">
                   <span class="min-w-0"><span class="font-medium">{l.qty} × {l.product_name}</span>{l.options && <span class="block text-xs text-muted">{l.options}</span>}</span>
-                  <span class="shrink-0">{l.line_total ? formatMoney(l.line_total, currency, locale) : '—'}</span>
+                  <span class="shrink-0">{l.line_total ? formatMoney(l.line_total, locale) : '—'}</span>
                 </li>
               ))}
             </ul>
             <dl class="mt-4 space-y-2 border-t border-line pt-4 text-sm" aria-live="polite">
-              <div class="flex justify-between"><dt>{t('orders.subtotal')}</dt><dd>{formatMoney(quote.cart.subtotal, currency, locale)}</dd></div>
+              <div class="flex justify-between"><dt>{t('orders.subtotal')}</dt><dd>{formatMoney(quote.cart.subtotal, locale)}</dd></div>
               <div class="flex justify-between">
                 <dt>{t('checkout.shipping')} <span class="text-xs text-muted">({t(zoneKey)})</span></dt>
-                <dd>{Number(quote.shipping_amount) === 0 ? t('checkout.free') : formatMoney(quote.shipping_amount, currency, locale)}</dd>
+                <dd>{Number(quote.shipping_amount) === 0 ? t('checkout.free') : formatMoney(quote.shipping_amount, locale)}</dd>
               </div>
-              <div class="flex justify-between"><dt>{t('checkout.tax', { percent: quote.igv_percent })}</dt><dd>{formatMoney(quote.tax, currency, locale)}</dd></div>
-              <div class="flex justify-between border-t border-line pt-2 text-base font-bold"><dt>{t('checkout.total')}</dt><dd>{formatMoney(quote.total, currency, locale)}</dd></div>
+              <div class="flex justify-between"><dt>{t('checkout.tax', { percent: quote.igv_percent })}</dt><dd>{formatMoney(quote.tax, locale)}</dd></div>
+              <div class="flex justify-between border-t border-line pt-2 text-base font-bold"><dt>{t('checkout.total')}</dt><dd>{formatMoney(quote.total, locale)}</dd></div>
             </dl>
             {!quote.cart.ready && <p class="mt-3 text-sm text-red-700">{t('cart.fixProblems')} <a class="underline" href={localePath(locale, '/cart')}>{t('cart.title')}</a></p>}
           </>
@@ -165,7 +165,10 @@ const zoneKey = `checkout.zone_${quote?.shipping.zone || 'pickup'}` as 'checkout
           <button type="submit" formmethod="get" formaction={here} class="btn-secondary mt-4 w-full">{t('checkout.refresh')}</button>
         </noscript>
         <button type="submit" class="btn-primary mt-6 w-full py-3" disabled={!canPlace}>{t('checkout.place')}</button>
-        <p class="mt-2 text-xs text-muted">{t('checkout.terms')}</p>
+        <p class="mt-3 text-center text-xs text-muted">
+          {t('legal.acceptOrder')} <a class="font-medium text-brand-700 underline" href={localePath(locale, '/legal/terms')}>{t('legal.terms')}</a>{' '}
+          {t('legal.and')} <a class="font-medium text-brand-700 underline" href={localePath(locale, '/legal/privacy')}>{t('legal.privacy')}</a>.
+        </p>
       </aside>
     </form>
   </div>

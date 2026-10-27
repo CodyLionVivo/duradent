@@ -26,3 +26,14 @@ pnpm-debug.log*
 # Go build output
 bin/
 coverage.out
+
+# Terraform: providers and local config stay out; lock files are committed.
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+infra/terraform/backend.hcl
+
+# Secrets files for put-secret-value (never committed)
+infra/**/app*.json

@@ -1,0 +1,154 @@
+---
+// Left-hand filters of the catalog: categories (with subtree counts), brand
+// and every variant attribute that has products in the current results.
+//
+// A plain GET form: the filters live in the URL and work without JavaScript.
+// On large screens it is a sticky sidebar; on small ones the same element is
+// a popover sheet opened by the "Filtros" button of CatalogView.
+import { localePath, useTranslations } from '../i18n';
+import type { Category, ProductFacets } from '../lib/catalog';
+import { clearedUrl, subtreeCounts, type CatalogFilters } from '../lib/filters';
+
+interface Props {
+  formId: string;
+  facets: ProductFacets;
+  categories: Category[];
+  current?: Category;
+  filters: CatalogFilters;
+}
+
+const { formId, facets, categories, current, filters } = Astro.props;
+const { locale } = Astro.locals;
+const t = useTranslations(locale);
+const VISIBLE = 6; // values shown before "Ver más"
+
+const counts = subtreeCounts(categories, facets.categories);
+const topLevel = categories.filter((c) => c.parent_id === null);
+// The branch being browsed: the current category's top-level ancestor.
+let branch = current;
+while (branch?.parent_id) branch = categories.find((c) => c.id === branch!.parent_id);
+const childrenOf = (id: string) => categories.filter((c) => c.parent_id === id);
+
+// Changing category keeps the search and the sort order, not the facets.
+const keep = new URLSearchParams();
+if (filters.q) keep.set('q', filters.q);
+if (filters.sort !== 'name') keep.set('sort', filters.sort);
+const categoryHref = (slug?: string) => {
+  const path = localePath(locale, slug ? `/catalog/${slug}` : '/catalog');
+  return keep.size ? `${path}?${keep}` : path;
+};
+const action = Astro.url.pathname;
+const hasFacets = facets.brands.length > 0 || facets.attributes.length > 0;
+const groups = [
+  ...(facets.brands.length ? [{ key: 'brand', name: 'brand', title: t('catalog.brand'), values: facets.brands.map((v) => ({ ...v, input: v.value })) }] : []),
+  ...facets.attributes.map((a) => ({ key: a.code, name: 'attr', title: a.name, values: a.values.map((v) => ({ ...v, input: `${a.code}:${v.value}` })) })),
+];
+---
+
+<aside id="catalog-filters" popover class="filters-panel" aria-labelledby="filters-title">
+  <div class="flex items-center justify-between gap-3">
+    <h2 id="filters-title" class="text-base font-semibold">{t('catalog.filters')}</h2>
+    <button type="button" popovertarget="catalog-filters" popovertargetaction="hide" class="filters-close" aria-label={t('catalog.close')}>
+      <svg aria-hidden="true" viewBox="0 0 20 20" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 5l10 10M15 5 5 15" /></svg>
+    </button>
+  </div>
+
+  <form id={formId} method="get" action={action} class="mt-4 space-y-6" data-filters-form>
+    {filters.q && <input type="hidden" name="q" value={filters.q} />}
+
+    <nav aria-labelledby="filter-categories">
+      <h3 id="filter-categories" class="filter-title">{t('catalog.categories')}</h3>
+      <ul class="mt-2 space-y-0.5 text-sm" role="list">
+        <li>
+          <a href={categoryHref()} class:list={['filter-link', !current && 'is-current']} aria-current={!current ? 'page' : undefined}>
+            {t('catalog.allProducts')}
+          </a>
+        </li>
+        {topLevel.map((c) => (
+          (counts.get(c.slug) ?? 0) > 0 || branch?.id === c.id ? (
+            <li>
+              <a href={categoryHref(c.slug)} class:list={['filter-link', current?.id === c.id && 'is-current']} aria-current={current?.id === c.id ? 'page' : undefined}>
+                <span>{c.name}</span>
+                <span class="filter-count">{counts.get(c.slug) ?? 0}</span>
+              </a>
+              {branch?.id === c.id && childrenOf(c.id).length > 0 && (
+                <ul class="ml-3 mt-0.5 space-y-0.5 border-l border-line pl-2" role="list">
+                  {childrenOf(c.id).map((s) => (
+                    <li>
+                      <a href={categoryHref(s.slug)} class:list={['filter-link', current?.id === s.id && 'is-current']} aria-current={current?.id === s.id ? 'page' : undefined}>
+                        <span>{s.name}</span>
+                        <span class="filter-count">{counts.get(s.slug) ?? 0}</span>
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </li>
+          ) : null
+        ))}
+      </ul>
+    </nav>
+
+    {groups.map((g) => (
+      <fieldset>
+        <legend class="filter-title">{g.title}</legend>
+        <ul class="mt-2 space-y-0.5" role="list">
+          {g.values.slice(0, VISIBLE).map((v) => (
+            <li>
+              <label class="filter-option">
+                <input type="checkbox" name={g.name} value={v.input} checked={v.selected} />
+                <span class="min-w-0 flex-1 truncate">{v.label}</span>
+                <span class="filter-count">{v.count}</span>
+              </label>
+            </li>
+          ))}
+        </ul>
+        {g.values.length > VISIBLE && (
+          <details class="mt-1" open={g.values.slice(VISIBLE).some((v) => v.selected)}>
+            <summary class="cursor-pointer px-2 py-1 text-sm font-semibold text-brand-700">{t('catalog.showMore')} ({g.values.length - VISIBLE})</summary>
+            <ul class="mt-1 space-y-0.5" role="list">
+              {g.values.slice(VISIBLE).map((v) => (
+                <li>
+                  <label class="filter-option">
+                    <input type="checkbox" name={g.name} value={v.input} checked={v.selected} />
+                    <span class="min-w-0 flex-1 truncate">{v.label}</span>
+                    <span class="filter-count">{v.count}</span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
+      </fieldset>
+    ))}
+
+    <div class="filters-actions">
+      {hasFacets && <button type="submit" class="btn-primary w-full" data-apply>{t('catalog.showResults')}</button>}
+      <a href={clearedUrl(Astro.url)} class="btn-secondary w-full">{t('catalog.clearAll')}</a>
+    </div>
+  </form>
+</aside>
+
+<script>
+  // With JavaScript, filters apply as soon as they change on large screens
+  // (on phones the visitor picks several and presses "Ver resultados").
+  const form = document.querySelector<HTMLFormElement>('[data-filters-form]');
+  if (form) {
+    const wide = matchMedia('(min-width: 64rem)');
+    const sync = () => form.querySelector<HTMLElement>('[data-apply]')?.toggleAttribute('hidden', wide.matches);
+    sync();
+    wide.addEventListener('change', sync);
+    form.addEventListener('change', (e) => {
+      const target = e.target as HTMLElement;
+      if (wide.matches || target.matches('select')) form.requestSubmit();
+    });
+    // Keep URLs short: the default sort order is not written.
+    form.addEventListener('formdata', (e) => {
+      if (e.formData.get('sort') === 'name') e.formData.delete('sort');
+    });
+    // The sort <select> sits outside the form (form="…"): it submits too.
+    document.querySelectorAll<HTMLSelectElement>(`select[form="${form.id}"]`).forEach((s) =>
+      s.addEventListener('change', () => form.requestSubmit()),
+    );
+  }
+</script>

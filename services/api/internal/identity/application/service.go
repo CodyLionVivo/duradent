@@ -38,7 +38,8 @@ type Service struct {
 	devLogin  bool
 	now       func() time.Time
 	verifs    ports.VerificationRepository
-	mailer    ports.VerificationMailer
+	resets    ports.PasswordResetRepository
+	mailer    ports.AccountMailer
 	uow       ports.UnitOfWork
 	events    ports.Events
 
@@ -57,10 +58,11 @@ type Deps struct {
 	Providers map[domain.Provider]ports.OIDCProvider
 	Now       func() time.Time
 
-	Verifications ports.VerificationRepository
-	Mailer        ports.VerificationMailer
-	UoW           ports.UnitOfWork
-	Events        ports.Events
+	Verifications  ports.VerificationRepository
+	PasswordResets ports.PasswordResetRepository
+	Mailer         ports.AccountMailer
+	UoW            ports.UnitOfWork
+	Events         ports.Events
 }
 
 func NewService(d Deps, cfg Config) (*Service, error) {
@@ -81,7 +83,7 @@ func NewService(d Deps, cfg Config) (*Service, error) {
 		accounts: d.Accounts, customers: d.Customers, addresses: d.Addresses, sessions: d.Sessions,
 		states: d.States, hasher: d.Hasher, providers: d.Providers, admins: admins,
 		devLogin: cfg.DevLogin, now: d.Now, dummyHash: dummy,
-		verifs: d.Verifications, mailer: d.Mailer, uow: d.UoW, events: d.Events,
+		verifs: d.Verifications, resets: d.PasswordResets, mailer: d.Mailer, uow: d.UoW, events: d.Events,
 	}, nil
 }
 
@@ -646,4 +648,107 @@ func (s *Service) VerifyEmail(ctx context.Context, token string) error {
 	}
 	a.PromoteIfListed(s.admins, now)
 	return s.accounts.Update(ctx, a)
+}
+
+// --- Password reset ("forgot your password?") ---------------------------------------------
+
+const (
+	resetTTL = time.Hour
+	// maxResetsPerHour stops the form from being used to flood a mailbox.
+	maxResetsPerHour = 3
+)
+
+// RequestPasswordReset emails a one-hour, single-use link to set a new
+// password. It answers the same whether or not the email has an account (and
+// when the hourly limit is reached), so the form does not reveal who is a
+// customer. Accounts created with Google or Microsoft can use it to add a
+// password.
+func (s *Service) RequestPasswordReset(ctx context.Context, email string, l locale.Locale) error {
+	e, err := domain.NormalizeEmail(email)
+	if err != nil {
+		return err
+	}
+	a, err := s.accounts.ByEmail(ctx, e)
+	if apperr.IsKind(err, apperr.KindNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if !a.Active() {
+		return nil
+	}
+	now := s.now()
+	n, err := s.resets.Recent(ctx, a.ID, now.Add(-time.Hour))
+	if err != nil || n >= maxResetsPerHour {
+		return err
+	}
+	token := randomToken(32)
+	if err := s.resets.Create(ctx, ports.PasswordReset{
+		TokenHash: domain.HashToken(token), AccountID: a.ID, Email: a.Email, ExpiresAt: now.Add(resetTTL), CreatedAt: now,
+	}); err != nil {
+		return err
+	}
+	if l == "" {
+		l = a.Locale
+	}
+	return s.mailer.SendPasswordReset(ctx, a.Email, a.DisplayName, l, token)
+}
+
+// ResetPassword sets a new password with an emailed link and signs the
+// person in. Opening the link proves the mailbox is theirs, so the email
+// counts as verified; every other session of the account is closed (whoever
+// knew the old password is out).
+func (s *Service) ResetPassword(ctx context.Context, token, password string, c Client) (SignedIn, error) {
+	invalid := apperr.Invalid("identity.reset_invalid", "token", "this link is invalid or has expired")
+	if token == "" || len(token) > 100 {
+		return SignedIn{}, invalid
+	}
+	hash := domain.HashToken(token)
+	r, err := s.resets.Get(ctx, hash)
+	if apperr.IsKind(err, apperr.KindNotFound) {
+		return SignedIn{}, invalid
+	}
+	if err != nil {
+		return SignedIn{}, err
+	}
+	now := s.now()
+	if !now.Before(r.ExpiresAt) {
+		return SignedIn{}, invalid
+	}
+	a, err := s.accounts.ByID(ctx, r.AccountID)
+	if err != nil {
+		return SignedIn{}, err
+	}
+	if r.Email != a.Email {
+		return SignedIn{}, invalid // the account's email changed after the link was sent
+	}
+	if !a.Active() {
+		return SignedIn{}, apperr.Invalid("identity.account_disabled", "", "this account is disabled")
+	}
+	// Check the new password before using up the link, so a rejected password
+	// can be corrected without asking for another email.
+	if err := domain.CheckPassword(password, a.Email); err != nil {
+		return SignedIn{}, err
+	}
+	if a.PasswordHash, err = s.hasher.Hash(password); err != nil {
+		return SignedIn{}, err
+	}
+	if _, err := s.resets.Take(ctx, hash); err != nil {
+		if apperr.IsKind(err, apperr.KindNotFound) { // used a moment ago by another request
+			return SignedIn{}, invalid
+		}
+		return SignedIn{}, err
+	}
+	if err := a.ConfirmEmail(r.Email, now); err != nil {
+		return SignedIn{}, err
+	}
+	a.PromoteIfListed(s.admins, now)
+	if err := s.accounts.Update(ctx, a); err != nil {
+		return SignedIn{}, err
+	}
+	if err := s.sessions.DeleteForAccount(ctx, a.ID); err != nil {
+		return SignedIn{}, err
+	}
+	return s.startSession(ctx, a, c)
 }

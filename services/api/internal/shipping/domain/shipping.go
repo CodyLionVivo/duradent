@@ -28,22 +28,14 @@ func ZoneFor(department string) Zone {
 type Rate struct {
 	Zone       Zone
 	MaxWeightG int
-	PEN        money.Money
-	USD        money.Money
-}
-
-func (r Rate) In(c money.Currency) money.Money {
-	if c == money.USD {
-		return r.USD
-	}
-	return r.PEN
+	Amount     money.Money // soles, without IGV
 }
 
 // Quote prices a parcel. Parcels heavier than the largest tier ship as
 // several parcels of that tier.
-func Quote(rates []Rate, zone Zone, weightG int, c money.Currency) (money.Money, error) {
+func Quote(rates []Rate, zone Zone, weightG int) (money.Money, error) {
 	if zone == ZonePickup {
-		return money.New(0, c), nil
+		return money.New(0, money.PEN), nil
 	}
 	var tiers []Rate
 	for _, r := range rates {
@@ -60,10 +52,10 @@ func Quote(rates []Rate, zone Zone, weightG int, c money.Currency) (money.Money,
 	}
 	for _, t := range tiers {
 		if weightG <= t.MaxWeightG {
-			return t.In(c), nil
+			return t.Amount, nil
 		}
 	}
 	largest := tiers[len(tiers)-1]
 	parcels := (weightG + largest.MaxWeightG - 1) / largest.MaxWeightG
-	return largest.In(c).Mul(int64(parcels)), nil
+	return largest.Amount.Mul(int64(parcels)), nil
 }

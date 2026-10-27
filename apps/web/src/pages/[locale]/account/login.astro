@@ -60,6 +60,9 @@ try {
           <div>
             <label for="password" class="label">{t('account.login.password')}</label>
             <input id="password" name="password" type="password" autocomplete="current-password" required class="input" />
+            <p class="mt-1.5 text-right text-sm">
+              <a class="font-medium text-brand-700 hover:underline" href={localePath(locale, '/account/forgot')}>{t('account.login.forgot')}</a>
+            </p>
           </div>
           <button class="btn-primary w-full py-3">{t('account.login.submit')}</button>
         </form>

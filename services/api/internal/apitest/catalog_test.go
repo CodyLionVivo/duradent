@@ -110,8 +110,12 @@ func TestCatalogAndPricingEndToEnd(t *testing.T) {
 	c.must(200, "PUT", "/v1/admin/pricing/price-lists/"+public.ID+"/variants/"+v018, map[string]any{"prices": []map[string]any{
 		{"currency": "PEN", "min_qty": 1, "unit_price": "85.00"},
 		{"currency": "PEN", "min_qty": 10, "unit_price": "78.20"},
-		{"currency": "USD", "min_qty": 1, "unit_price": "22.70"},
 	}}, nil)
+	if got := c.do("PUT", "/v1/admin/pricing/price-lists/"+public.ID+"/variants/"+v018, true, map[string]any{"prices": []map[string]any{
+		{"currency": "USD", "min_qty": 1, "unit_price": "22.70"},
+	}}, &problem); got != 422 || problem.Code != "pricing.currency_invalid" {
+		t.Fatalf("prices are only in soles: %d %+v", got, problem)
+	}
 	c.must(200, "PUT", "/v1/admin/pricing/price-lists/"+clinic.ID+"/variants/"+v018, map[string]any{"prices": []map[string]any{
 		{"currency": "PEN", "min_qty": 1, "unit_price": "70.00"},
 	}}, nil)

@@ -1,0 +1,62 @@
+---
+// Placeholder for products without photos: the category illustration on a
+// soft, tinted background. Floats a little when the parent card is hovered.
+import CategoryArt from './CategoryArt.astro';
+import type { ArtKind } from '../lib/art';
+
+interface Props {
+  kind: ArtKind;
+  tint: number;
+  label: string;
+  class?: string;
+}
+
+const { kind, tint, label, class: className = '' } = Astro.props;
+---
+
+<div role="img" aria-label={label} class:list={['product-art', `tint-${tint}`, className]}>
+  <span class="glow" aria-hidden="true"></span>
+  <CategoryArt kind={kind} class="art" />
+</div>
+
+<style>
+  .product-art {
+    position: relative;
+    display: flex;
+    height: 100%;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    background:
+      radial-gradient(circle at 1px 1px, rgb(4 104 128 / 0.09) 1px, transparent 0) 0 0 / 14px 14px,
+      linear-gradient(160deg, #ffffff 0%, var(--tint-bg) 100%);
+  }
+  .tint-0 { --tint-bg: #e6f7f5; --tint-glow: #aeeae7; }
+  .tint-1 { --tint-bg: #e7f3f8; --tint-glow: #b9e2ef; }
+  .tint-2 { --tint-bg: #eef7ef; --tint-glow: #cdeccf; }
+
+  .glow {
+    position: absolute;
+    inset: 18%;
+    border-radius: 9999px;
+    background: radial-gradient(circle, var(--tint-glow) 0%, transparent 70%);
+    filter: blur(8px);
+    opacity: 0.9;
+    transition: transform 0.5s ease, opacity 0.5s ease;
+  }
+  .product-art :global(.art) {
+    position: relative;
+    width: 62%;
+    height: 62%;
+    filter: drop-shadow(0 8px 10px rgb(4 104 128 / 0.15));
+    transition: transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  :global(.group:hover) .product-art :global(.art),
+  :global(.group:focus-within) .product-art :global(.art) {
+    transform: translateY(-6px) rotate(-3deg) scale(1.04);
+  }
+  :global(.group:hover) .glow {
+    transform: scale(1.25);
+    opacity: 1;
+  }
+</style>

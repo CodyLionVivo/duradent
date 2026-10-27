@@ -13,9 +13,12 @@ import (
 )
 
 type Config struct {
-	Env             string // local | staging | prod
-	HTTPAddr        string
-	MySQLDSN        string
+	Env      string // local | staging | prod
+	HTTPAddr string
+	MySQLDSN string
+	// MySQLCAFile is a PEM bundle to verify the database certificate (RDS);
+	// the DSN selects it with tls=rds.
+	MySQLCAFile     string
 	LogLevel        string
 	ShutdownTimeout time.Duration
 
@@ -73,13 +76,18 @@ type Config struct {
 
 	// Nubefact (OSE). Without a URL in local development a fake accepts
 	// every document.
-	NubefactURL     string
-	NubefactToken   string
-	SeriesFactura   string
-	SeriesBoleta    string
-	SeriesCreditF   string
-	SeriesCreditB   string
-	USDExchangeRate string
+	NubefactURL   string
+	NubefactToken string
+	SeriesFactura string
+	SeriesBoleta  string
+	SeriesCreditF string
+	SeriesCreditB string
+
+	// The company as printed on the Libro de Reclamaciones sheets. The RUC is
+	// required outside local.
+	CompanyName    string
+	CompanyRUC     string
+	CompanyAddress string
 }
 
 // Load reads configuration from the environment, applying defaults suitable
@@ -93,6 +101,7 @@ func load(getenv func(string) string) (Config, error) {
 		Env:               valueOr(getenv("APP_ENV"), "local"),
 		HTTPAddr:          valueOr(getenv("HTTP_ADDR"), ":8080"),
 		MySQLDSN:          getenv("MYSQL_DSN"),
+		MySQLCAFile:       getenv("MYSQL_CA_FILE"),
 		LogLevel:          valueOr(getenv("LOG_LEVEL"), "info"),
 		AdminToken:        getenv("ADMIN_TOKEN"),
 		AWSRegion:         valueOr(getenv("AWS_REGION"), "us-east-1"),
@@ -128,7 +137,9 @@ func load(getenv func(string) string) (Config, error) {
 		SeriesBoleta:       valueOr(getenv("INVOICE_SERIES_BOLETA"), "B001"),
 		SeriesCreditF:      valueOr(getenv("INVOICE_SERIES_CREDIT_F"), "FC01"),
 		SeriesCreditB:      valueOr(getenv("INVOICE_SERIES_CREDIT_B"), "BC01"),
-		USDExchangeRate:    getenv("USD_EXCHANGE_RATE"),
+		CompanyName:        valueOr(getenv("COMPANY_NAME"), "Duradent S.A.C."),
+		CompanyRUC:         getenv("COMPANY_RUC"),
+		CompanyAddress:     valueOr(getenv("COMPANY_ADDRESS"), "Av. Emancipación 271, tiendas 108 y 126, Cercado de Lima, Lima"),
 	}
 	if len(cfg.OpsEmails) == 0 {
 		cfg.OpsEmails = cfg.AdminEmails
@@ -150,9 +161,6 @@ func load(getenv func(string) string) (Config, error) {
 		if cfg.MediaBaseURL == "" {
 			cfg.MediaBaseURL = "http://localhost:4566/" + cfg.MediaBucket
 		}
-		if cfg.USDExchangeRate == "" {
-			cfg.USDExchangeRate = "3.750"
-		}
 		return cfg, nil
 	}
 
@@ -166,7 +174,7 @@ func load(getenv func(string) string) (Config, error) {
 	for name, v := range map[string]string{
 		"MYSQL_DSN": cfg.MySQLDSN, "S3_MEDIA_BUCKET": cfg.MediaBucket, "MEDIA_BASE_URL": cfg.MediaBaseURL,
 		"CULQI_SECRET_KEY": cfg.CulqiSecretKey, "CULQI_PUBLIC_KEY": cfg.CulqiPublicKey, "CULQI_WEBHOOK_SECRET": cfg.CulqiWebhookSecret,
-		"NUBEFACT_URL": cfg.NubefactURL, "NUBEFACT_TOKEN": cfg.NubefactToken, "USD_EXCHANGE_RATE": cfg.USDExchangeRate,
+		"NUBEFACT_URL": cfg.NubefactURL, "NUBEFACT_TOKEN": cfg.NubefactToken,
 		"MAIL_FROM": getenv("MAIL_FROM"),
 	} {
 		if v == "" {
@@ -181,6 +189,9 @@ func load(getenv func(string) string) (Config, error) {
 	}
 	if cfg.AdminToken != "" && len(cfg.AdminToken) < 32 {
 		return Config{}, errors.New("ADMIN_TOKEN must be at least 32 characters")
+	}
+	if len(cfg.CompanyRUC) != 11 || strings.Trim(cfg.CompanyRUC, "0123456789") != "" {
+		return Config{}, errors.New("COMPANY_RUC must be the company's 11-digit RUC")
 	}
 	return cfg, nil
 }

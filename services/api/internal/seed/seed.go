@@ -1,6 +1,6 @@
 // Package seed loads a realistic demo catalog for local development: the
 // usual orthodontic supplies with variants, in three languages, priced in
-// three lists (public, clínica, distribuidor) in PEN and USD.
+// three lists (public, clínica, distribuidor) in soles.
 //
 // It goes through the application services, so the data obeys the same rules
 // as the admin panel. It does nothing if price lists already exist.
@@ -277,8 +277,6 @@ var lists = []struct {
 	{"distribuidor", "Distribuidores", 0.75, false},
 }
 
-const penPerUSD = 3.75
-
 func Run(ctx context.Context, log *slog.Logger, catalog *catalogapp.Service, pricing *pricingapp.Service, inventory *inventoryapp.Service) error {
 	if existing, err := pricing.PriceLists(ctx); err != nil {
 		return err
@@ -373,16 +371,13 @@ func translations(names, desc tr) map[locale.Locale]domain.Translation {
 	}
 }
 
-// tiers derives a list's prices from the public PEN price: PEN and USD at
-// quantity 1, plus a volume tier at 10 units with 8% off.
+// tiers derives a list's prices from the public price: one unit, plus a
+// volume tier at 10 units with 8% off.
 func tiers(publicPEN money.Money, factor float64) []pricingdomain.Tier {
 	pen := round(float64(publicPEN.Minor) * factor)
-	usd := round(float64(pen) / penPerUSD)
 	return []pricingdomain.Tier{
 		{MinQty: 1, Unit: money.New(pen, money.PEN)},
 		{MinQty: 10, Unit: money.New(round(float64(pen)*0.92), money.PEN)},
-		{MinQty: 1, Unit: money.New(usd, money.USD)},
-		{MinQty: 10, Unit: money.New(round(float64(usd)*0.92), money.USD)},
 	}
 }
 

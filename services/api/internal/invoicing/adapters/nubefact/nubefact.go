@@ -15,7 +15,6 @@ import (
 
 	"github.com/CodyLionVivo/duradent/services/api/internal/invoicing/domain"
 	"github.com/CodyLionVivo/duradent/services/api/internal/invoicing/ports"
-	"github.com/CodyLionVivo/duradent/services/api/internal/kernel/money"
 )
 
 type Client struct {
@@ -89,8 +88,7 @@ type request struct {
 	CustomerAddress   string      `json:"cliente_direccion,omitempty"`
 	CustomerEmail     string      `json:"cliente_email,omitempty"`
 	IssueDate         string      `json:"fecha_de_emision,omitempty"`
-	Currency          int         `json:"moneda,omitempty"`
-	ExchangeRate      json.Number `json:"tipo_de_cambio,omitempty"`
+	Currency          int         `json:"moneda,omitempty"` // 1: soles
 	IGVPercent        json.Number `json:"porcentaje_de_igv,omitempty"`
 	TaxedTotal        json.Number `json:"total_gravada,omitempty"`
 	TotalIGV          json.Number `json:"total_igv,omitempty"`
@@ -125,9 +123,6 @@ func toRequest(d domain.Document) request {
 		IssueDate: d.IssueDate.Format("02-01-2006"), Currency: 1, IGVPercent: "18.00",
 		TaxedTotal: amount(d.TaxedTotal), TotalIGV: amount(d.IGV), Total: amount(d.Total),
 		SendToSunat: true, SendToCustomer: false,
-	}
-	if d.Currency == money.USD {
-		r.Currency, r.ExchangeRate = 2, json.Number(d.ExchangeRate)
 	}
 	if d.Type == domain.CreditNote {
 		r.RefType, r.RefSeries, r.RefNumber = docTypeCode(d.RefType), d.RefSeries, d.RefNumber

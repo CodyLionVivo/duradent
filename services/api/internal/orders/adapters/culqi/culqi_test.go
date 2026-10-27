@@ -102,10 +102,10 @@ func TestServerErrorIsAnError(t *testing.T) {
 
 func TestGetCharge(t *testing.T) {
 	c := fakeCulqi(t, func(w http.ResponseWriter, body map[string]any) {
-		_, _ = w.Write([]byte(`{"object":"charge","id":"` + body["get"].(string) + `","amount":100,"currency_code":"USD","response_code":"venta_exitosa","metadata":{"order_id":"x"}}`))
+		_, _ = w.Write([]byte(`{"object":"charge","id":"` + body["get"].(string) + `","amount":100,"currency_code":"PEN","response_code":"venta_exitosa","metadata":{"order_id":"x"}}`))
 	})
 	got, err := c.GetCharge(t.Context(), "chr_test_9")
-	if err != nil || got.ID != "chr_test_9" || got.Currency != money.USD || !got.Succeeded {
+	if err != nil || got.ID != "chr_test_9" || got.Currency != money.PEN || !got.Succeeded {
 		t.Fatalf("%+v %v", got, err)
 	}
 }

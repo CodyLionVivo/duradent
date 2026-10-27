@@ -107,10 +107,6 @@ func TestQuoteFallsBackToDefaultList(t *testing.T) {
 	if anon[bracket].Unit.Minor != 1500 {
 		t.Errorf("anonymous visitors see the default list: %+v", anon[bracket])
 	}
-	usd, _ := svc.Quote(ctx, application.QuoteQuery{Currency: money.USD, VariantIDs: []id.ID{bracket}})
-	if len(usd) != 0 {
-		t.Errorf("no USD prices yet: %+v", usd)
-	}
 }
 
 func TestOnlyOneDefaultList(t *testing.T) {

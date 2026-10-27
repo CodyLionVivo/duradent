@@ -9,7 +9,6 @@ import (
 )
 
 func pen(minor int64) money.Money { return money.New(minor, money.PEN) }
-func usd(minor int64) money.Money { return money.New(minor, money.USD) }
 
 func code(err error) string {
 	if e, ok := apperr.As(err); ok {
@@ -26,7 +25,7 @@ func TestVariantPricesValidation(t *testing.T) {
 		"pricing.tier_duplicate":      {{MinQty: 1, Unit: pen(1000)}, {MinQty: 1, Unit: pen(900)}},
 		"pricing.tier_not_decreasing": {{MinQty: 1, Unit: pen(1000)}, {MinQty: 10, Unit: pen(1100)}},
 		"pricing.min_qty_invalid":     {{MinQty: 0, Unit: pen(1000)}},
-		"pricing.currency_invalid":    {{MinQty: 1, Unit: money.New(1000, "BRL")}},
+		"pricing.currency_invalid":    {{MinQty: 1, Unit: money.New(1000, "USD")}},
 	}
 	for want, tiers := range cases {
 		if _, err := NewVariantPrices(l, v, tiers); code(err) != want {
@@ -40,7 +39,6 @@ func TestUnitPricePicksHighestApplicableTier(t *testing.T) {
 		{MinQty: 50, Unit: pen(800)},
 		{MinQty: 1, Unit: pen(1000)},
 		{MinQty: 10, Unit: pen(900)},
-		{MinQty: 1, Unit: usd(280)},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -52,18 +50,8 @@ func TestUnitPricePicksHighestApplicableTier(t *testing.T) {
 			t.Errorf("qty %d: got %v, want %d", qty, got, want)
 		}
 	}
-	if got, ok := vp.UnitPrice(money.USD, 100); !ok || got.Minor != 280 {
-		t.Errorf("USD: got %v", got)
-	}
 	if len(vp.TiersIn(money.PEN)) != 3 || vp.TiersIn(money.PEN)[0].MinQty != 1 {
 		t.Errorf("tiers should be sorted ascending: %+v", vp.TiersIn(money.PEN))
-	}
-}
-
-func TestUnitPriceMissingCurrency(t *testing.T) {
-	vp, _ := NewVariantPrices(id.New(), id.New(), []Tier{{MinQty: 1, Unit: pen(1000)}})
-	if _, ok := vp.UnitPrice(money.USD, 1); ok {
-		t.Fatal("no USD tier: price should be missing")
 	}
 }
 

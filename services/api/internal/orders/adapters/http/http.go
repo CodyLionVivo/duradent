@@ -93,7 +93,7 @@ func currencyOf(r *http.Request, raw string) (money.Currency, error) {
 	}
 	c, err := money.ParseCurrency(raw)
 	if err != nil {
-		return "", apperr.Invalid("orders.currency_invalid", "currency", "use PEN or USD")
+		return "", apperr.Invalid("orders.currency_invalid", "currency", "prices are in soles (PEN)")
 	}
 	return c, nil
 }
